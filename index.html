@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0f0f1a">
+<title>ERP Descanso Maya</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0f0f1a;--bg2:#16162a;--bg3:#1e1e35;--border:#2a2a45;--accent:#7c6af7;--accent2:#e8a44a;--danger:#e05a6b;--success:#4ecda4;--text:#e8e6f0;--text2:#9896b0;--text3:#5c5a78;--card:#1a1a30;--serif:'DM Serif Display',serif;--sans:'DM Sans',sans-serif;--radius:14px;--radius-sm:8px}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+.app{display:flex;flex-direction:column;min-height:100vh;max-width:480px;margin:0 auto}
+.header{padding:20px 20px 0;display:flex;align-items:center;justify-content:space-between}
+.header-logo{font-family:var(--serif);font-size:22px;letter-spacing:-.3px}
+.header-logo span{color:var(--accent)}
+.header-sub{font-size:11px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase}
+.header-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#fff}
+.screen{display:none;flex-direction:column;flex:1;padding:16px 20px 100px;animation:fadeIn .2s ease}
+.screen.active{display:flex}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--bg2);border-top:1px solid var(--border);display:flex;padding:8px 0 20px;z-index:100}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;cursor:pointer;border:none;background:none;color:var(--text3);font-family:var(--sans);font-size:10px;letter-spacing:.04em;transition:color .2s}
+.nav-btn.active{color:var(--accent)}
+.nav-btn svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.nav-btn.active svg{stroke:var(--accent)}
+.section-title{font-family:var(--serif);font-size:26px;color:var(--text);margin-bottom:4px;letter-spacing:-.3px}
+.section-sub{font-size:13px;color:var(--text3);margin-bottom:20px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color .2s,transform .15s}
+.card:active{transform:scale(.98)}
+.card:hover{border-color:var(--accent)}
+.card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
+.card-title{font-size:15px;font-weight:500;color:var(--text)}
+.card-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.badge{font-size:10px;font-weight:600;padding:3px 9px;border-radius:20px;letter-spacing:.06em;text-transform:uppercase;flex-shrink:0}
+.badge.nuevo{background:#1e2a4a;color:#7ca8f7}
+.badge.en_produccion{background:#2a1e3a;color:var(--accent)}
+.badge.listo{background:#1a2e2a;color:var(--success)}
+.badge.entregado{background:#1e2e1e;color:#7cd4a0}
+.badge.cancelado{background:#2e1a1a;color:var(--danger)}
+.badge.pendiente{background:#2a2a1a;color:var(--accent2)}
+.badge.en_proceso{background:#2a1e3a;color:var(--accent)}
+.badge.ok{background:#1a2e2a;color:var(--success)}
+.badge.bajo{background:#2e1a1a;color:var(--danger)}
+.stats-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.stat-val{font-family:var(--serif);font-size:24px;color:var(--text);margin-bottom:2px}
+.stat-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em}
+.stat-card.accent{border-color:var(--accent);background:#1e1a3a}.stat-card.accent .stat-val{color:var(--accent)}
+.stat-card.success{border-color:var(--success);background:#1a2e28}.stat-card.success .stat-val{color:var(--success)}
+.stat-card.warning{border-color:var(--accent2);background:#2a2010}.stat-card.warning .stat-val{color:var(--accent2)}
+.form-group{margin-bottom:14px}
+.form-label{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;display:block}
+.form-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;font-family:var(--sans);font-size:14px;color:var(--text);outline:none;transition:border-color .2s;-webkit-appearance:none}
+.form-input:focus{border-color:var(--accent)}
+.form-input option{background:var(--bg3)}
+.form-textarea{resize:vertical;min-height:80px}
+.btn{width:100%;padding:14px;border-radius:var(--radius-sm);font-family:var(--sans);font-size:15px;font-weight:500;cursor:pointer;border:none;transition:opacity .2s,transform .15s}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-secondary{background:var(--bg3);color:var(--text);border:1px solid var(--border);margin-top:8px}
+.btn-success{background:var(--success);color:#0a1a14;margin-top:8px}
+.btn-sm{padding:8px 14px;font-size:13px;width:auto}
+.fab{position:fixed;bottom:90px;right:20px;width:54px;height:54px;border-radius:50%;background:var(--accent);border:none;color:#fff;font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(124,106,247,.4);transition:transform .2s;z-index:99}
+.fab:active{transform:scale(.93)}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex;animation:slideUp .25s ease}
+@keyframes slideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+.modal{background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:20px 20px 40px;max-height:92vh;overflow-y:auto;border-top:1px solid var(--border)}
+.modal-handle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px}
+.modal-title{font-family:var(--serif);font-size:22px;margin-bottom:20px}
+.empty{text-align:center;padding:40px 20px;color:var(--text3)}
+.empty-icon{font-size:40px;margin-bottom:10px;opacity:.4}
+.empty p{font-size:14px}
+.alert{padding:12px 14px;border-radius:var(--radius-sm);margin-bottom:12px;font-size:13px;line-height:1.5}
+.alert-warning{background:#2a2510;border:1px solid #5a4a10;color:var(--accent2)}
+.alert-success{background:#102a20;border:1px solid #1D9E75;color:var(--success)}
+.alert-info{background:#1a1a3a;border:1px solid var(--border);color:var(--text2)}
+.divider{height:1px;background:var(--border);margin:16px 0}
+.chip-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.chip{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border);color:var(--text2);background:var(--bg3);transition:all .15s}
+.chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+#toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:10px 20px;border-radius:20px;font-size:13px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;max-width:90vw}
+#toast.show{opacity:1}
+.detail-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px}
+.detail-val{font-size:15px;color:var(--text);margin-bottom:14px}
+.progress-bar{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-top:8px}
+.progress-fill{height:100%;border-radius:3px;transition:width .5s ease}
+.loader{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;margin-right:6px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.connected-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--success);margin-right:5px}
+.disconnected-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--danger);margin-right:5px}
+.config-box{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;font-size:13px;color:var(--text2);line-height:1.65}
+.config-box code{font-family:monospace;background:var(--bg);padding:1px 5px;border-radius:4px;color:var(--accent);font-size:12px}
+.row-between{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.tag-verde{background:#1a2e2a;color:var(--success);font-size:11px;padding:2px 8px;border-radius:10px}
+.tag-rojo{background:#2e1a1a;color:var(--danger);font-size:11px;padding:2px 8px;border-radius:10px}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+<div class="app">
+  <div class="header">
+    <div>
+      <div class="header-logo">Descanso <span>Maya</span></div>
+      <div class="header-sub" id="conexion-status"><span class="disconnected-dot"></span>Sin conectar</div>
+    </div>
+    <div class="header-avatar">DM</div>
+  </div>
+
+  <!-- INICIO -->
+  <div class="screen active" id="screen-inicio">
+    <br>
+    <div class="stats-row">
+      <div class="stat-card accent"><div class="stat-val" id="stat-pedidos">—</div><div class="stat-label">Pedidos activos</div></div>
+      <div class="stat-card success"><div class="stat-val" id="stat-produccion">—</div><div class="stat-label">En producción</div></div>
+      <div class="stat-card"><div class="stat-val" id="stat-ingresos">—</div><div class="stat-label">Ingresos del mes</div></div>
+      <div class="stat-card warning"><div class="stat-val" id="stat-por-cobrar">—</div><div class="stat-label">Por cobrar</div></div>
+    </div>
+    <div class="section-title">Pedidos recientes</div>
+    <div id="inicio-pedidos"></div>
+    <div class="divider"></div>
+    <div class="section-title" style="font-size:20px">Órdenes pendientes</div>
+    <div id="inicio-ordenes"></div>
+  </div>
+
+  <!-- PEDIDOS -->
+  <div class="screen" id="screen-pedidos">
+    <div class="section-title">Pedidos</div>
+    <div class="section-sub" id="pedidos-count">—</div>
+    <div class="chip-list">
+      <div class="chip active" onclick="filtrarP('todos',this)">Todos</div>
+      <div class="chip" onclick="filtrarP('nuevo',this)">Nuevo</div>
+      <div class="chip" onclick="filtrarP('en_produccion',this)">Producción</div>
+      <div class="chip" onclick="filtrarP('listo',this)">Listo</div>
+      <div class="chip" onclick="filtrarP('entregado',this)">Entregado</div>
+    </div>
+    <div id="pedidos-list"></div>
+  </div>
+
+  <!-- PRODUCCION -->
+  <div class="screen" id="screen-produccion">
+    <div class="section-title">Producción</div>
+    <div class="section-sub">Órdenes de trabajo</div>
+    <div class="chip-list">
+      <div class="chip active" onclick="filtrarO('todos',this)">Todas</div>
+      <div class="chip" onclick="filtrarO('pendiente',this)">Pendiente</div>
+      <div class="chip" onclick="filtrarO('en_proceso',this)">En proceso</div>
+      <div class="chip" onclick="filtrarO('listo',this)">Listo</div>
+    </div>
+    <div id="ordenes-list"></div>
+  </div>
+
+  <!-- INVENTARIO -->
+  <div class="screen" id="screen-inventario">
+    <div class="row-between">
+      <div><div class="section-title">Inventario</div><div class="section-sub" style="margin:0">Materiales y stock</div></div>
+      <button class="btn btn-primary btn-sm" onclick="openModal('modal-material')">+ Material</button>
+    </div>
+    <div id="alertas-inv"></div>
+    <div id="materiales-list"></div>
+  </div>
+
+  <!-- MÁS -->
+  <div class="screen" id="screen-mas">
+    <div class="section-title">Más</div>
+    <div class="section-sub">Catálogos y configuración</div>
+    <div style="font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Catálogos</div>
+    <div class="card" onclick="showSub('clientes')"><div class="card-header"><div><div class="card-title">👥 Clientes</div><div class="card-sub">Agregar y consultar</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg></div></div>
+    <div class="card" onclick="showSub('productos')"><div class="card-header"><div><div class="card-title">🛏 Productos</div><div class="card-sub">Tipos de hamaca y precios</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg></div></div>
+    <div class="card" onclick="showSub('artesanos')"><div class="card-header"><div><div class="card-title">🧵 Artesanos</div><div class="card-sub">Personal de producción</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg></div></div>
+    <div class="card" onclick="showSub('gastos')"><div class="card-header"><div><div class="card-title">💸 Gastos</div><div class="card-sub">Registro de egresos</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg></div></div>
+    <div class="divider"></div>
+    <div class="card" onclick="showSub('config')"><div class="card-header"><div><div class="card-title">⚙️ Configuración</div><div class="card-sub" id="config-lbl">Sin conectar</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg></div></div>
+  </div>
+
+  <nav class="nav">
+    <button class="nav-btn active" onclick="showScreen('inicio')"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>Inicio</button>
+    <button class="nav-btn" onclick="showScreen('pedidos')"><svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>Pedidos</button>
+    <button class="nav-btn" onclick="showScreen('produccion')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M5.34 18.66l-1.41 1.41M20 12h2M2 12h2M19.07 19.07l-1.41-1.41M5.34 5.34L3.93 3.93M12 20v2M12 2v2"/></svg>Producción</button>
+    <button class="nav-btn" onclick="showScreen('inventario')"><svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>Inventario</button>
+    <button class="nav-btn" onclick="showScreen('mas')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>Más</button>
+  </nav>
+</div>
+
+<button class="fab" id="fab" onclick="fabAction()">+</button>
+
+<!-- ======= MODALES ======= -->
+
+<!-- NUEVO PEDIDO -->
+<div class="modal-overlay" id="modal-pedido">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Nuevo pedido</div>
+    <div class="form-group"><label class="form-label">Cliente *</label>
+      <select class="form-input" id="f-cliente">
+        <option value="">— Selecciona un cliente —</option>
+      </select>
+      <button class="btn btn-secondary btn-sm" style="margin-top:6px;width:auto" onclick="closeModal('modal-pedido');openModal('modal-cliente');pendingAfterCliente=true">+ Agregar cliente nuevo</button>
+    </div>
+    <div class="form-group"><label class="form-label">Producto *</label>
+      <select class="form-input" id="f-producto" onchange="autoTotal()">
+        <option value="">— Selecciona un producto —</option>
+      </select>
+      <button class="btn btn-secondary btn-sm" style="margin-top:6px;width:auto" onclick="closeModal('modal-pedido');openModal('modal-producto');pendingAfterProducto=true">+ Agregar producto nuevo</button>
+    </div>
+    <div class="form-group"><label class="form-label">Cantidad</label><input type="number" class="form-input" id="f-cantidad" value="1" min="1" onchange="autoTotal()"></div>
+    <div class="form-group"><label class="form-label">Color de hilo</label><input type="text" class="form-input" id="f-color" placeholder="Ej: Azul marino, multicolor..."></div>
+    <div class="form-group"><label class="form-label">Medidas especiales</label><input type="text" class="form-input" id="f-medidas" placeholder="Ej: 1.5m x 1m"></div>
+    <div class="form-group"><label class="form-label">Precio total ($) *</label><input type="number" class="form-input" id="f-total" placeholder="0.00"></div>
+    <div class="form-group"><label class="form-label">Anticipo recibido ($)</label><input type="number" class="form-input" id="f-anticipo" value="0" placeholder="0.00"></div>
+    <div class="form-group"><label class="form-label">Fecha de entrega</label><input type="date" class="form-input" id="f-fecha"></div>
+    <div class="form-group"><label class="form-label">Notas</label><textarea class="form-input form-textarea" id="f-notas" placeholder="Especificaciones adicionales..."></textarea></div>
+    <button class="btn btn-primary" id="btn-pedido" onclick="guardarPedido()">Guardar pedido</button>
+    <button class="btn btn-secondary" onclick="closeModal('modal-pedido')">Cancelar</button>
+  </div>
+</div>
+
+<!-- NUEVO CLIENTE -->
+<div class="modal-overlay" id="modal-cliente">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Nuevo cliente</div>
+    <div class="form-group"><label class="form-label">Nombre *</label><input type="text" class="form-input" id="c-nombre" placeholder="Nombre completo"></div>
+    <div class="form-group"><label class="form-label">Teléfono</label><input type="tel" class="form-input" id="c-tel" placeholder="999 000 0000"></div>
+    <div class="form-group"><label class="form-label">Email</label><input type="email" class="form-input" id="c-email" placeholder="correo@ejemplo.com"></div>
+    <div class="form-group"><label class="form-label">Dirección / Ciudad</label><input type="text" class="form-input" id="c-dir" placeholder="Mérida, Yucatán"></div>
+    <button class="btn btn-primary" id="btn-cliente" onclick="guardarCliente()">Guardar cliente</button>
+    <button class="btn btn-secondary" onclick="closeModal('modal-cliente')">Cancelar</button>
+  </div>
+</div>
+
+<!-- NUEVO PRODUCTO -->
+<div class="modal-overlay" id="modal-producto">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Nuevo producto</div>
+    <div class="form-group"><label class="form-label">Nombre *</label><input type="text" class="form-input" id="p-nombre" placeholder="Ej: Hamaca matrimonial"></div>
+    <div class="form-group"><label class="form-label">Tipo</label>
+      <select class="form-input" id="p-tipo">
+        <option value="hamaca">Hamaca</option>
+        <option value="hamaca_silla">Hamaca silla</option>
+        <option value="accesorio">Accesorio</option>
+        <option value="otro">Otro</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Descripción</label><input type="text" class="form-input" id="p-desc" placeholder="Descripción breve"></div>
+    <div class="form-group"><label class="form-label">Precio de venta ($) *</label><input type="number" class="form-input" id="p-precio" placeholder="0.00"></div>
+    <div class="form-group"><label class="form-label">Costo de producción ($)</label><input type="number" class="form-input" id="p-costo" placeholder="0.00"></div>
+    <button class="btn btn-primary" id="btn-producto" onclick="guardarProducto()">Guardar producto</button>
+    <button class="btn btn-secondary" onclick="closeModal('modal-producto')">Cancelar</button>
+  </div>
+</div>
+
+<!-- NUEVO ARTESANO -->
+<div class="modal-overlay" id="modal-artesano">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Nuevo artesano</div>
+    <div class="form-group"><label class="form-label">Nombre *</label><input type="text" class="form-input" id="a-nombre" placeholder="Nombre completo"></div>
+    <div class="form-group"><label class="form-label">Teléfono</label><input type="tel" class="form-input" id="a-tel" placeholder="999 000 0000"></div>
+    <div class="form-group"><label class="form-label">Estado</label>
+      <select class="form-input" id="a-activo">
+        <option value="true">Activo</option>
+        <option value="false">Inactivo</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="btn-artesano" onclick="guardarArtesano()">Guardar artesano</button>
+    <button class="btn btn-secondary" onclick="closeModal('modal-artesano')">Cancelar</button>
+  </div>
+</div>
+
+<!-- NUEVO MATERIAL -->
+<div class="modal-overlay" id="modal-material">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="mat-modal-title">Nuevo material</div>
+    <div class="form-group"><label class="form-label">Nombre *</label><input type="text" class="form-input" id="m-nombre" placeholder="Ej: Hilo de algodón"></div>
+    <div class="form-group"><label class="form-label">Unidad de medida</label>
+      <select class="form-input" id="m-unidad">
+        <option value="kg">Kilogramos (kg)</option>
+        <option value="metros">Metros</option>
+        <option value="piezas">Piezas</option>
+        <option value="rollos">Rollos</option>
+        <option value="litros">Litros</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Stock actual</label><input type="number" class="form-input" id="m-stock" placeholder="0" value="0"></div>
+    <div class="form-group"><label class="form-label">Stock mínimo (alerta)</label><input type="number" class="form-input" id="m-minimo" placeholder="0" value="0"></div>
+    <div class="form-group"><label class="form-label">Costo unitario ($)</label><input type="number" class="form-input" id="m-costo" placeholder="0.00"></div>
+    <button class="btn btn-primary" id="btn-material" onclick="guardarMaterial()">Guardar material</button>
+    <button class="btn btn-secondary" onclick="closeModal('modal-material')">Cancelar</button>
+  </div>
+</div>
+
+<!-- NUEVO GASTO -->
+<div class="modal-overlay" id="modal-gasto">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Registrar gasto</div>
+    <div class="form-group"><label class="form-label">Categoría</label>
+      <select class="form-input" id="g-cat">
+        <option value="materiales">Materiales</option>
+        <option value="nomina">Nómina / Artesanos</option>
+        <option value="servicios">Servicios</option>
+        <option value="transporte">Transporte / Envíos</option>
+        <option value="renta">Renta</option>
+        <option value="otro">Otro</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Descripción *</label><input type="text" class="form-input" id="g-desc" placeholder="¿En qué se gastó?"></div>
+    <div class="form-group"><label class="form-label">Monto ($) *</label><input type="number" class="form-input" id="g-monto" placeholder="0.00"></div>
+    <button class="btn btn-primary" id="btn-gasto" onclick="guardarGasto()">Registrar gasto</button>
+    <button class="btn btn-secondary" onclick="closeModal('modal-gasto')">Cancelar</button>
+  </div>
+</div>
+
+<!-- DETALLE PEDIDO -->
+<div class="modal-overlay" id="modal-det-p">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="det-p-title">Pedido</div>
+    <div id="det-p-body"></div>
+    <div class="form-group" style="margin-top:16px"><label class="form-label">Cambiar estado</label>
+      <select class="form-input" id="det-p-estado" onchange="cambiarEstadoPedido()">
+        <option value="nuevo">Nuevo</option>
+        <option value="en_produccion">En producción</option>
+        <option value="listo">Listo</option>
+        <option value="entregado">Entregado</option>
+        <option value="cancelado">Cancelado</option>
+      </select>
+    </div>
+    <button class="btn btn-secondary" onclick="closeModal('modal-det-p')">Cerrar</button>
+  </div>
+</div>
+
+<!-- DETALLE ORDEN -->
+<div class="modal-overlay" id="modal-det-o">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="det-o-title">Orden</div>
+    <div id="det-o-body"></div>
+    <div class="form-group" style="margin-top:16px"><label class="form-label">Estado</label>
+      <select class="form-input" id="det-o-estado" onchange="cambiarEstadoOrden()">
+        <option value="pendiente">Pendiente</option>
+        <option value="en_proceso">En proceso</option>
+        <option value="listo">Listo</option>
+        <option value="entregado">Entregado</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Asignar artesano</label>
+      <select class="form-input" id="det-o-artesano" onchange="asignarArtesano()">
+        <option value="">Sin asignar</option>
+      </select>
+    </div>
+    <button class="btn btn-secondary" onclick="closeModal('modal-det-o')">Cerrar</button>
+  </div>
+</div>
+
+<!-- DETALLE MATERIAL -->
+<div class="modal-overlay" id="modal-det-m">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="det-m-title">Material</div>
+    <div id="det-m-body"></div>
+    <div class="form-group" style="margin-top:16px"><label class="form-label">Ajustar stock actual</label>
+      <input type="number" class="form-input" id="det-m-stock" placeholder="0">
+    </div>
+    <button class="btn btn-success" onclick="actualizarStock()">Actualizar stock</button>
+    <button class="btn btn-secondary" onclick="closeModal('modal-det-m')">Cerrar</button>
+  </div>
+</div>
+
+<!-- SUBS -->
+<div class="modal-overlay" id="sub-clientes">
+  <div class="modal" style="border-radius:20px 20px 0 0;max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="row-between" style="margin-bottom:16px">
+      <div class="modal-title" style="margin:0">Clientes</div>
+      <button class="btn btn-primary btn-sm" onclick="openModal('modal-cliente')">+ Nuevo</button>
+    </div>
+    <div id="clientes-list"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="sub-productos">
+  <div class="modal" style="border-radius:20px 20px 0 0;max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="row-between" style="margin-bottom:16px">
+      <div class="modal-title" style="margin:0">Productos</div>
+      <button class="btn btn-primary btn-sm" onclick="openModal('modal-producto')">+ Nuevo</button>
+    </div>
+    <div id="productos-list"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="sub-artesanos">
+  <div class="modal" style="border-radius:20px 20px 0 0;max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="row-between" style="margin-bottom:16px">
+      <div class="modal-title" style="margin:0">Artesanos</div>
+      <button class="btn btn-primary btn-sm" onclick="openModal('modal-artesano')">+ Nuevo</button>
+    </div>
+    <div id="artesanos-list"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="sub-gastos">
+  <div class="modal" style="border-radius:20px 20px 0 0;max-height:92vh">
+    <div class="modal-handle"></div>
+    <div class="row-between" style="margin-bottom:16px">
+      <div class="modal-title" style="margin:0">Gastos</div>
+      <button class="btn btn-primary btn-sm" onclick="openModal('modal-gasto')">+ Nuevo</button>
+    </div>
+    <div id="gastos-list"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="sub-config">
+  <div class="modal" style="border-radius:20px 20px 0 0">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Configuración</div>
+    <div class="config-box">
+      En Apps Script → <code>Implementar</code> → <code>Nueva implementación</code> → Tipo: <code>Aplicación web</code> → Ejecutar como: <code>Yo</code> → Acceso: <code>Cualquier usuario</code> → Implementar.<br><br>
+      Copia la URL que termina en <code>/exec</code> y pégala abajo.
+    </div>
+    <div class="form-group"><label class="form-label">URL del Web App</label><input type="text" class="form-input" id="cfg-url" placeholder="https://script.google.com/macros/s/.../exec"></div>
+    <div class="form-group"><label class="form-label">Clave secreta (API Key)</label><input type="text" class="form-input" id="cfg-key" placeholder="descanso-maya-2024"><div style="font-size:11px;color:var(--text3);margin-top:4px">Debe coincidir con API_KEY en tu script</div></div>
+    <button class="btn btn-primary" onclick="guardarConfig()">Conectar y cargar datos</button>
+    <button class="btn btn-secondary" onclick="closeModal('sub-config')">Cancelar</button>
+  </div>
+</div>
+
+<script>
+// ============ ESTADO ============
+let CFG = { url: localStorage.getItem('apiUrl')||'', key: localStorage.getItem('apiKey')||'' };
+let D = { pedidos:[], clientes:[], productos:[], materiales:[], artesanos:[], ordenes_produccion:[], gastos:[], pedido_detalle:[] };
+let filtroP='todos', filtroO='todos';
+let pedidoActivo=null, ordenActiva=null, materialActivo=null;
+let currentScreen='inicio';
+let pendingAfterCliente=false, pendingAfterProducto=false;
+
+// ============ API ============
+async function apiRead(sheet) {
+  if (!CFG.url) return [];
+  try {
+    const r = await fetch(`${CFG.url}?action=read&sheet=${sheet}&key=${encodeURIComponent(CFG.key)}`);
+    const j = await r.json();
+    return j.ok ? j.data : [];
+  } catch(e) { return []; }
+}
+async function apiWrite(sheet, data) {
+  if (!CFG.url) return false;
+  try {
+    const r = await fetch(`${CFG.url}?action=write&sheet=${sheet}&key=${encodeURIComponent(CFG.key)}`, { method:'POST', body:JSON.stringify(data) });
+    const j = await r.json();
+    return j.ok;
+  } catch(e) { return false; }
+}
+async function apiUpdate(sheet, data) {
+  if (!CFG.url) return false;
+  try {
+    const r = await fetch(`${CFG.url}?action=update&sheet=${sheet}&key=${encodeURIComponent(CFG.key)}`, { method:'POST', body:JSON.stringify(data) });
+    const j = await r.json();
+    return j.ok;
+  } catch(e) { return false; }
+}
+async function cargarTodo() {
+  if (!CFG.url) return;
+  toast('<span class="loader"></span>Cargando datos...');
+  const sheets = ['pedidos','clientes','productos','materiales','artesanos','ordenes_produccion','gastos','pedido_detalle'];
+  const results = await Promise.all(sheets.map(s => apiRead(s)));
+  sheets.forEach((s,i) => D[s] = results[i]);
+  setConexion(true);
+  renderScreen(currentScreen);
+  toast('✓ Datos cargados');
+}
+function setConexion(ok) {
+  const st = document.getElementById('conexion-status');
+  const lb = document.getElementById('config-lbl');
+  st.innerHTML = ok ? '<span class="connected-dot"></span>Conectado' : '<span class="disconnected-dot"></span>Sin conectar';
+  st.style.color = ok ? 'var(--success)' : 'var(--danger)';
+  if (lb) lb.textContent = ok ? 'Conectado a Sheets' : 'Sin conectar';
+}
+
+// ============ NAV ============
+function showScreen(n) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('screen-'+n).classList.add('active');
+  const idx = ['inicio','pedidos','produccion','inventario','mas'].indexOf(n);
+  if(idx>=0) document.querySelectorAll('.nav-btn')[idx].classList.add('active');
+  currentScreen=n;
+  renderScreen(n);
+}
+function showSub(n) {
+  document.getElementById('sub-'+n).classList.add('open');
+  if(n==='clientes') renderClientes();
+  if(n==='productos') renderProductos();
+  if(n==='artesanos') renderArtesanos();
+  if(n==='gastos') renderGastos();
+  if(n==='config') { document.getElementById('cfg-url').value=CFG.url; document.getElementById('cfg-key').value=CFG.key; }
+}
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if(e.target===m) m.classList.remove('open'); }));
+function fabAction() {
+  if(currentScreen==='inventario') openModal('modal-material');
+  else { populateSelects(); openModal('modal-pedido'); }
+}
+
+// ============ RENDERS ============
+function renderScreen(n) {
+  if(n==='inicio') renderInicio();
+  if(n==='pedidos') renderPedidos();
+  if(n==='produccion') renderOrdenes();
+  if(n==='inventario') renderInventario();
+}
+function renderInicio() {
+  const activos = D.pedidos.filter(p=>!['entregado','cancelado'].includes(p.estado));
+  const enProd  = D.ordenes_produccion.filter(o=>o.estado==='en_proceso');
+  const mes = new Date().getMonth();
+  const ingresos = D.pedidos.filter(p=>p.estado!=='cancelado'&&new Date(p.fecha_creacion).getMonth()===mes).reduce((s,p)=>s+Number(p.total||0),0);
+  const porCobrar = D.pedidos.filter(p=>!['entregado','cancelado'].includes(p.estado)).reduce((s,p)=>s+(Number(p.total||0)-Number(p.anticipo||0)),0);
+  document.getElementById('stat-pedidos').textContent = activos.length;
+  document.getElementById('stat-produccion').textContent = enProd.length;
+  document.getElementById('stat-ingresos').textContent = '$'+ingresos.toLocaleString('es-MX');
+  document.getElementById('stat-por-cobrar').textContent = '$'+porCobrar.toLocaleString('es-MX');
+  const rec = [...D.pedidos].slice(-5).reverse();
+  document.getElementById('inicio-pedidos').innerHTML = rec.length ? rec.map(cardP).join('') : empty('Sin pedidos aún');
+  const pend = D.ordenes_produccion.filter(o=>['pendiente','en_proceso'].includes(o.estado)).slice(0,5);
+  document.getElementById('inicio-ordenes').innerHTML = pend.length ? pend.map(cardO).join('') : empty('Sin órdenes pendientes');
+}
+function renderPedidos() {
+  const lista = filtroP==='todos' ? D.pedidos : D.pedidos.filter(p=>p.estado===filtroP);
+  document.getElementById('pedidos-count').textContent = lista.length+' pedido'+(lista.length!==1?'s':'');
+  document.getElementById('pedidos-list').innerHTML = lista.length ? [...lista].reverse().map(cardP).join('') : empty('No hay pedidos en este estado');
+}
+function renderOrdenes() {
+  const lista = filtroO==='todos' ? D.ordenes_produccion : D.ordenes_produccion.filter(o=>o.estado===filtroO);
+  document.getElementById('ordenes-list').innerHTML = lista.length ? lista.map(cardO).join('') : empty('No hay órdenes');
+}
+function renderInventario() {
+  const bajos = D.materiales.filter(m=>Number(m.stock_actual)<Number(m.stock_minimo));
+  document.getElementById('alertas-inv').innerHTML = bajos.length
+    ? `<div class="alert alert-warning">⚠️ Stock bajo en: ${bajos.map(m=>m.nombre).join(', ')}</div>`
+    : (D.materiales.length ? '<div class="alert alert-success">✓ Todo el stock está en nivel correcto</div>' : '');
+  document.getElementById('materiales-list').innerHTML = D.materiales.length
+    ? D.materiales.map(m => {
+        const pct = Math.min(100,Math.round((Number(m.stock_actual)/Math.max(Number(m.stock_minimo)*2,1))*100));
+        const bajo = Number(m.stock_actual)<Number(m.stock_minimo);
+        const idx = D.materiales.indexOf(m);
+        return `<div class="card" onclick="verMaterial(${idx})">
+          <div class="card-header">
+            <div><div class="card-title">${m.nombre}</div><div class="card-sub">${m.stock_actual} ${m.unidad}</div></div>
+            <span class="badge ${bajo?'bajo':'ok'}">${bajo?'Bajo':'OK'}</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${bajo?'var(--danger)':'var(--success)'}"></div></div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px">Mínimo: ${m.stock_minimo} ${m.unidad} · $${m.costo_unitario}/${m.unidad}</div>
+        </div>`;
+      }).join('')
+    : empty('Sin materiales. Toca + para agregar');
+}
+function renderClientes() {
+  document.getElementById('clientes-list').innerHTML = D.clientes.length
+    ? D.clientes.map(c=>`<div class="card"><div class="card-title">${c.nombre}</div><div class="card-sub">${c.telefono||''} ${c.email?'· '+c.email:''}</div>${c.direccion?'<div style="font-size:12px;color:var(--text3);margin-top:4px">'+c.direccion+'</div>':''}</div>`).join('')
+    : empty('Sin clientes');
+}
+function renderProductos() {
+  document.getElementById('productos-list').innerHTML = D.productos.length
+    ? D.productos.map(p=>`<div class="card"><div class="card-header"><div><div class="card-title">${p.nombre}</div><div class="card-sub">${p.tipo}</div></div><div style="text-align:right"><div style="font-size:15px;font-weight:600;color:var(--accent)">$${Number(p.precio_venta).toLocaleString('es-MX')}</div><div style="font-size:11px;color:var(--text3)">Costo: $${Number(p.costo_produccion||0).toLocaleString('es-MX')}</div></div></div></div>`).join('')
+    : empty('Sin productos');
+}
+function renderArtesanos() {
+  document.getElementById('artesanos-list').innerHTML = D.artesanos.length
+    ? D.artesanos.map(a=>`<div class="card"><div class="card-header"><div><div class="card-title">${a.nombre}</div><div class="card-sub">${a.telefono||''}</div></div><span class="badge ${String(a.activo)==='true'?'listo':'cancelado'}">${String(a.activo)==='true'?'Activo':'Inactivo'}</span></div></div>`).join('')
+    : empty('Sin artesanos');
+}
+function renderGastos() {
+  const total = D.gastos.reduce((s,g)=>s+Number(g.monto||0),0);
+  document.getElementById('gastos-list').innerHTML =
+    `<div class="stat-card" style="margin-bottom:12px"><div class="stat-val">$${total.toLocaleString('es-MX')}</div><div class="stat-label">Total registrado</div></div>`+
+    (D.gastos.length ? [...D.gastos].reverse().map(g=>`<div class="card"><div class="card-header"><div><div class="card-title">${g.descripcion}</div><div class="card-sub">${g.categoria}</div></div><div style="font-size:16px;font-weight:600;color:var(--danger)">$${Number(g.monto).toLocaleString('es-MX')}</div></div></div>`).join('') : empty('Sin gastos'));
+}
+
+// ============ CARDS ============
+function cardP(p) {
+  const c = D.clientes.find(x=>x.id===p.cliente_id);
+  return `<div class="card" onclick="verPedido('${p.id}')">
+    <div class="card-header">
+      <div><div class="card-title">${c?c.nombre:p.cliente_id||'—'}</div><div class="card-sub">${p.id} · $${Number(p.total||0).toLocaleString('es-MX')}</div></div>
+      <span class="badge ${p.estado}">${p.estado.replace('_',' ')}</span>
+    </div>
+    ${p.fecha_entrega?`<div style="font-size:12px;color:var(--text3)">Entrega: ${p.fecha_entrega}</div>`:''}
+    ${p.notas?`<div style="font-size:12px;color:var(--text2);margin-top:4px">${p.notas}</div>`:''}
+  </div>`;
+}
+function cardO(o) {
+  const a = D.artesanos.find(x=>x.id===o.artesano_id);
+  const idx = D.ordenes_produccion.indexOf(o);
+  const det = D.pedido_detalle.find(x=>x.id===o.pedido_detalle_id);
+  const prod = det ? D.productos.find(x=>x.id===det.producto_id) : null;
+  return `<div class="card" onclick="verOrden(${idx})">
+    <div class="card-header">
+      <div><div class="card-title">${o.id}</div><div class="card-sub">${prod?prod.nombre:''} · ${a?a.nombre:'Sin asignar'}</div></div>
+      <span class="badge ${o.estado}">${o.estado.replace('_',' ')}</span>
+    </div>
+  </div>`;
+}
+function empty(msg) { return `<div class="empty"><div class="empty-icon">📭</div><p>${msg}</p></div>`; }
+
+// ============ DETALLES ============
+function verPedido(id) {
+  const p = D.pedidos.find(x=>x.id===id);
+  if(!p) return;
+  pedidoActivo = id;
+  const c = D.clientes.find(x=>x.id===p.cliente_id);
+  const saldo = Number(p.total||0)-Number(p.anticipo||0);
+  document.getElementById('det-p-title').textContent = p.id;
+  document.getElementById('det-p-body').innerHTML = `
+    <div class="detail-label">Cliente</div><div class="detail-val">${c?c.nombre:p.cliente_id||'—'}</div>
+    <div class="detail-label">Total</div><div class="detail-val">$${Number(p.total||0).toLocaleString('es-MX')}</div>
+    <div class="detail-label">Anticipo cobrado</div><div class="detail-val">$${Number(p.anticipo||0).toLocaleString('es-MX')} <span style="color:var(--text3);font-size:13px">· Saldo: $${saldo.toLocaleString('es-MX')}</span></div>
+    <div class="detail-label">Fecha de entrega</div><div class="detail-val">${p.fecha_entrega||'—'}</div>
+    <div class="detail-label">Notas</div><div class="detail-val">${p.notas||'—'}</div>`;
+  document.getElementById('det-p-estado').value = p.estado;
+  openModal('modal-det-p');
+}
+async function cambiarEstadoPedido() {
+  const estado = document.getElementById('det-p-estado').value;
+  const idx = D.pedidos.findIndex(p=>p.id===pedidoActivo);
+  if(idx<0) return;
+  D.pedidos[idx].estado = estado;
+  await apiUpdate('pedidos', { id:pedidoActivo, estado });
+  toast('Estado actualizado: '+estado.replace('_',' '));
+  renderScreen(currentScreen);
+}
+function verOrden(idx) {
+  const o = D.ordenes_produccion[idx];
+  if(!o) return;
+  ordenActiva = idx;
+  const a = D.artesanos.find(x=>x.id===o.artesano_id);
+  const det = D.pedido_detalle.find(x=>x.id===o.pedido_detalle_id);
+  const prod = det ? D.productos.find(x=>x.id===det.producto_id) : null;
+  document.getElementById('det-o-title').textContent = o.id;
+  document.getElementById('det-o-body').innerHTML = `
+    <div class="detail-label">Producto</div><div class="detail-val">${prod?prod.nombre:'—'}</div>
+    <div class="detail-label">Artesano</div><div class="detail-val">${a?a.nombre:'Sin asignar'}</div>
+    <div class="detail-label">Creada</div><div class="detail-val">${o.fecha_creacion?new Date(o.fecha_creacion).toLocaleDateString('es-MX'):'—'}</div>`;
+  document.getElementById('det-o-estado').value = o.estado;
+  const sel = document.getElementById('det-o-artesano');
+  sel.innerHTML = '<option value="">Sin asignar</option>'+D.artesanos.map(a=>`<option value="${a.id}" ${a.id===o.artesano_id?'selected':''}>${a.nombre}</option>`).join('');
+  openModal('modal-det-o');
+}
+async function cambiarEstadoOrden() {
+  const estado = document.getElementById('det-o-estado').value;
+  const o = D.ordenes_produccion[ordenActiva];
+  o.estado = estado;
+  await apiUpdate('ordenes_produccion', { id:o.id, estado });
+  toast('Estado: '+estado.replace('_',' '));
+  renderScreen(currentScreen);
+}
+async function asignarArtesano() {
+  const artId = document.getElementById('det-o-artesano').value;
+  const o = D.ordenes_produccion[ordenActiva];
+  o.artesano_id = artId;
+  await apiUpdate('ordenes_produccion', { id:o.id, artesano_id:artId });
+  toast('Artesano asignado');
+}
+function verMaterial(idx) {
+  const m = D.materiales[idx];
+  if(!m) return;
+  materialActivo = idx;
+  document.getElementById('det-m-title').textContent = m.nombre;
+  document.getElementById('det-m-body').innerHTML = `
+    <div class="detail-label">Stock actual</div><div class="detail-val">${m.stock_actual} ${m.unidad}</div>
+    <div class="detail-label">Stock mínimo</div><div class="detail-val">${m.stock_minimo} ${m.unidad}</div>
+    <div class="detail-label">Costo unitario</div><div class="detail-val">$${m.costo_unitario}/${m.unidad}</div>`;
+  document.getElementById('det-m-stock').value = m.stock_actual;
+  openModal('modal-det-m');
+}
+async function actualizarStock() {
+  const nuevoStock = document.getElementById('det-m-stock').value;
+  const m = D.materiales[materialActivo];
+  m.stock_actual = nuevoStock;
+  await apiUpdate('materiales', { id:m.id, stock_actual:nuevoStock });
+  closeModal('modal-det-m');
+  toast('✓ Stock actualizado');
+  renderInventario();
+}
+
+// ============ GUARDAR ============
+function genId(pre, lista) { return pre+'-'+String(lista.length+1).padStart(4,'0'); }
+function setBusy(btnId, busy, label) {
+  const b = document.getElementById(btnId);
+  b.innerHTML = busy ? '<span class="loader"></span>Guardando...' : label;
+  b.disabled = busy;
+}
+function populateSelects() {
+  document.getElementById('f-cliente').innerHTML = '<option value="">— Selecciona cliente —</option>'+D.clientes.map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
+  document.getElementById('f-producto').innerHTML = '<option value="">— Selecciona producto —</option>'+D.productos.map(p=>`<option value="${p.id}">${p.nombre} — $${p.precio_venta}</option>`).join('');
+}
+function autoTotal() {
+  const pId = document.getElementById('f-producto').value;
+  const qty = Number(document.getElementById('f-cantidad').value)||1;
+  const prod = D.productos.find(x=>x.id===pId);
+  if(prod) document.getElementById('f-total').value = Number(prod.precio_venta)*qty;
+}
+
+async function guardarPedido() {
+  const clienteId = document.getElementById('f-cliente').value;
+  const productoId = document.getElementById('f-producto').value;
+  const total = document.getElementById('f-total').value;
+  if(!clienteId||!productoId||!total) { toast('Completa los campos requeridos (*)'); return; }
+  setBusy('btn-pedido',true,'Guardar pedido');
+  const pedidoId = genId('PED',D.pedidos);
+  const detId = genId('DET',D.pedido_detalle);
+  const ordenId = genId('ORD',D.ordenes_produccion);
+  const pedido = { id:pedidoId, cliente_id:clienteId, estado:'nuevo', total:Number(total), anticipo:Number(document.getElementById('f-anticipo').value)||0, notas:document.getElementById('f-notas').value, fecha_entrega:document.getElementById('f-fecha').value, fecha_creacion:new Date().toISOString() };
+  const detalle = { id:detId, pedido_id:pedidoId, producto_id:productoId, cantidad:Number(document.getElementById('f-cantidad').value)||1, precio_unitario:Number(total), color_hilo:document.getElementById('f-color').value, medidas:document.getElementById('f-medidas').value, notas_especiales:pedido.notas };
+  const orden = { id:ordenId, pedido_detalle_id:detId, artesano_id:'', estado:'pendiente', fecha_inicio:'', fecha_fin:'', fecha_creacion:new Date().toISOString() };
+  D.pedidos.push(pedido); D.pedido_detalle.push(detalle); D.ordenes_produccion.push(orden);
+  await Promise.all([apiWrite('pedidos',pedido), apiWrite('pedido_detalle',detalle), apiWrite('ordenes_produccion',orden)]);
+  setBusy('btn-pedido',false,'Guardar pedido');
+  closeModal('modal-pedido');
+  toast('✓ Pedido '+pedidoId+' creado');
+  renderScreen(currentScreen);
+  limpiar(['f-cliente','f-producto','f-color','f-medidas','f-total','f-anticipo','f-fecha','f-notas']);
+  document.getElementById('f-cantidad').value=1;
+}
+
+async function guardarCliente() {
+  const nombre = document.getElementById('c-nombre').value.trim();
+  if(!nombre) { toast('Escribe el nombre del cliente'); return; }
+  setBusy('btn-cliente',true,'Guardar cliente');
+  const id = genId('CLI',D.clientes);
+  const obj = { id, nombre, telefono:document.getElementById('c-tel').value, email:document.getElementById('c-email').value, direccion:document.getElementById('c-dir').value, fecha_creacion:new Date().toISOString() };
+  D.clientes.push(obj);
+  await apiWrite('clientes',obj);
+  setBusy('btn-cliente',false,'Guardar cliente');
+  closeModal('modal-cliente');
+  toast('✓ Cliente agregado: '+nombre);
+  renderClientes();
+  limpiar(['c-nombre','c-tel','c-email','c-dir']);
+  if(pendingAfterCliente) { pendingAfterCliente=false; populateSelects(); openModal('modal-pedido'); }
+}
+
+async function guardarProducto() {
+  const nombre = document.getElementById('p-nombre').value.trim();
+  const precio = document.getElementById('p-precio').value;
+  if(!nombre||!precio) { toast('Nombre y precio son requeridos'); return; }
+  setBusy('btn-producto',true,'Guardar producto');
+  const id = genId('PRO',D.productos);
+  const obj = { id, nombre, tipo:document.getElementById('p-tipo').value, descripcion:document.getElementById('p-desc').value, precio_venta:Number(precio), costo_produccion:Number(document.getElementById('p-costo').value)||0 };
+  D.productos.push(obj);
+  await apiWrite('productos',obj);
+  setBusy('btn-producto',false,'Guardar producto');
+  closeModal('modal-producto');
+  toast('✓ Producto agregado: '+nombre);
+  renderProductos();
+  limpiar(['p-nombre','p-desc','p-precio','p-costo']);
+  if(pendingAfterProducto) { pendingAfterProducto=false; populateSelects(); openModal('modal-pedido'); }
+}
+
+async function guardarArtesano() {
+  const nombre = document.getElementById('a-nombre').value.trim();
+  if(!nombre) { toast('Escribe el nombre del artesano'); return; }
+  setBusy('btn-artesano',true,'Guardar artesano');
+  const id = genId('ART',D.artesanos);
+  const obj = { id, nombre, telefono:document.getElementById('a-tel').value, activo:document.getElementById('a-activo').value };
+  D.artesanos.push(obj);
+  await apiWrite('artesanos',obj);
+  setBusy('btn-artesano',false,'Guardar artesano');
+  closeModal('modal-artesano');
+  toast('✓ Artesano agregado: '+nombre);
+  renderArtesanos();
+  limpiar(['a-nombre','a-tel']);
+}
+
+async function guardarMaterial() {
+  const nombre = document.getElementById('m-nombre').value.trim();
+  if(!nombre) { toast('Escribe el nombre del material'); return; }
+  setBusy('btn-material',true,'Guardar material');
+  const id = genId('MAT',D.materiales);
+  const obj = { id, nombre, unidad:document.getElementById('m-unidad').value, stock_actual:Number(document.getElementById('m-stock').value)||0, stock_minimo:Number(document.getElementById('m-minimo').value)||0, costo_unitario:Number(document.getElementById('m-costo').value)||0 };
+  D.materiales.push(obj);
+  await apiWrite('materiales',obj);
+  setBusy('btn-material',false,'Guardar material');
+  closeModal('modal-material');
+  toast('✓ Material agregado: '+nombre);
+  renderInventario();
+  limpiar(['m-nombre','m-stock','m-minimo','m-costo']);
+}
+
+async function guardarGasto() {
+  const desc = document.getElementById('g-desc').value.trim();
+  const monto = document.getElementById('g-monto').value;
+  if(!desc||!monto) { toast('Descripción y monto son requeridos'); return; }
+  setBusy('btn-gasto',true,'Registrar gasto');
+  const id = genId('GAS',D.gastos);
+  const obj = { id, categoria:document.getElementById('g-cat').value, descripcion:desc, monto:Number(monto), fecha:new Date().toISOString() };
+  D.gastos.push(obj);
+  await apiWrite('gastos',obj);
+  setBusy('btn-gasto',false,'Registrar gasto');
+  closeModal('modal-gasto');
+  toast('✓ Gasto registrado: $'+Number(monto).toLocaleString('es-MX'));
+  renderGastos();
+  limpiar(['g-desc','g-monto']);
+}
+
+// ============ FILTROS ============
+function filtrarP(e,el) { filtroP=e; document.querySelectorAll('#screen-pedidos .chip').forEach(c=>c.classList.remove('active')); el.classList.add('active'); renderPedidos(); }
+function filtrarO(e,el) { filtroO=e; document.querySelectorAll('#screen-produccion .chip').forEach(c=>c.classList.remove('active')); el.classList.add('active'); renderOrdenes(); }
+
+// ============ CONFIG ============
+async function guardarConfig() {
+  const url = document.getElementById('cfg-url').value.trim();
+  const key = document.getElementById('cfg-key').value.trim();
+  if(!url||!key) { toast('Completa los dos campos'); return; }
+  CFG = { url, key };
+  localStorage.setItem('apiUrl',url);
+  localStorage.setItem('apiKey',key);
+  closeModal('sub-config');
+  await cargarTodo();
+}
+
+// ============ UTILS ============
+function limpiar(ids) { ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.tagName==='SELECT'?el.selectedIndex=0:el.value=''; }); }
+function toast(msg) {
+  const t=document.getElementById('toast');
+  t.innerHTML=msg; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+// ============ INIT ============
+if(CFG.url&&CFG.key) { setConexion(false); cargarTodo(); } else { setConexion(false); }
+renderInicio();
+</script>
+</body>
+</html>
