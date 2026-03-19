@@ -4403,6 +4403,120 @@ function exportarTodo(){
   toast('✓ Backup descargado');
 }
 
+
+// ===== TOAST =====
+let _toastTimer=null;
+function toast(msg,dur){
+  const el=document.getElementById('toast');
+  if(!el)return;
+  el.innerHTML=msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(()=>el.classList.remove('show'),dur||2800);
+}
+
+// ===== LOGO =====
+function obtenerLogoHTML(maxH,maxW){
+  const src=localStorage.getItem('logo')||CFG.logo||'';
+  if(!src)return '';
+  return '<img src="'+src+'" style="max-height:'+maxH+'px;max-width:'+(maxW||200)+'px;object-fit:contain;display:block" />';
+}
+
+// ===== COTIZADOR =====
+function onCotTipoChange(){
+  const tipo=document.getElementById('cot-tipo-servicio')?.value;
+  const pg=document.getElementById('cot-producto-group');
+  const rg=document.getElementById('cot-reparacion-group');
+  if(pg)pg.style.display=tipo==='producto'?'block':'none';
+  if(rg)rg.style.display=tipo==='reparacion'?'block':'none';
+  if(tipo==='reparacion')setVal('cot-precio','');
+}
+
+// ===== FECHA ENTREGA SUGERIDA =====
+function sugerirFechaEntrega(){
+  const pId=document.getElementById('f-producto')?.value;
+  const prod=D.productos.find(x=>x.id===pId);
+  if(!prod||prod.categoria==='reventa')return;
+  const dias=Number(prod.dias_produccion||7);
+  const ordenesActivas=D.ordenes_produccion.filter(o=>['pendiente','en_proceso'].includes(o.estado)).length;
+  const diasExtra=Math.floor(ordenesActivas/3);
+  const total=dias+diasExtra;
+  const fecha=new Date();fecha.setDate(fecha.getDate()+total);
+  const fechaStr=fecha.toISOString().split('T')[0];
+  const fEl=document.getElementById('f-fecha');
+  if(fEl&&!fEl.value){
+    fEl.value=fechaStr;
+    toast('📅 Fecha sugerida: +'+total+' días');
+  }
+}
+
+// ===== COSTO PROMEDIO PONDERADO =====
+function costoPromedioPonderado(materialId){
+  const compras=(D.compra_detalle||[])
+    .filter(cd=>cd.material_id===materialId)
+    .map(cd=>{
+      const comp=D.compras.find(c=>c.id===cd.compra_id);
+      return {fecha:comp?.fecha||'',cantidad:Number(cd.cantidad||0),costo:Number(cd.costo_unitario||0)};
+    })
+    .sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
+  if(!compras.length){
+    const mat=D.materiales.find(m=>m.id===materialId);
+    return Number(mat?.costo_unitario||0);
+  }
+  const totalU=compras.reduce((s,c)=>s+c.cantidad,0);
+  const totalC=compras.reduce((s,c)=>s+c.cantidad*c.costo,0);
+  return totalU>0?totalC/totalU:0;
+}
+
+// ===== BÚSQUEDA GLOBAL =====
+function renderBusquedaGlobal(){
+  const q=(document.getElementById('busqueda-global-input')?.value||'').toLowerCase().trim();
+  const el=document.getElementById('busqueda-global-results');
+  if(!el)return;
+  if(q.length<2){el.innerHTML='';return;}
+  let html='';
+  // Pedidos
+  const peds=D.pedidos.filter(p=>{
+    const c=D.clientes.find(x=>x.id===p.cliente_id);
+    return p.id.toLowerCase().includes(q)||(c&&c.nombre.toLowerCase().includes(q))||(p.notas&&p.notas.toLowerCase().includes(q));
+  }).slice(0,4);
+  if(peds.length){
+    html+='<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin:8px 0 4px">Pedidos</div>';
+    peds.forEach(p=>{
+      const c=D.clientes.find(x=>x.id===p.cliente_id);
+      const div=document.createElement('div');
+      div.className='card clickable';
+      div.style.cssText='padding:10px;margin-bottom:6px';
+      div.addEventListener('click',function(){toggleBusquedaGlobal();verPedido(p.id);});
+      div.innerHTML='<div style="display:flex;justify-content:space-between">'
+        +'<div><div style="font-size:13px;font-weight:500">'+(c?c.nombre:'—')+'</div>'
+        +'<div style="font-size:11px;color:var(--text3)">'+p.id+' · $'+fmx(p.total)+'</div></div>'
+        +'<span class="badge '+p.estado+'">'+p.estado.replace('_',' ')+'</span></div>';
+      el.appendChild(div);
+    });
+  }
+  // Clientes
+  const clis=D.clientes.filter(c=>c.nombre.toLowerCase().includes(q)||(c.telefono&&c.telefono.includes(q))).slice(0,3);
+  if(clis.length){
+    const hdiv=document.createElement('div');
+    hdiv.style.cssText='font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin:8px 0 4px';
+    hdiv.textContent='Clientes';
+    el.appendChild(hdiv);
+    clis.forEach(c=>{
+      const div=document.createElement('div');
+      div.className='card clickable';
+      div.style.cssText='padding:10px;margin-bottom:6px';
+      div.addEventListener('click',function(){toggleBusquedaGlobal();showSub('clientes');});
+      div.innerHTML='<div style="font-size:13px;font-weight:500">'+c.nombre+'</div>'
+        +'<div style="font-size:11px;color:var(--text3)">'+(c.telefono||'')+'</div>';
+      el.appendChild(div);
+    });
+  }
+  if(!peds.length&&!clis.length){
+    el.innerHTML='<div style="font-size:13px;color:var(--text3);text-align:center;padding:16px">Sin resultados para "'+q+'"</div>';
+  }
+}
+
 </script>
 </body>
 </html>
