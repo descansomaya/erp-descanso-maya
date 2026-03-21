@@ -1053,6 +1053,59 @@ function toast(msg, dur=2800) {
   _toastT = setTimeout(() => el.classList.remove('show'), dur);
 }
 function setV(id, v) { const e=$(id); if(e) e.value = v==null?'':v; }
+
+window.productoPedido = function productoPedido(pedidoId){
+  const det = typeof detallePedido==='function' ? detallePedido(pedidoId) : (arr(D.ped_det).find(x=>String(x.pedido_id)===String(pedidoId))||null);
+  return det ? (arr(D.productos).find(x=>String(x.id)===String(det.producto_id))||null) : null;
+};
+
+window.siguienteEstadoPedido = function siguienteEstadoPedido(p){
+  if(!p) return null;
+  const estado = String(p.estado||'nuevo').toLowerCase();
+  const flujo = (typeof flujoPedido==='function' ? flujoPedido(p) : 'fabricacion');
+  if(estado==='nuevo') return flujo==='reventa' ? 'listo' : 'en_produccion';
+  if(estado==='en_produccion') return 'listo';
+  if(estado==='listo') return 'entregado';
+  return null;
+};
+
+window.liberarReservasPedido = async function liberarReservasPedido(pedidoId, motivo='Liberación de reserva'){
+  const rows = (D.reservas||[]).filter(r=>String(r.pedido_id)===String(pedidoId) && !['consumida','cancelada','liberada'].includes(String(r.estado||'').toLowerCase()));
+  for(const r of rows){
+    r.estado = 'liberada';
+    r.activa = 'no';
+    r.nota = motivo;
+    try{
+      if(r.id) await actualizar('reservas_inventario', {id:r.id, estado:'liberada', activa:'no', nota:motivo});
+    }catch(err){
+      console.warn('No se pudo liberar reserva', r.id, err);
+    }
+  }
+  return rows.length;
+};
+
+window.cerrarCobro = function cerrarCobro(){
+  const id = window.pedActivo || pedActivo;
+  if(!id){ toast('No hay pedido activo'); return; }
+  const p = (D.pedidos||[]).find(x=>String(x.id)===String(id));
+  if(!p){ toast('No se encontró el pedido'); return; }
+  const cliente = (D.clientes||[]).find(x=>String(x.id)===String(p.cliente_id));
+  const saldo = Math.max(0, Number(p.total||0)-Number(p.anticipo||0)-abonadoPor(id));
+  abonoActivo = {id, cerrar:true};
+  const tit = $('tit-abono'); if(tit) tit.textContent = 'Cerrar saldo';
+  const info = $('abono-info');
+  if(info) info.innerHTML = `
+    <div class="card" style="padding:10px 12px">
+      <div style="font-size:13px;font-weight:700">${cliente?.nombre||'Cliente'}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:2px">Pedido ${id}</div>
+      <div style="font-size:12px;margin-top:8px">Saldo pendiente: <strong>$${fmx(saldo)}</strong></div>
+    </div>`;
+  setV('ab-monto', saldo || '');
+  setV('ab-nota', 'Liquidación de saldo');
+  abrirModal('modal-abono');
+};
+
+
 function normDate(v){
   if(v==null || v==='') return '';
   if(typeof v==='string'){
@@ -3906,9 +3959,10 @@ ${recetas.length?`<div class="sec">Materiales</div>${recetas.map(r=>{const m=D.m
   cerrar('det-pedido');
   abrirPDF(html);
 }
-function waPedido(id) {
-  const p=D.pedidos.find(x=>x.id===id);if(!p)return;
-  const c=D.clientes.find(x=>x.id===p.cliente_id);if(!c?.telefono)return;
+window.waPedido = function waPedido(id) {
+  const p=D.pedidos.find(x=>String(x.id)===String(id)); if(!p){ toast('No se encontró el pedido'); return; }
+  const c=D.clientes.find(x=>String(x.id)===String(p.cliente_id));
+  if(!c?.telefono){ toast('El cliente no tiene teléfono registrado'); return; }
   const saldo=Number(p.total||0)-Number(p.anticipo||0)-abonadoPor(id);
   const msgs={nuevo:'Hemos recibido su pedido '+id+'.',en_produccion:'Su pedido está en producción.',listo:'¡Su pedido ya está listo para recoger! Saldo: $'+fmx(saldo)+'.',entregado:'Gracias por su preferencia.'};
   const msg=`Hola ${c.nombre}, ${msgs[p.estado]||''} — ${CFG.emp}`;
