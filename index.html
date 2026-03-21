@@ -1072,6 +1072,36 @@ window.cerrarYVolver = function cerrarYVolver(id){
   }
 };
 
+window.registrarMovimiento = async function registrarMovimiento(mov){
+  try{
+    const row = {
+      id: mov.id || genId('MOV', D.movimientos||[]),
+      fecha: mov.fecha || hoy(),
+      tipo_movimiento: mov.tipo_movimiento || mov.tipo || 'ajuste',
+      origen: mov.origen || '',
+      origen_id: mov.origen_id || '',
+      ref_tipo: mov.ref_tipo || mov.tipo_ref || '',
+      ref_id: mov.ref_id || '',
+      cantidad: Number(mov.cantidad||0),
+      costo_unitario: Number(mov.costo_unitario||0),
+      total: Number(mov.total!=null ? mov.total : (Number(mov.cantidad||0)*Number(mov.costo_unitario||0))),
+      notas: mov.notas || ''
+    };
+    D.movimientos = Array.isArray(D.movimientos) ? D.movimientos : [];
+    D.movimientos.push(row);
+    const r = await crear('movimientos_inventario', row);
+    if(!r || !r.ok){
+      console.warn('No se pudo guardar movimiento en Sheets', row, r);
+    }
+    return row;
+  }catch(err){
+    console.error('registrarMovimiento', err);
+    toast('⚠️ No se pudo registrar el movimiento de inventario');
+    return null;
+  }
+};
+
+
 function toast(msg, dur=2800) {
   const el = $('toast');
   el.innerHTML = msg;
