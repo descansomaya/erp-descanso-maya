@@ -727,23 +727,22 @@ body.modal-open{overflow:hidden}
         <option value="accesorio">Accesorio</option>
       </select>
     </div>
-    
-<div id="pr-fab-section">
-  <input type="hidden" id="pr-material">
-  <input type="hidden" id="pr-tubos" value="0">
-  <div class="form-group"><label class="form-label">Días de producción</label><input type="number" class="form-input" id="pr-dias" value="7" min="1"></div>
-  <div class="sec-title">Receta base del producto</div>
-  <div id="pr-receta-list"></div>
-  <button type="button" class="btn btn-secondary btn-sm" id="btn-add-pr-receta" onclick="addMatProducto()">+ Agregar material</button>
-  <div class="sec-title" style="margin-top:14px">Mano de obra estimada</div>
-  <div id="pr-art-list"></div>
-  <button type="button" class="btn btn-secondary btn-sm" id="btn-add-pr-art" onclick="addArtProducto()">+ Agregar artesano</button>
-  <div class="alert alert-info" style="margin-top:10px;font-size:12px">
-    Puedes agregar dos o más artesanos. Usa el factor de participación para repartir trabajo; por ejemplo 0.5 si ese artesano realiza media pieza o media carga.
-  </div>
-</div>
-<div class="form-group"><label class="form-label">Precio de venta ($) *</label><input type="number" class="form-input" id="pr-precio" placeholder="0.00"></div>
-    <div class="form-group"><label class="form-label">Costo estimado automático ($)</label><input type="number" class="form-input" id="pr-costo" placeholder="0.00" readonly><div style="font-size:11px;color:var(--text3);margin-top:6px">Se calcula con receta de materiales + mano de obra estimada.</div></div>
+    <div id="pr-fab-section">
+      <input type="hidden" id="pr-material">
+      <input type="hidden" id="pr-tubos" value="0">
+      <div class="form-group"><label class="form-label">Días de producción</label><input type="number" class="form-input" id="pr-dias" value="7" min="1"></div>
+      <div class="sec-title">Receta base del producto</div>
+      <div id="pr-receta-list"></div>
+      <button type="button" class="btn btn-secondary btn-sm" id="btn-add-pr-receta" onclick="addMatProducto()">+ Agregar material</button>
+      <div class="sec-title" style="margin-top:14px">Mano de obra estimada</div>
+      <div id="pr-art-list"></div>
+      <button type="button" class="btn btn-secondary btn-sm" id="btn-add-pr-art" onclick="addArtProducto()">+ Agregar artesano</button>
+      <div class="alert alert-info" style="margin-top:10px;font-size:12px">
+        Puedes agregar dos o más artesanos. Usa el factor de participación para repartir trabajo; por ejemplo 0.5 si ese artesano realiza media pieza o media carga.
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Precio de venta ($) *</label><input type="number" class="form-input" id="pr-precio" placeholder="0.00"></div>
+    <div class="form-group"><label class="form-label">Costo estimado automático ($)</label><input type="number" class="form-input" id="pr-costo" placeholder="0.00" readonly><div style="font-size:11px;color:var(--text3);margin-top:6px">Se calcula con receta de materiales + mano de obra estimada.</div><div id="pr-cost-breakdown" style="margin-top:6px"></div></div>
     <div class="form-group"><label class="form-label">Stock disponible</label><input type="number" class="form-input" id="pr-stock" value="0" min="0"></div>
     <button class="btn btn-primary" id="btn-guardar-prod" onclick="guardarProducto()">Guardar producto</button>
     <button class="btn btn-secondary" onclick="cerrar('modal-producto')">Cancelar</button>
@@ -3545,235 +3544,6 @@ ${notas?`<div class="notas">${notas}</div>`:''}
 <div class="val">✓ Válida hasta ${vence}. Precios en pesos mexicanos incluyen mano de obra.</div>
 <div class="ftr">${CFG.emp} — Elaboración y Reparación de Hamacas Artesanales${CFG.tel?'<br>📞 '+CFG.tel:''}<br>Mérida, Yucatán, México</div>
 <button class="btn" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
-
-<script>
-(function(){
-  window.laborProdItems = [];
-  function tplLabId(prodId){ return 'PRODLAB:'+String(prodId); }
-  function laborRowsProducto(prodId){
-    return (Array.isArray(D.recetas)?D.recetas:[]).filter(r=>String(r.pedido_id)===tplLabId(prodId));
-  }
-  function costoMat(m){
-    return Number(m?.costo_promedio || m?.costo_unitario || m?.costo || m?.ultimo_costo || m?.precio_compra || 0);
-  }
-  window.calcCostoEstimadoProducto = function(){
-    const cat = (typeof getV==='function' ? getV('pr-cat') : 'fabricacion');
-    if(cat!=='fabricacion'){
-      const manual = Number((document.getElementById('pr-costo')||{}).value||0);
-      return manual;
-    }
-    const recetaIds = Array.isArray(window.recetaProdItems) ? window.recetaProdItems : [];
-    let totalMat = 0;
-    let baseQty = 0;
-    recetaIds.forEach(i=>{
-      const matId = document.getElementById('prm-mat-'+i)?.value || '';
-      const qty = Number(document.getElementById('prm-qty-'+i)?.value || 0);
-      if(!matId || qty<=0) return;
-      const mat = (D.materiales||[]).find(m=>String(m.id)===String(matId));
-      totalMat += qty * costoMat(mat);
-      baseQty += qty;
-    });
-    const artIds = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
-    let totalLabor = 0;
-    artIds.forEach(i=>{
-      const artId = document.getElementById('pra-art-'+i)?.value || '';
-      const factor = Number(document.getElementById('pra-factor-'+i)?.value || 0);
-      if(!artId || factor<=0) return;
-      const art = (D.artesanos||[]).find(a=>String(a.id)===String(artId)) || {};
-      const tarifa = Number(art.tarifa||0);
-      const esquema = String(art.esquema||'por_pieza');
-      if(esquema==='por_tubo') totalLabor += tarifa * baseQty * factor;
-      else totalLabor += tarifa * factor;
-    });
-    const total = Math.round((totalMat + totalLabor)*100)/100;
-    const inp = document.getElementById('pr-costo');
-    if(inp) inp.value = total;
-    const box = document.getElementById('pr-cost-breakdown');
-    if(box){
-      box.innerHTML = `<div class="card-note">Materiales: $${typeof fmx==='function'?fmx(totalMat):totalMat} · Mano de obra: $${typeof fmx==='function'?fmx(totalLabor):totalLabor}</div>`;
-    }
-    return total;
-  };
-
-  window.addArtProducto = function(artId='', factor=1, nota=''){
-    const host = document.getElementById('pr-art-list');
-    if(!host) return;
-    window.laborProdItems = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
-    const idn = window.laborProdItems.length ? Math.max(...window.laborProdItems)+1 : 0;
-    window.laborProdItems.push(idn);
-    const row = document.createElement('div');
-    row.id = 'pra-'+idn;
-    row.style.cssText = 'background:var(--bg3);border-radius:12px;padding:10px;margin-bottom:8px';
-    row.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;margin-bottom:6px">
-        <select class="form-input" id="pra-art-${idn}">
-          <option value="">— Artesano —</option>
-          ${(D.artesanos||[]).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(artId)===String(a.id)?'selected':''}>${a.nombre} · ${a.esquema==='por_tubo'?'Por tubo':'Por pieza'} · $${typeof fmx==='function'?fmx(a.tarifa):a.tarifa}</option>`).join('')}
-        </select>
-        <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('pra-${idn}').remove(); laborProdItems=laborProdItems.filter(x=>x!==${idn}); calcCostoEstimadoProducto(); return false;">×</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div><label class="form-label" style="margin-bottom:4px">Factor de participación</label><input type="number" min="0" step="0.1" class="form-input" id="pra-factor-${idn}" value="${Number(factor||0)}"></div>
-        <div><label class="form-label" style="margin-bottom:4px">Nota</label><input type="text" class="form-input" id="pra-nota-${idn}" value="${nota||''}" placeholder="Opcional"></div>
-      </div>`;
-    host.appendChild(row);
-    calcCostoEstimadoProducto();
-  };
-
-  // Inject breakdown container if missing
-  const costoInput = document.getElementById('pr-costo');
-  if(costoInput && !document.getElementById('pr-cost-breakdown')){
-    const div = document.createElement('div');
-    div.id = 'pr-cost-breakdown';
-    div.style.cssText = 'margin-top:6px';
-    costoInput.parentElement.appendChild(div);
-  }
-
-  // Rebuild open modal behavior for products
-  window.abrirModalProducto = function(id){
-    editIds.prod = id || null;
-    window.recetaProdItems = [];
-    window.laborProdItems = [];
-    if(document.getElementById('pr-receta-list')) document.getElementById('pr-receta-list').innerHTML='';
-    if(document.getElementById('pr-art-list')) document.getElementById('pr-art-list').innerHTML='';
-    document.getElementById('tit-prod').textContent = id ? 'Editar producto' : 'Nuevo producto';
-    document.getElementById('btn-guardar-prod').textContent = id ? 'Guardar cambios' : 'Guardar producto';
-    const legacySel = document.getElementById('pr-material');
-    if(legacySel) legacySel.innerHTML = '<option value="">— Sin material vinculado —</option>'+ (D.materiales||[]).map(m=>`<option value="${m.id}">${m.nombre}${m.unidad?` (${m.unidad})`:''}</option>`).join('');
-    if(id){
-      const p = (D.productos||[]).find(x=>String(x.id)===String(id)); if(!p) return;
-      setV('pr-nombre', p.nombre||'');
-      setV('pr-cat', (typeof categoriaProducto==='function'?categoriaProducto(p):(p.categoria||'fabricacion')));
-      setV('pr-dias', p.dias_produccion||7);
-      setV('pr-precio', p.precio_venta||0);
-      setV('pr-stock', p.stock_disponible||0);
-      const matRows = (typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(id) : []).filter(r=>!String(r.material_id||'').startsWith('ART:'));
-      if(matRows.length) matRows.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||''));
-      else addMatProducto();
-      const labRows = laborRowsProducto(id);
-      if(labRows.length) labRows.forEach(r=>addArtProducto(String(r.material_id||'').replace(/^ART:/,''), r.cantidad||1, r.color||''));
-      else addArtProducto();
-      setTimeout(()=>calcCostoEstimadoProducto(), 30);
-    } else {
-      clr('pr-nombre','pr-precio');
-      setV('pr-cat','fabricacion');
-      setV('pr-dias','7');
-      setV('pr-stock','0');
-      addMatProducto();
-      addArtProducto();
-      setTimeout(()=>calcCostoEstimadoProducto(), 30);
-    }
-    onProdCatChange();
-    abrirModal('modal-producto');
-  };
-
-  window.onProdCatChange = function(){
-    const cat = getV('pr-cat');
-    const sec = document.getElementById('pr-fab-section');
-    if(sec) sec.style.display = cat==='fabricacion' ? 'block' : 'none';
-    const stockWrap = document.getElementById('pr-stock')?.closest('.form-group');
-    if(stockWrap) stockWrap.style.display = cat==='fabricacion' ? 'none' : 'block';
-    if(cat==='fabricacion'){
-      if(document.getElementById('pr-receta-list') && !document.getElementById('pr-receta-list').children.length) addMatProducto();
-      if(document.getElementById('pr-art-list') && !document.getElementById('pr-art-list').children.length) addArtProducto();
-      calcCostoEstimadoProducto();
-    }
-  };
-
-  window.guardarProducto = async function(){
-    const nombre=getV('pr-nombre'), precio=getV('pr-precio');
-    if(!nombre || !precio){ toast('Nombre y precio son requeridos'); return; }
-    const btn = document.getElementById('btn-guardar-prod');
-    if(btn){ btn.disabled=true; btn.textContent='Guardando...'; }
-    try{
-      const id = editIds.prod || genId('PRO', D.productos||[]);
-      const cat = getV('pr-cat');
-      const p = {
-        id,
-        nombre,
-        categoria:cat,
-        precio_venta:Number(precio||0),
-        costo_produccion: cat==='fabricacion' ? calcCostoEstimadoProducto() : Number(getV('pr-costo')||0),
-        stock_disponible: cat==='fabricacion' ? 0 : Number(getV('pr-stock')||0),
-        dias_produccion:Number(getV('pr-dias')||7)
-      };
-
-      const recetaRows = (window.recetaProdItems||[]).map(i=>({
-        material_id:document.getElementById('prm-mat-'+i)?.value || '',
-        cantidad:Number(document.getElementById('prm-qty-'+i)?.value || 0),
-        color:document.getElementById('prm-color-'+i)?.value || ''
-      })).filter(x=>x.material_id && x.cantidad>0);
-
-      // keep first row in legacy fields only for compatibility
-      p.material_hilo_id = recetaRows[0]?.material_id || '';
-      p.tubos_hilo = Number(recetaRows[0]?.cantidad || 0);
-
-      if(editIds.prod){
-        const idx=(D.productos||[]).findIndex(x=>String(x.id)===String(id));
-        if(idx>=0) Object.assign(D.productos[idx], p);
-        await actualizar('productos', p);
-      }else{
-        D.productos.push(p);
-        await crear('productos', p);
-      }
-
-      // Save material template rows
-      const tplId = 'PROD:'+String(id);
-      const prevMat = (D.recetas||[]).filter(r=>String(r.pedido_id)===tplId);
-      for(const r of prevMat){ if(r.id) await eliminar('recetas', r.id); }
-      D.recetas = (D.recetas||[]).filter(r=>String(r.pedido_id)!==tplId);
-
-      for(const rec of recetaRows){
-        const rr={id:genId('REC', D.recetas||[]), pedido_id:tplId, material_id:rec.material_id, cantidad:rec.cantidad, color:rec.color};
-        D.recetas.push(rr); await crear('recetas', rr);
-      }
-
-      // Save labor template rows
-      const labId = 'PRODLAB:'+String(id);
-      const prevLab = (D.recetas||[]).filter(r=>String(r.pedido_id)===labId);
-      for(const r of prevLab){ if(r.id) await eliminar('recetas', r.id); }
-      D.recetas = (D.recetas||[]).filter(r=>String(r.pedido_id)!==labId);
-
-      const laborRows = (window.laborProdItems||[]).map(i=>({
-        artesano_id:document.getElementById('pra-art-'+i)?.value || '',
-        factor:Number(document.getElementById('pra-factor-'+i)?.value || 0),
-        nota:document.getElementById('pra-nota-'+i)?.value || ''
-      })).filter(x=>x.artesano_id && x.factor>0);
-
-      for(const row of laborRows){
-        const rr={id:genId('REC', D.recetas||[]), pedido_id:labId, material_id:'ART:'+row.artesano_id, cantidad:row.factor, color:row.nota};
-        D.recetas.push(rr); await crear('recetas', rr);
-      }
-
-      toast(editIds.prod ? '✓ Producto actualizado' : '✓ Producto guardado');
-      editIds.prod = null;
-      cerrar('modal-producto');
-      if(typeof renderProductos==='function') renderProductos();
-    }catch(err){
-      console.error('guardarProducto override', err);
-      toast('Error al guardar producto: '+(err.message||err));
-    }finally{
-      if(btn){ btn.disabled=false; btn.textContent='Guardar producto'; }
-    }
-  };
-
-  // Delegate cost recalculation on dynamic inputs
-  document.addEventListener('input', function(e){
-    const id = e.target && e.target.id ? e.target.id : '';
-    if(/^prm-(mat|qty|color)-/.test(id) || /^pra-(art|factor|nota)-/.test(id) || id==='pr-cat'){
-      if(getV('pr-cat')==='fabricacion') calcCostoEstimadoProducto();
-    }
-  }, true);
-  document.addEventListener('change', function(e){
-    const id = e.target && e.target.id ? e.target.id : '';
-    if(/^prm-(mat|qty|color)-/.test(id) || /^pra-(art|factor|nota)-/.test(id) || id==='pr-cat'){
-      if(getV('pr-cat')==='fabricacion') calcCostoEstimadoProducto();
-    }
-  }, true);
-
-})();
-</script>
-
 </body></html>`;
   // Guardar en historial (o actualizar si es edición)
   const editId=$('modal-cot')?.dataset?.editId;
@@ -4538,235 +4308,6 @@ ${recetas.length?`<div class="sec">Materiales</div>${recetas.map(r=>{const m=D.m
 </div>
 <div class="ftr">${CFG.emp} · ${new Date().toLocaleDateString('es-MX')}${CFG.tel?' · 📞 '+CFG.tel:''}</div>
 <button class="btn" onclick="window.print()">🖨 Imprimir</button>
-
-<script>
-(function(){
-  window.laborProdItems = [];
-  function tplLabId(prodId){ return 'PRODLAB:'+String(prodId); }
-  function laborRowsProducto(prodId){
-    return (Array.isArray(D.recetas)?D.recetas:[]).filter(r=>String(r.pedido_id)===tplLabId(prodId));
-  }
-  function costoMat(m){
-    return Number(m?.costo_promedio || m?.costo_unitario || m?.costo || m?.ultimo_costo || m?.precio_compra || 0);
-  }
-  window.calcCostoEstimadoProducto = function(){
-    const cat = (typeof getV==='function' ? getV('pr-cat') : 'fabricacion');
-    if(cat!=='fabricacion'){
-      const manual = Number((document.getElementById('pr-costo')||{}).value||0);
-      return manual;
-    }
-    const recetaIds = Array.isArray(window.recetaProdItems) ? window.recetaProdItems : [];
-    let totalMat = 0;
-    let baseQty = 0;
-    recetaIds.forEach(i=>{
-      const matId = document.getElementById('prm-mat-'+i)?.value || '';
-      const qty = Number(document.getElementById('prm-qty-'+i)?.value || 0);
-      if(!matId || qty<=0) return;
-      const mat = (D.materiales||[]).find(m=>String(m.id)===String(matId));
-      totalMat += qty * costoMat(mat);
-      baseQty += qty;
-    });
-    const artIds = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
-    let totalLabor = 0;
-    artIds.forEach(i=>{
-      const artId = document.getElementById('pra-art-'+i)?.value || '';
-      const factor = Number(document.getElementById('pra-factor-'+i)?.value || 0);
-      if(!artId || factor<=0) return;
-      const art = (D.artesanos||[]).find(a=>String(a.id)===String(artId)) || {};
-      const tarifa = Number(art.tarifa||0);
-      const esquema = String(art.esquema||'por_pieza');
-      if(esquema==='por_tubo') totalLabor += tarifa * baseQty * factor;
-      else totalLabor += tarifa * factor;
-    });
-    const total = Math.round((totalMat + totalLabor)*100)/100;
-    const inp = document.getElementById('pr-costo');
-    if(inp) inp.value = total;
-    const box = document.getElementById('pr-cost-breakdown');
-    if(box){
-      box.innerHTML = `<div class="card-note">Materiales: $${typeof fmx==='function'?fmx(totalMat):totalMat} · Mano de obra: $${typeof fmx==='function'?fmx(totalLabor):totalLabor}</div>`;
-    }
-    return total;
-  };
-
-  window.addArtProducto = function(artId='', factor=1, nota=''){
-    const host = document.getElementById('pr-art-list');
-    if(!host) return;
-    window.laborProdItems = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
-    const idn = window.laborProdItems.length ? Math.max(...window.laborProdItems)+1 : 0;
-    window.laborProdItems.push(idn);
-    const row = document.createElement('div');
-    row.id = 'pra-'+idn;
-    row.style.cssText = 'background:var(--bg3);border-radius:12px;padding:10px;margin-bottom:8px';
-    row.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;margin-bottom:6px">
-        <select class="form-input" id="pra-art-${idn}">
-          <option value="">— Artesano —</option>
-          ${(D.artesanos||[]).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(artId)===String(a.id)?'selected':''}>${a.nombre} · ${a.esquema==='por_tubo'?'Por tubo':'Por pieza'} · $${typeof fmx==='function'?fmx(a.tarifa):a.tarifa}</option>`).join('')}
-        </select>
-        <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('pra-${idn}').remove(); laborProdItems=laborProdItems.filter(x=>x!==${idn}); calcCostoEstimadoProducto(); return false;">×</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div><label class="form-label" style="margin-bottom:4px">Factor de participación</label><input type="number" min="0" step="0.1" class="form-input" id="pra-factor-${idn}" value="${Number(factor||0)}"></div>
-        <div><label class="form-label" style="margin-bottom:4px">Nota</label><input type="text" class="form-input" id="pra-nota-${idn}" value="${nota||''}" placeholder="Opcional"></div>
-      </div>`;
-    host.appendChild(row);
-    calcCostoEstimadoProducto();
-  };
-
-  // Inject breakdown container if missing
-  const costoInput = document.getElementById('pr-costo');
-  if(costoInput && !document.getElementById('pr-cost-breakdown')){
-    const div = document.createElement('div');
-    div.id = 'pr-cost-breakdown';
-    div.style.cssText = 'margin-top:6px';
-    costoInput.parentElement.appendChild(div);
-  }
-
-  // Rebuild open modal behavior for products
-  window.abrirModalProducto = function(id){
-    editIds.prod = id || null;
-    window.recetaProdItems = [];
-    window.laborProdItems = [];
-    if(document.getElementById('pr-receta-list')) document.getElementById('pr-receta-list').innerHTML='';
-    if(document.getElementById('pr-art-list')) document.getElementById('pr-art-list').innerHTML='';
-    document.getElementById('tit-prod').textContent = id ? 'Editar producto' : 'Nuevo producto';
-    document.getElementById('btn-guardar-prod').textContent = id ? 'Guardar cambios' : 'Guardar producto';
-    const legacySel = document.getElementById('pr-material');
-    if(legacySel) legacySel.innerHTML = '<option value="">— Sin material vinculado —</option>'+ (D.materiales||[]).map(m=>`<option value="${m.id}">${m.nombre}${m.unidad?` (${m.unidad})`:''}</option>`).join('');
-    if(id){
-      const p = (D.productos||[]).find(x=>String(x.id)===String(id)); if(!p) return;
-      setV('pr-nombre', p.nombre||'');
-      setV('pr-cat', (typeof categoriaProducto==='function'?categoriaProducto(p):(p.categoria||'fabricacion')));
-      setV('pr-dias', p.dias_produccion||7);
-      setV('pr-precio', p.precio_venta||0);
-      setV('pr-stock', p.stock_disponible||0);
-      const matRows = (typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(id) : []).filter(r=>!String(r.material_id||'').startsWith('ART:'));
-      if(matRows.length) matRows.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||''));
-      else addMatProducto();
-      const labRows = laborRowsProducto(id);
-      if(labRows.length) labRows.forEach(r=>addArtProducto(String(r.material_id||'').replace(/^ART:/,''), r.cantidad||1, r.color||''));
-      else addArtProducto();
-      setTimeout(()=>calcCostoEstimadoProducto(), 30);
-    } else {
-      clr('pr-nombre','pr-precio');
-      setV('pr-cat','fabricacion');
-      setV('pr-dias','7');
-      setV('pr-stock','0');
-      addMatProducto();
-      addArtProducto();
-      setTimeout(()=>calcCostoEstimadoProducto(), 30);
-    }
-    onProdCatChange();
-    abrirModal('modal-producto');
-  };
-
-  window.onProdCatChange = function(){
-    const cat = getV('pr-cat');
-    const sec = document.getElementById('pr-fab-section');
-    if(sec) sec.style.display = cat==='fabricacion' ? 'block' : 'none';
-    const stockWrap = document.getElementById('pr-stock')?.closest('.form-group');
-    if(stockWrap) stockWrap.style.display = cat==='fabricacion' ? 'none' : 'block';
-    if(cat==='fabricacion'){
-      if(document.getElementById('pr-receta-list') && !document.getElementById('pr-receta-list').children.length) addMatProducto();
-      if(document.getElementById('pr-art-list') && !document.getElementById('pr-art-list').children.length) addArtProducto();
-      calcCostoEstimadoProducto();
-    }
-  };
-
-  window.guardarProducto = async function(){
-    const nombre=getV('pr-nombre'), precio=getV('pr-precio');
-    if(!nombre || !precio){ toast('Nombre y precio son requeridos'); return; }
-    const btn = document.getElementById('btn-guardar-prod');
-    if(btn){ btn.disabled=true; btn.textContent='Guardando...'; }
-    try{
-      const id = editIds.prod || genId('PRO', D.productos||[]);
-      const cat = getV('pr-cat');
-      const p = {
-        id,
-        nombre,
-        categoria:cat,
-        precio_venta:Number(precio||0),
-        costo_produccion: cat==='fabricacion' ? calcCostoEstimadoProducto() : Number(getV('pr-costo')||0),
-        stock_disponible: cat==='fabricacion' ? 0 : Number(getV('pr-stock')||0),
-        dias_produccion:Number(getV('pr-dias')||7)
-      };
-
-      const recetaRows = (window.recetaProdItems||[]).map(i=>({
-        material_id:document.getElementById('prm-mat-'+i)?.value || '',
-        cantidad:Number(document.getElementById('prm-qty-'+i)?.value || 0),
-        color:document.getElementById('prm-color-'+i)?.value || ''
-      })).filter(x=>x.material_id && x.cantidad>0);
-
-      // keep first row in legacy fields only for compatibility
-      p.material_hilo_id = recetaRows[0]?.material_id || '';
-      p.tubos_hilo = Number(recetaRows[0]?.cantidad || 0);
-
-      if(editIds.prod){
-        const idx=(D.productos||[]).findIndex(x=>String(x.id)===String(id));
-        if(idx>=0) Object.assign(D.productos[idx], p);
-        await actualizar('productos', p);
-      }else{
-        D.productos.push(p);
-        await crear('productos', p);
-      }
-
-      // Save material template rows
-      const tplId = 'PROD:'+String(id);
-      const prevMat = (D.recetas||[]).filter(r=>String(r.pedido_id)===tplId);
-      for(const r of prevMat){ if(r.id) await eliminar('recetas', r.id); }
-      D.recetas = (D.recetas||[]).filter(r=>String(r.pedido_id)!==tplId);
-
-      for(const rec of recetaRows){
-        const rr={id:genId('REC', D.recetas||[]), pedido_id:tplId, material_id:rec.material_id, cantidad:rec.cantidad, color:rec.color};
-        D.recetas.push(rr); await crear('recetas', rr);
-      }
-
-      // Save labor template rows
-      const labId = 'PRODLAB:'+String(id);
-      const prevLab = (D.recetas||[]).filter(r=>String(r.pedido_id)===labId);
-      for(const r of prevLab){ if(r.id) await eliminar('recetas', r.id); }
-      D.recetas = (D.recetas||[]).filter(r=>String(r.pedido_id)!==labId);
-
-      const laborRows = (window.laborProdItems||[]).map(i=>({
-        artesano_id:document.getElementById('pra-art-'+i)?.value || '',
-        factor:Number(document.getElementById('pra-factor-'+i)?.value || 0),
-        nota:document.getElementById('pra-nota-'+i)?.value || ''
-      })).filter(x=>x.artesano_id && x.factor>0);
-
-      for(const row of laborRows){
-        const rr={id:genId('REC', D.recetas||[]), pedido_id:labId, material_id:'ART:'+row.artesano_id, cantidad:row.factor, color:row.nota};
-        D.recetas.push(rr); await crear('recetas', rr);
-      }
-
-      toast(editIds.prod ? '✓ Producto actualizado' : '✓ Producto guardado');
-      editIds.prod = null;
-      cerrar('modal-producto');
-      if(typeof renderProductos==='function') renderProductos();
-    }catch(err){
-      console.error('guardarProducto override', err);
-      toast('Error al guardar producto: '+(err.message||err));
-    }finally{
-      if(btn){ btn.disabled=false; btn.textContent='Guardar producto'; }
-    }
-  };
-
-  // Delegate cost recalculation on dynamic inputs
-  document.addEventListener('input', function(e){
-    const id = e.target && e.target.id ? e.target.id : '';
-    if(/^prm-(mat|qty|color)-/.test(id) || /^pra-(art|factor|nota)-/.test(id) || id==='pr-cat'){
-      if(getV('pr-cat')==='fabricacion') calcCostoEstimadoProducto();
-    }
-  }, true);
-  document.addEventListener('change', function(e){
-    const id = e.target && e.target.id ? e.target.id : '';
-    if(/^prm-(mat|qty|color)-/.test(id) || /^pra-(art|factor|nota)-/.test(id) || id==='pr-cat'){
-      if(getV('pr-cat')==='fabricacion') calcCostoEstimadoProducto();
-    }
-  }, true);
-
-})();
-</script>
-
 </body></html>`;
   cerrar('det-pedido');
   abrirPDF(html);
@@ -5430,8 +4971,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.calcCostoEstimadoProducto = function(){
     const cat = (typeof getV==='function' ? getV('pr-cat') : 'fabricacion');
     if(cat!=='fabricacion'){
-      const manual = Number((document.getElementById('pr-costo')||{}).value||0);
-      return manual;
+      return Number((document.getElementById('pr-costo')||{}).value||0);
     }
     const recetaIds = Array.isArray(window.recetaProdItems) ? window.recetaProdItems : [];
     let totalMat = 0;
@@ -5460,9 +5000,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const inp = document.getElementById('pr-costo');
     if(inp) inp.value = total;
     const box = document.getElementById('pr-cost-breakdown');
-    if(box){
-      box.innerHTML = `<div class="card-note">Materiales: $${typeof fmx==='function'?fmx(totalMat):totalMat} · Mano de obra: $${typeof fmx==='function'?fmx(totalLabor):totalLabor}</div>`;
-    }
+    if(box) box.innerHTML = `<div class="card-note">Materiales: $${typeof fmx==='function'?fmx(totalMat):totalMat} · Mano de obra: $${typeof fmx==='function'?fmx(totalLabor):totalLabor}</div>`;
     return total;
   };
 
@@ -5491,16 +5029,7 @@ document.addEventListener('DOMContentLoaded', () => {
     calcCostoEstimadoProducto();
   };
 
-  // Inject breakdown container if missing
-  const costoInput = document.getElementById('pr-costo');
-  if(costoInput && !document.getElementById('pr-cost-breakdown')){
-    const div = document.createElement('div');
-    div.id = 'pr-cost-breakdown';
-    div.style.cssText = 'margin-top:6px';
-    costoInput.parentElement.appendChild(div);
-  }
-
-  // Rebuild open modal behavior for products
+  const _origAbrirModalProducto = window.abrirModalProducto;
   window.abrirModalProducto = function(id){
     editIds.prod = id || null;
     window.recetaProdItems = [];
@@ -5509,8 +5038,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if(document.getElementById('pr-art-list')) document.getElementById('pr-art-list').innerHTML='';
     document.getElementById('tit-prod').textContent = id ? 'Editar producto' : 'Nuevo producto';
     document.getElementById('btn-guardar-prod').textContent = id ? 'Guardar cambios' : 'Guardar producto';
-    const legacySel = document.getElementById('pr-material');
-    if(legacySel) legacySel.innerHTML = '<option value="">— Sin material vinculado —</option>'+ (D.materiales||[]).map(m=>`<option value="${m.id}">${m.nombre}${m.unidad?` (${m.unidad})`:''}</option>`).join('');
     if(id){
       const p = (D.productos||[]).find(x=>String(x.id)===String(id)); if(!p) return;
       setV('pr-nombre', p.nombre||'');
@@ -5575,7 +5102,6 @@ document.addEventListener('DOMContentLoaded', () => {
         color:document.getElementById('prm-color-'+i)?.value || ''
       })).filter(x=>x.material_id && x.cantidad>0);
 
-      // keep first row in legacy fields only for compatibility
       p.material_hilo_id = recetaRows[0]?.material_id || '';
       p.tubos_hilo = Number(recetaRows[0]?.cantidad || 0);
 
@@ -5588,7 +5114,6 @@ document.addEventListener('DOMContentLoaded', () => {
         await crear('productos', p);
       }
 
-      // Save material template rows
       const tplId = 'PROD:'+String(id);
       const prevMat = (D.recetas||[]).filter(r=>String(r.pedido_id)===tplId);
       for(const r of prevMat){ if(r.id) await eliminar('recetas', r.id); }
@@ -5599,7 +5124,6 @@ document.addEventListener('DOMContentLoaded', () => {
         D.recetas.push(rr); await crear('recetas', rr);
       }
 
-      // Save labor template rows
       const labId = 'PRODLAB:'+String(id);
       const prevLab = (D.recetas||[]).filter(r=>String(r.pedido_id)===labId);
       for(const r of prevLab){ if(r.id) await eliminar('recetas', r.id); }
@@ -5628,7 +5152,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Delegate cost recalculation on dynamic inputs
+  function bindProductoCosteo(){
+    const btnRec = document.getElementById('btn-add-pr-receta');
+    if(btnRec && !btnRec.dataset.bound){
+      btnRec.dataset.bound='1';
+      btnRec.onclick = function(e){ if(e){e.preventDefault();e.stopPropagation();} addMatProducto(); return false; };
+    }
+    const btnArt = document.getElementById('btn-add-pr-art');
+    if(btnArt && !btnArt.dataset.bound){
+      btnArt.dataset.bound='1';
+      btnArt.onclick = function(e){ if(e){e.preventDefault();e.stopPropagation();} addArtProducto(); return false; };
+    }
+  }
+  document.addEventListener('DOMContentLoaded', bindProductoCosteo);
+  setTimeout(bindProductoCosteo, 400);
+
   document.addEventListener('input', function(e){
     const id = e.target && e.target.id ? e.target.id : '';
     if(/^prm-(mat|qty|color)-/.test(id) || /^pra-(art|factor|nota)-/.test(id) || id==='pr-cat'){
@@ -5641,7 +5179,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if(getV('pr-cat')==='fabricacion') calcCostoEstimadoProducto();
     }
   }, true);
-
 })();
 </script>
 
