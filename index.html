@@ -728,9 +728,12 @@ body.modal-open{overflow:hidden}
       </select>
     </div>
     <div id="pr-fab-section">
-      <div class="form-group"><label class="form-label">Material principal (hilo)</label><select class="form-input" id="pr-material"></select></div>
-      <div class="form-group"><label class="form-label">Tubos de hilo</label><input type="number" class="form-input" id="pr-tubos" value="0" min="0"></div>
+      <div class="form-group"><label class="form-label">Material principal (legado)</label><select class="form-input" id="pr-material"></select></div>
+      <div class="form-group"><label class="form-label">Tubos de hilo base</label><input type="number" class="form-input" id="pr-tubos" value="0" min="0"></div>
       <div class="form-group"><label class="form-label">Días de producción</label><input type="number" class="form-input" id="pr-dias" value="7" min="1"></div>
+      <div class="sec-title">Receta base del producto</div>
+      <div id="pr-receta-list"></div>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="addMatProducto()">+ Agregar material a la receta</button>
     </div>
     <div class="form-group"><label class="form-label">Precio de venta ($) *</label><input type="number" class="form-input" id="pr-precio" placeholder="0.00"></div>
     <div class="form-group"><label class="form-label">Costo estimado ($)</label><input type="number" class="form-input" id="pr-costo" placeholder="0.00"></div>
@@ -1127,8 +1130,70 @@ window.registrarMovimiento = async function registrarMovimiento(mov){
 
 
 
+
 let recetaProdItems = [];
 let pedidoProduccionPendiente = null;
+
+window.descontarStockPedido = window.descontarStockPedido || async function(pedidoId){
+  const det = detallePedido(pedidoId); if(!det) return;
+  const prod = productoPedido(pedidoId);
+  const cat = typeof categoriaProducto==='function' ? categoriaProducto(prod||{}) : (prod?.categoria||'fabricacion');
+  if(cat==='reventa') return;
+  const recs = arr(D.recetas).filter(r=>String(r.pedido_id)===String(det.id));
+  for(const r of recs){
+    const mat = arr(D.materiales).find(m=>String(m.id)===String(r.material_id));
+    if(!mat) continue;
+    const qty = Number(r.cantidad||0);
+    mat.stock_actual = Math.max(0, Number(mat.stock_actual||0) - qty);
+    await actualizar('materiales', {id:mat.id, stock_actual:mat.stock_actual});
+    await registrarMovimiento({
+      tipo_movimiento:'salida_pedido',
+      origen:'pedido',
+      origen_id:pedidoId,
+      ref_tipo:'material',
+      ref_id:mat.id,
+      cantidad:-qty,
+      costo_unitario:Number(mat.costo_promedio||mat.costo_unitario||mat.costo||0),
+      total:-qty*Number(mat.costo_promedio||mat.costo_unitario||mat.costo||0),
+      notas:'Consumo al iniciar producción'
+    });
+  }
+};
+
+window.consumirReservasPedido = window.consumirReservasPedido || async function(pedidoId, motivo='Reserva consumida'){
+  const rows = arr(D.reservas).filter(r=>String(r.pedido_id)===String(pedidoId) && !['consumida','cancelada','liberada'].includes(String(r.estado||'').toLowerCase()));
+  for(const r of rows){
+    r.estado='consumida';
+    r.activa='no';
+    r.nota=motivo;
+    if(r.id) await actualizar('reservas', {id:r.id, estado:'consumida', activa:'no', nota:motivo});
+  }
+};
+
+window.addMatProducto = window.addMatProducto || function(materialId='', cantidad=1, color=''){
+  const host=$('pr-receta-list');
+  if(!host){ console.warn('No existe pr-receta-list'); return; }
+  recetaProdItems = Array.isArray(recetaProdItems) ? recetaProdItems : [];
+  const idn = recetaProdItems.length ? Math.max(...recetaProdItems)+1 : 0;
+  recetaProdItems.push(idn);
+  const row=document.createElement('div');
+  row.id='prm-'+idn;
+  row.style.cssText='background:var(--bg3);border-radius:12px;padding:10px;margin-bottom:8px';
+  row.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;margin-bottom:6px">
+      <select class="form-input" id="prm-mat-${idn}">
+        <option value="">— Material —</option>
+        ${arr(D.materiales).map(m=>`<option value="${m.id}" ${String(materialId)===String(m.id)?'selected':''}>${m.nombre}${m.unidad?` (${m.unidad})`:''}</option>`).join('')}
+      </select>
+      <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('prm-${idn}').remove(); recetaProdItems=recetaProdItems.filter(x=>x!==${idn}); return false;">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><label class="form-label" style="margin-bottom:4px">Cantidad</label><input type="number" min="0" step="any" class="form-input" id="prm-qty-${idn}" value="${Number(cantidad||0)}"></div>
+      <div><label class="form-label" style="margin-bottom:4px">Color / nota</label><input type="text" class="form-input" id="prm-color-${idn}" value="${color||''}" placeholder="Opcional"></div>
+    </div>`;
+  host.appendChild(row);
+};
+
 
 function recetaTemplateId(prodId){ return 'PROD:'+String(prodId); }
 function recetasPlantillaProducto(prodId){
@@ -1219,32 +1284,39 @@ window.abrirAsignacionProduccion = function(pedidoId){
 };
 
 window.confirmarInicioProduccion = async function(){
-  const pedidoId=pedidoProduccionPendiente;
-  const p=arr(D.pedidos).find(x=>String(x.id)===String(pedidoId)); if(!p){ toast('No se encontró el pedido'); return; }
-  const artId=getV('ap-artesano'); if(!artId){ toast('Selecciona un artesano'); return; }
-  const faltantes=validarStockPedido(pedidoId,true);
-  if(faltantes.length){toast('⚠️ Sin disponibilidad: '+faltantes.join(', '));return;}
-  const det=detallePedido(pedidoId);
-  let ord=arr(D.ordenes).find(o=>String(o.pedido_detalle_id)===String(det?.id));
-  if(!ord && det){
-    ord={id:genId('ORD', arr(D.ordenes)), pedido_detalle_id:det.id, artesano_id:'', estado:'pendiente', fecha_inicio:'', fecha_fin:'', fecha_creacion:hoy()};
-    D.ordenes.push(ord);
-    await crear('ordenes', ord);
+  try{
+    const pedidoId=pedidoProduccionPendiente;
+    const p=arr(D.pedidos).find(x=>String(x.id)===String(pedidoId)); 
+    if(!p){ toast('No se encontró el pedido'); return; }
+    const artId=getV('ap-artesano'); 
+    if(!artId){ toast('Selecciona un artesano'); return; }
+    const faltantes=typeof validarStockPedido==='function' ? validarStockPedido(pedidoId,true) : [];
+    if(faltantes.length){toast('⚠️ Sin disponibilidad: '+faltantes.join(', '));return;}
+    const det=detallePedido(pedidoId);
+    let ord=arr(D.ordenes).find(o=>String(o.pedido_detalle_id)===String(det?.id));
+    if(!ord && det){
+      ord={id:genId('ORD', arr(D.ordenes)), pedido_detalle_id:det.id, artesano_id:'', estado:'pendiente', fecha_inicio:'', fecha_fin:'', fecha_creacion:hoy()};
+      D.ordenes.push(ord);
+      await crear('ordenes', ord);
+    }
+    await descontarStockPedido(pedidoId);
+    await consumirReservasPedido(pedidoId,'Material liberado a producción');
+    p.estado='en_produccion';
+    await actualizar('pedidos',{id:pedidoId,estado:'en_produccion'});
+    if(ord){
+      Object.assign(ord,{artesano_id:artId,estado:'en_proceso',fecha_inicio:hoy(),nota:getV('ap-nota')||'', pago_estimado:Number(getV('ap-pago')||0)});
+      await actualizar('ordenes', {id:ord.id, artesano_id:artId, estado:'en_proceso', fecha_inicio:hoy()});
+    }
+    cerrar('modal-asignacion-prod');
+    cerrar('det-pedido');
+    toast('✓ Producción iniciada');
+    if(typeof renderProduccion==='function') renderProduccion();
+    if(typeof renderPedidos==='function') renderPedidos();
+    if(typeof renderLabels==='function') renderLabels();
+  }catch(err){
+    console.error('confirmarInicioProduccion', err);
+    toast('Error al iniciar producción: '+(err.message||err));
   }
-  await descontarStockPedido(pedidoId);
-  await consumirReservasPedido(pedidoId,'Material liberado a producción');
-  p.estado='en_produccion';
-  await actualizar('pedidos',{id:pedidoId,estado:'en_produccion'});
-  if(ord){
-    Object.assign(ord,{artesano_id:artId,estado:'en_proceso',fecha_inicio:hoy(),nota:getV('ap-nota')||'', pago_estimado:Number(getV('ap-pago')||0)});
-    await actualizar('ordenes', {id:ord.id, artesano_id:artId, estado:'en_proceso', fecha_inicio:hoy()});
-  }
-  cerrar('modal-asignacion-prod');
-  cerrar('det-pedido');
-  toast('✓ Producción iniciada');
-  renderProduccion();
-  renderPedidos();
-  renderLabels();
 };
 
 
@@ -2789,6 +2861,11 @@ function abrirModalProducto(id) {
 function onProdCatChange(){
   const cat=getV('pr-cat');
   $('pr-fab-section').style.display=cat==='fabricacion'?'block':'none';
+  if(cat==='fabricacion'){
+    if($('pr-receta-list') && !$('pr-receta-list').children.length){
+      addMatProducto();
+    }
+  }
 }
 async function guardarProducto() {
   const nombre=getV('pr-nombre'),precio=getV('pr-precio');
