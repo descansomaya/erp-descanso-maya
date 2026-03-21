@@ -3544,6 +3544,318 @@ ${notas?`<div class="notas">${notas}</div>`:''}
 <div class="val">✓ Válida hasta ${vence}. Precios en pesos mexicanos incluyen mano de obra.</div>
 <div class="ftr">${CFG.emp} — Elaboración y Reparación de Hamacas Artesanales${CFG.tel?'<br>📞 '+CFG.tel:''}<br>Mérida, Yucatán, México</div>
 <button class="btn" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
+
+<div class="overlay" id="modal-tarifa-artesano">
+  <div class="modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div class="modal-title" id="tit-tar-art">Nueva tarifa de artesano</div>
+    <div class="form-group"><label class="form-label">Artesano *</label><select class="form-input" id="ta-artesano"></select></div>
+    <div class="form-group"><label class="form-label">Concepto *</label><input type="text" class="form-input" id="ta-concepto" placeholder="Ej: Tejido matrimonial"></div>
+    <div class="form-group"><label class="form-label">Tipo de cobro</label>
+      <select class="form-input" id="ta-tipo">
+        <option value="por_pieza">Por pieza</option>
+        <option value="por_tubo">Por tubo</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Tarifa ($) *</label><input type="number" class="form-input" id="ta-tarifa" placeholder="0.00"></div>
+    <button class="btn btn-primary" onclick="guardarTarifaArtesano()">Guardar tarifa</button>
+    <button class="btn btn-secondary" onclick="cerrar('modal-tarifa-artesano')">Cancelar</button>
+  </div>
+</div>
+
+
+<script>
+(function(){
+  // persistence for multiple artisan rates
+  const KEY_TAR = 'erp_tarifas_artesano';
+  window.D = window.D || {};
+  D.tarifas_artesano = D.tarifas_artesano || [];
+
+  function arr(v){ return Array.isArray(v)?v:[]; }
+  function loadTarifasArtesano(){
+    try{
+      const rows = JSON.parse(localStorage.getItem(KEY_TAR)||'[]');
+      D.tarifas_artesano = Array.isArray(rows) ? rows : [];
+    }catch(_){ D.tarifas_artesano=[]; }
+  }
+  function saveTarifasArtesano(){
+    try{ localStorage.setItem(KEY_TAR, JSON.stringify(D.tarifas_artesano||[])); }catch(_){}
+  }
+  loadTarifasArtesano();
+
+  window.tarifasDeArtesano = function(artId){
+    return arr(D.tarifas_artesano).filter(t=>String(t.artesano_id)===String(artId) && String(t.activo||'true')!=='false');
+  };
+
+  window.abrirModalTarifaArtesano = function(artId=''){
+    const sel = document.getElementById('ta-artesano');
+    if(sel){
+      sel.innerHTML = '<option value="">— Selecciona artesano —</option>' + arr(D.artesanos).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(artId)===String(a.id)?'selected':''}>${a.nombre}</option>`).join('');
+    }
+    if(typeof clr==='function') clr('ta-concepto','ta-tarifa');
+    if(typeof setV==='function') setV('ta-tipo','por_pieza');
+    abrirModal('modal-tarifa-artesano');
+  };
+
+  window.guardarTarifaArtesano = function(){
+    const artesano_id = document.getElementById('ta-artesano')?.value || '';
+    const concepto = document.getElementById('ta-concepto')?.value?.trim() || '';
+    const tipo = document.getElementById('ta-tipo')?.value || 'por_pieza';
+    const tarifa = Number(document.getElementById('ta-tarifa')?.value || 0);
+    if(!artesano_id || !concepto || !tarifa){
+      if(typeof toast==='function') toast('Completa artesano, concepto y tarifa');
+      return;
+    }
+    const row = {id:(typeof genId==='function'?genId('TAR', D.tarifas_artesano||[]):('TAR-'+Date.now())), artesano_id, concepto, tipo_cobro:tipo, tarifa, activo:true};
+    D.tarifas_artesano = arr(D.tarifas_artesano);
+    D.tarifas_artesano.push(row);
+    saveTarifasArtesano();
+    cerrar('modal-tarifa-artesano');
+    if(typeof toast==='function') toast('✓ Tarifa guardada');
+    if(typeof renderArtesanos==='function') renderArtesanos();
+    if(document.getElementById('pr-art-list')) {
+      // refresh visible options in product form
+      const ids = (window.laborProdItems||[]).slice();
+      const current = ids.map(i=>({
+        art: document.getElementById('pra-art-'+i)?.value || '',
+        tar: document.getElementById('pra-tar-'+i)?.value || '',
+        fac: document.getElementById('pra-factor-'+i)?.value || '1',
+        nota: document.getElementById('pra-nota-'+i)?.value || ''
+      }));
+      document.getElementById('pr-art-list').innerHTML='';
+      window.laborProdItems=[];
+      current.forEach(r=>window.addArtProducto(r.art, r.fac, r.nota, r.tar));
+      if(typeof calcCostoEstimadoProducto==='function') calcCostoEstimadoProducto();
+    }
+  };
+
+  // Override product cost helpers to support tariff selection
+  window.addArtProducto = function(artId='', factor=1, nota='', tarifaId=''){
+    const host = document.getElementById('pr-art-list');
+    if(!host) return;
+    window.laborProdItems = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
+    const idn = window.laborProdItems.length ? Math.max(...window.laborProdItems)+1 : 0;
+    window.laborProdItems.push(idn);
+    const row = document.createElement('div');
+    row.id = 'pra-'+idn;
+    row.style.cssText = 'background:var(--bg3);border-radius:12px;padding:10px;margin-bottom:8px';
+    row.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;margin-bottom:6px">
+        <select class="form-input" id="pra-art-${idn}" onchange="onArtProductoChange(${idn})">
+          <option value="">— Artesano —</option>
+          ${(D.artesanos||[]).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(artId)===String(a.id)?'selected':''}>${a.nombre}</option>`).join('')}
+        </select>
+        <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('pra-${idn}').remove(); laborProdItems=laborProdItems.filter(x=>x!==${idn}); calcCostoEstimadoProducto(); return false;">×</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+        <div>
+          <label class="form-label" style="margin-bottom:4px">Tarifa / concepto</label>
+          <select class="form-input" id="pra-tar-${idn}" onchange="calcCostoEstimadoProducto()"></select>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="abrirModalTarifaArtesano(document.getElementById('pra-art-${idn}').value)">+ Tarifa</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label class="form-label" style="margin-bottom:4px">Factor de participación</label><input type="number" min="0" step="0.1" class="form-input" id="pra-factor-${idn}" value="${Number(factor||0)}"></div>
+        <div><label class="form-label" style="margin-bottom:4px">Nota</label><input type="text" class="form-input" id="pra-nota-${idn}" value="${nota||''}" placeholder="Opcional"></div>
+      </div>`;
+    host.appendChild(row);
+    window.onArtProductoChange(idn, tarifaId);
+    if(typeof calcCostoEstimadoProducto==='function') calcCostoEstimadoProducto();
+  };
+
+  window.onArtProductoChange = function(idn, selectedTar=''){
+    const artId = document.getElementById('pra-art-'+idn)?.value || '';
+    const sel = document.getElementById('pra-tar-'+idn);
+    if(!sel) return;
+    const rows = tarifasDeArtesano(artId);
+    if(rows.length){
+      sel.innerHTML = '<option value="">— Selecciona tarifa —</option>' + rows.map(t=>`<option value="${t.id}" ${String(selectedTar)===String(t.id)?'selected':''}>${t.concepto} · ${t.tipo_cobro==='por_tubo'?'Por tubo':'Por pieza'} · $${typeof fmx==='function'?fmx(t.tarifa):t.tarifa}</option>`).join('');
+      if(!selectedTar) sel.value = rows[0].id;
+    }else{
+      const art = arr(D.artesanos).find(a=>String(a.id)===String(artId));
+      if(artId && art){
+        sel.innerHTML = `<option value="">Tarifa base · ${art.esquema==='por_tubo'?'Por tubo':'Por pieza'} · $${typeof fmx==='function'?fmx(art.tarifa):art.tarifa}</option>`;
+      }else{
+        sel.innerHTML = '<option value="">— Sin tarifas —</option>';
+      }
+    }
+  };
+
+  // Override calc cost to use selected tariff if any
+  window.calcCostoEstimadoProducto = function(){
+    const cat = (typeof getV==='function' ? getV('pr-cat') : 'fabricacion');
+    if(cat!=='fabricacion'){
+      return Number((document.getElementById('pr-costo')||{}).value||0);
+    }
+    const recetaIds = Array.isArray(window.recetaProdItems) ? window.recetaProdItems : [];
+    let totalMat = 0;
+    let baseQty = 0;
+    recetaIds.forEach(i=>{
+      const matId = document.getElementById('prm-mat-'+i)?.value || '';
+      const qty = Number(document.getElementById('prm-qty-'+i)?.value || 0);
+      if(!matId || qty<=0) return;
+      const mat = (D.materiales||[]).find(m=>String(m.id)===String(matId));
+      const unit = Number(mat?.costo_promedio || mat?.costo_unitario || mat?.costo || mat?.ultimo_costo || mat?.precio_compra || 0);
+      totalMat += qty * unit;
+      baseQty += qty;
+    });
+    const artIds = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
+    let totalLabor = 0;
+    artIds.forEach(i=>{
+      const artId = document.getElementById('pra-art-'+i)?.value || '';
+      const tarId = document.getElementById('pra-tar-'+i)?.value || '';
+      const factor = Number(document.getElementById('pra-factor-'+i)?.value || 0);
+      if(!artId || factor<=0) return;
+      const art = (D.artesanos||[]).find(a=>String(a.id)===String(artId)) || {};
+      const tar = tarifasDeArtesano(artId).find(t=>String(t.id)===String(tarId));
+      const esquema = String(tar?.tipo_cobro || art.esquema || 'por_pieza');
+      const tarifa = Number(tar?.tarifa || art.tarifa || 0);
+      if(esquema==='por_tubo') totalLabor += tarifa * baseQty * factor;
+      else totalLabor += tarifa * factor;
+    });
+    const total = Math.round((totalMat + totalLabor)*100)/100;
+    const inp = document.getElementById('pr-costo');
+    if(inp) inp.value = total;
+    let box = document.getElementById('pr-cost-breakdown');
+    if(!box && inp){
+      box = document.createElement('div');
+      box.id='pr-cost-breakdown';
+      box.style.cssText='margin-top:6px';
+      inp.parentElement.appendChild(box);
+    }
+    if(box){
+      box.innerHTML = `<div class="card-note">Materiales: $${typeof fmx==='function'?fmx(totalMat):totalMat} · Mano de obra: $${typeof fmx==='function'?fmx(totalLabor):totalLabor}</div>`;
+    }
+    return total;
+  };
+
+  // Override product modal open/save to store tariff ids in receta table as labor templates
+  const oldAbrir = window.abrirModalProducto;
+  window.abrirModalProducto = function(id){
+    if(typeof oldAbrir==='function') oldAbrir(id); else return;
+    // replace labor rows with tariff-aware rows
+    if(document.getElementById('pr-art-list')){
+      document.getElementById('pr-art-list').innerHTML='';
+      window.laborProdItems=[];
+      if(id){
+        const labRows = arr(D.recetas).filter(r=>String(r.pedido_id)==='PRODLAB:'+String(id));
+        if(labRows.length){
+          labRows.forEach(r=>window.addArtProducto(String(r.material_id||'').replace(/^ART:/,''), r.cantidad||1, r.color||'', r.ref_id||''));
+        } else {
+          window.addArtProducto();
+        }
+      } else {
+        window.addArtProducto();
+      }
+      window.calcCostoEstimadoProducto();
+    }
+  };
+
+  const oldGuardar = window.guardarProducto;
+  window.guardarProducto = async function(){
+    const btn = document.getElementById('btn-guardar-prod');
+    if(btn){ btn.disabled=true; }
+    try{
+      const nombre=getV('pr-nombre'), precio=getV('pr-precio');
+      if(!nombre || !precio){ toast('Nombre y precio son requeridos'); return; }
+      const id = editIds.prod || genId('PRO', D.productos||[]);
+      const cat = getV('pr-cat');
+      const recetaRows = (window.recetaProdItems||[]).map(i=>({
+        material_id:document.getElementById('prm-mat-'+i)?.value || '',
+        cantidad:Number(document.getElementById('prm-qty-'+i)?.value || 0),
+        color:document.getElementById('prm-color-'+i)?.value || ''
+      })).filter(x=>x.material_id && x.cantidad>0);
+
+      const p = {
+        id,
+        nombre,
+        categoria:cat,
+        precio_venta:Number(precio||0),
+        costo_produccion: cat==='fabricacion' ? calcCostoEstimadoProducto() : Number(getV('pr-costo')||0),
+        stock_disponible: cat==='fabricacion' ? 0 : Number(getV('pr-stock')||0),
+        dias_produccion:Number(getV('pr-dias')||7),
+        material_hilo_id: recetaRows[0]?.material_id || '',
+        tubos_hilo: Number(recetaRows[0]?.cantidad || 0)
+      };
+
+      if(editIds.prod){
+        const idx=(D.productos||[]).findIndex(x=>String(x.id)===String(id));
+        if(idx>=0) Object.assign(D.productos[idx], p);
+        await actualizar('productos', p);
+      } else {
+        D.productos.push(p);
+        await crear('productos', p);
+      }
+
+      const idsToRemove = ['PROD:'+id, 'PRODLAB:'+id];
+      const prev = arr(D.recetas).filter(r=>idsToRemove.includes(String(r.pedido_id)));
+      for(const r of prev){ if(r.id) await eliminar('recetas', r.id); }
+      D.recetas = arr(D.recetas).filter(r=>!idsToRemove.includes(String(r.pedido_id)));
+
+      for(const rec of recetaRows){
+        const rr={id:genId('REC', D.recetas||[]), pedido_id:'PROD:'+String(id), material_id:rec.material_id, cantidad:rec.cantidad, color:rec.color};
+        D.recetas.push(rr); await crear('recetas', rr);
+      }
+
+      const laborRows = (window.laborProdItems||[]).map(i=>({
+        artesano_id:document.getElementById('pra-art-'+i)?.value || '',
+        tarifa_id:document.getElementById('pra-tar-'+i)?.value || '',
+        factor:Number(document.getElementById('pra-factor-'+i)?.value || 0),
+        nota:document.getElementById('pra-nota-'+i)?.value || ''
+      })).filter(x=>x.artesano_id && x.factor>0);
+
+      for(const row of laborRows){
+        const rr={id:genId('REC', D.recetas||[]), pedido_id:'PRODLAB:'+String(id), material_id:'ART:'+row.artesano_id, ref_id:row.tarifa_id, cantidad:row.factor, color:row.nota};
+        D.recetas.push(rr); await crear('recetas', rr);
+      }
+
+      toast(editIds.prod ? '✓ Producto actualizado' : '✓ Producto guardado');
+      editIds.prod=null;
+      cerrar('modal-producto');
+      if(typeof renderProductos==='function') renderProductos();
+    }catch(err){
+      console.error('guardarProducto 11.5.4', err);
+      toast('Error al guardar producto: '+(err.message||err));
+    }finally{
+      const btn = document.getElementById('btn-guardar-prod');
+      if(btn){ btn.disabled=false; btn.textContent='Guardar producto'; }
+    }
+  };
+
+  // enrich artisans render with rate summary
+  const oldRenderArt = window.renderArtesanos;
+  window.renderArtesanos = function(){
+    if(typeof oldRenderArt==='function') oldRenderArt();
+    const el = document.getElementById('art-list');
+    if(!el) return;
+    const cards = Array.from(el.querySelectorAll('.card'));
+    cards.forEach(card=>{
+      const title = card.querySelector('.card-title')?.textContent?.trim() || '';
+      const art = arr(D.artesanos).find(a=>a.nombre===title);
+      if(!art) return;
+      const rates = tarifasDeArtesano(art.id);
+      if(!rates.length) return;
+      const note = document.createElement('div');
+      note.className='card-note';
+      note.style.marginTop='4px';
+      note.textContent = rates.length + ' tarifa' + (rates.length!==1?'s':'') + ' configurada' + (rates.length!==1?'s':'');
+      const holder = card.querySelector('.card-row > div');
+      if(holder) holder.appendChild(note);
+    });
+  };
+
+  // ensure dynamic recalc
+  document.addEventListener('input', function(e){
+    const id = e.target?.id || '';
+    if(/^prm-/.test(id) || /^pra-/.test(id)) window.calcCostoEstimadoProducto?.();
+  }, true);
+  document.addEventListener('change', function(e){
+    const id = e.target?.id || '';
+    if(/^prm-/.test(id) || /^pra-/.test(id) || id==='pr-cat') window.calcCostoEstimadoProducto?.();
+  }, true);
+})();
+</script>
+
 </body></html>`;
   // Guardar en historial (o actualizar si es edición)
   const editId=$('modal-cot')?.dataset?.editId;
@@ -4308,6 +4620,318 @@ ${recetas.length?`<div class="sec">Materiales</div>${recetas.map(r=>{const m=D.m
 </div>
 <div class="ftr">${CFG.emp} · ${new Date().toLocaleDateString('es-MX')}${CFG.tel?' · 📞 '+CFG.tel:''}</div>
 <button class="btn" onclick="window.print()">🖨 Imprimir</button>
+
+<div class="overlay" id="modal-tarifa-artesano">
+  <div class="modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div class="modal-title" id="tit-tar-art">Nueva tarifa de artesano</div>
+    <div class="form-group"><label class="form-label">Artesano *</label><select class="form-input" id="ta-artesano"></select></div>
+    <div class="form-group"><label class="form-label">Concepto *</label><input type="text" class="form-input" id="ta-concepto" placeholder="Ej: Tejido matrimonial"></div>
+    <div class="form-group"><label class="form-label">Tipo de cobro</label>
+      <select class="form-input" id="ta-tipo">
+        <option value="por_pieza">Por pieza</option>
+        <option value="por_tubo">Por tubo</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Tarifa ($) *</label><input type="number" class="form-input" id="ta-tarifa" placeholder="0.00"></div>
+    <button class="btn btn-primary" onclick="guardarTarifaArtesano()">Guardar tarifa</button>
+    <button class="btn btn-secondary" onclick="cerrar('modal-tarifa-artesano')">Cancelar</button>
+  </div>
+</div>
+
+
+<script>
+(function(){
+  // persistence for multiple artisan rates
+  const KEY_TAR = 'erp_tarifas_artesano';
+  window.D = window.D || {};
+  D.tarifas_artesano = D.tarifas_artesano || [];
+
+  function arr(v){ return Array.isArray(v)?v:[]; }
+  function loadTarifasArtesano(){
+    try{
+      const rows = JSON.parse(localStorage.getItem(KEY_TAR)||'[]');
+      D.tarifas_artesano = Array.isArray(rows) ? rows : [];
+    }catch(_){ D.tarifas_artesano=[]; }
+  }
+  function saveTarifasArtesano(){
+    try{ localStorage.setItem(KEY_TAR, JSON.stringify(D.tarifas_artesano||[])); }catch(_){}
+  }
+  loadTarifasArtesano();
+
+  window.tarifasDeArtesano = function(artId){
+    return arr(D.tarifas_artesano).filter(t=>String(t.artesano_id)===String(artId) && String(t.activo||'true')!=='false');
+  };
+
+  window.abrirModalTarifaArtesano = function(artId=''){
+    const sel = document.getElementById('ta-artesano');
+    if(sel){
+      sel.innerHTML = '<option value="">— Selecciona artesano —</option>' + arr(D.artesanos).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(artId)===String(a.id)?'selected':''}>${a.nombre}</option>`).join('');
+    }
+    if(typeof clr==='function') clr('ta-concepto','ta-tarifa');
+    if(typeof setV==='function') setV('ta-tipo','por_pieza');
+    abrirModal('modal-tarifa-artesano');
+  };
+
+  window.guardarTarifaArtesano = function(){
+    const artesano_id = document.getElementById('ta-artesano')?.value || '';
+    const concepto = document.getElementById('ta-concepto')?.value?.trim() || '';
+    const tipo = document.getElementById('ta-tipo')?.value || 'por_pieza';
+    const tarifa = Number(document.getElementById('ta-tarifa')?.value || 0);
+    if(!artesano_id || !concepto || !tarifa){
+      if(typeof toast==='function') toast('Completa artesano, concepto y tarifa');
+      return;
+    }
+    const row = {id:(typeof genId==='function'?genId('TAR', D.tarifas_artesano||[]):('TAR-'+Date.now())), artesano_id, concepto, tipo_cobro:tipo, tarifa, activo:true};
+    D.tarifas_artesano = arr(D.tarifas_artesano);
+    D.tarifas_artesano.push(row);
+    saveTarifasArtesano();
+    cerrar('modal-tarifa-artesano');
+    if(typeof toast==='function') toast('✓ Tarifa guardada');
+    if(typeof renderArtesanos==='function') renderArtesanos();
+    if(document.getElementById('pr-art-list')) {
+      // refresh visible options in product form
+      const ids = (window.laborProdItems||[]).slice();
+      const current = ids.map(i=>({
+        art: document.getElementById('pra-art-'+i)?.value || '',
+        tar: document.getElementById('pra-tar-'+i)?.value || '',
+        fac: document.getElementById('pra-factor-'+i)?.value || '1',
+        nota: document.getElementById('pra-nota-'+i)?.value || ''
+      }));
+      document.getElementById('pr-art-list').innerHTML='';
+      window.laborProdItems=[];
+      current.forEach(r=>window.addArtProducto(r.art, r.fac, r.nota, r.tar));
+      if(typeof calcCostoEstimadoProducto==='function') calcCostoEstimadoProducto();
+    }
+  };
+
+  // Override product cost helpers to support tariff selection
+  window.addArtProducto = function(artId='', factor=1, nota='', tarifaId=''){
+    const host = document.getElementById('pr-art-list');
+    if(!host) return;
+    window.laborProdItems = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
+    const idn = window.laborProdItems.length ? Math.max(...window.laborProdItems)+1 : 0;
+    window.laborProdItems.push(idn);
+    const row = document.createElement('div');
+    row.id = 'pra-'+idn;
+    row.style.cssText = 'background:var(--bg3);border-radius:12px;padding:10px;margin-bottom:8px';
+    row.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;margin-bottom:6px">
+        <select class="form-input" id="pra-art-${idn}" onchange="onArtProductoChange(${idn})">
+          <option value="">— Artesano —</option>
+          ${(D.artesanos||[]).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(artId)===String(a.id)?'selected':''}>${a.nombre}</option>`).join('')}
+        </select>
+        <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('pra-${idn}').remove(); laborProdItems=laborProdItems.filter(x=>x!==${idn}); calcCostoEstimadoProducto(); return false;">×</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+        <div>
+          <label class="form-label" style="margin-bottom:4px">Tarifa / concepto</label>
+          <select class="form-input" id="pra-tar-${idn}" onchange="calcCostoEstimadoProducto()"></select>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="abrirModalTarifaArtesano(document.getElementById('pra-art-${idn}').value)">+ Tarifa</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label class="form-label" style="margin-bottom:4px">Factor de participación</label><input type="number" min="0" step="0.1" class="form-input" id="pra-factor-${idn}" value="${Number(factor||0)}"></div>
+        <div><label class="form-label" style="margin-bottom:4px">Nota</label><input type="text" class="form-input" id="pra-nota-${idn}" value="${nota||''}" placeholder="Opcional"></div>
+      </div>`;
+    host.appendChild(row);
+    window.onArtProductoChange(idn, tarifaId);
+    if(typeof calcCostoEstimadoProducto==='function') calcCostoEstimadoProducto();
+  };
+
+  window.onArtProductoChange = function(idn, selectedTar=''){
+    const artId = document.getElementById('pra-art-'+idn)?.value || '';
+    const sel = document.getElementById('pra-tar-'+idn);
+    if(!sel) return;
+    const rows = tarifasDeArtesano(artId);
+    if(rows.length){
+      sel.innerHTML = '<option value="">— Selecciona tarifa —</option>' + rows.map(t=>`<option value="${t.id}" ${String(selectedTar)===String(t.id)?'selected':''}>${t.concepto} · ${t.tipo_cobro==='por_tubo'?'Por tubo':'Por pieza'} · $${typeof fmx==='function'?fmx(t.tarifa):t.tarifa}</option>`).join('');
+      if(!selectedTar) sel.value = rows[0].id;
+    }else{
+      const art = arr(D.artesanos).find(a=>String(a.id)===String(artId));
+      if(artId && art){
+        sel.innerHTML = `<option value="">Tarifa base · ${art.esquema==='por_tubo'?'Por tubo':'Por pieza'} · $${typeof fmx==='function'?fmx(art.tarifa):art.tarifa}</option>`;
+      }else{
+        sel.innerHTML = '<option value="">— Sin tarifas —</option>';
+      }
+    }
+  };
+
+  // Override calc cost to use selected tariff if any
+  window.calcCostoEstimadoProducto = function(){
+    const cat = (typeof getV==='function' ? getV('pr-cat') : 'fabricacion');
+    if(cat!=='fabricacion'){
+      return Number((document.getElementById('pr-costo')||{}).value||0);
+    }
+    const recetaIds = Array.isArray(window.recetaProdItems) ? window.recetaProdItems : [];
+    let totalMat = 0;
+    let baseQty = 0;
+    recetaIds.forEach(i=>{
+      const matId = document.getElementById('prm-mat-'+i)?.value || '';
+      const qty = Number(document.getElementById('prm-qty-'+i)?.value || 0);
+      if(!matId || qty<=0) return;
+      const mat = (D.materiales||[]).find(m=>String(m.id)===String(matId));
+      const unit = Number(mat?.costo_promedio || mat?.costo_unitario || mat?.costo || mat?.ultimo_costo || mat?.precio_compra || 0);
+      totalMat += qty * unit;
+      baseQty += qty;
+    });
+    const artIds = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
+    let totalLabor = 0;
+    artIds.forEach(i=>{
+      const artId = document.getElementById('pra-art-'+i)?.value || '';
+      const tarId = document.getElementById('pra-tar-'+i)?.value || '';
+      const factor = Number(document.getElementById('pra-factor-'+i)?.value || 0);
+      if(!artId || factor<=0) return;
+      const art = (D.artesanos||[]).find(a=>String(a.id)===String(artId)) || {};
+      const tar = tarifasDeArtesano(artId).find(t=>String(t.id)===String(tarId));
+      const esquema = String(tar?.tipo_cobro || art.esquema || 'por_pieza');
+      const tarifa = Number(tar?.tarifa || art.tarifa || 0);
+      if(esquema==='por_tubo') totalLabor += tarifa * baseQty * factor;
+      else totalLabor += tarifa * factor;
+    });
+    const total = Math.round((totalMat + totalLabor)*100)/100;
+    const inp = document.getElementById('pr-costo');
+    if(inp) inp.value = total;
+    let box = document.getElementById('pr-cost-breakdown');
+    if(!box && inp){
+      box = document.createElement('div');
+      box.id='pr-cost-breakdown';
+      box.style.cssText='margin-top:6px';
+      inp.parentElement.appendChild(box);
+    }
+    if(box){
+      box.innerHTML = `<div class="card-note">Materiales: $${typeof fmx==='function'?fmx(totalMat):totalMat} · Mano de obra: $${typeof fmx==='function'?fmx(totalLabor):totalLabor}</div>`;
+    }
+    return total;
+  };
+
+  // Override product modal open/save to store tariff ids in receta table as labor templates
+  const oldAbrir = window.abrirModalProducto;
+  window.abrirModalProducto = function(id){
+    if(typeof oldAbrir==='function') oldAbrir(id); else return;
+    // replace labor rows with tariff-aware rows
+    if(document.getElementById('pr-art-list')){
+      document.getElementById('pr-art-list').innerHTML='';
+      window.laborProdItems=[];
+      if(id){
+        const labRows = arr(D.recetas).filter(r=>String(r.pedido_id)==='PRODLAB:'+String(id));
+        if(labRows.length){
+          labRows.forEach(r=>window.addArtProducto(String(r.material_id||'').replace(/^ART:/,''), r.cantidad||1, r.color||'', r.ref_id||''));
+        } else {
+          window.addArtProducto();
+        }
+      } else {
+        window.addArtProducto();
+      }
+      window.calcCostoEstimadoProducto();
+    }
+  };
+
+  const oldGuardar = window.guardarProducto;
+  window.guardarProducto = async function(){
+    const btn = document.getElementById('btn-guardar-prod');
+    if(btn){ btn.disabled=true; }
+    try{
+      const nombre=getV('pr-nombre'), precio=getV('pr-precio');
+      if(!nombre || !precio){ toast('Nombre y precio son requeridos'); return; }
+      const id = editIds.prod || genId('PRO', D.productos||[]);
+      const cat = getV('pr-cat');
+      const recetaRows = (window.recetaProdItems||[]).map(i=>({
+        material_id:document.getElementById('prm-mat-'+i)?.value || '',
+        cantidad:Number(document.getElementById('prm-qty-'+i)?.value || 0),
+        color:document.getElementById('prm-color-'+i)?.value || ''
+      })).filter(x=>x.material_id && x.cantidad>0);
+
+      const p = {
+        id,
+        nombre,
+        categoria:cat,
+        precio_venta:Number(precio||0),
+        costo_produccion: cat==='fabricacion' ? calcCostoEstimadoProducto() : Number(getV('pr-costo')||0),
+        stock_disponible: cat==='fabricacion' ? 0 : Number(getV('pr-stock')||0),
+        dias_produccion:Number(getV('pr-dias')||7),
+        material_hilo_id: recetaRows[0]?.material_id || '',
+        tubos_hilo: Number(recetaRows[0]?.cantidad || 0)
+      };
+
+      if(editIds.prod){
+        const idx=(D.productos||[]).findIndex(x=>String(x.id)===String(id));
+        if(idx>=0) Object.assign(D.productos[idx], p);
+        await actualizar('productos', p);
+      } else {
+        D.productos.push(p);
+        await crear('productos', p);
+      }
+
+      const idsToRemove = ['PROD:'+id, 'PRODLAB:'+id];
+      const prev = arr(D.recetas).filter(r=>idsToRemove.includes(String(r.pedido_id)));
+      for(const r of prev){ if(r.id) await eliminar('recetas', r.id); }
+      D.recetas = arr(D.recetas).filter(r=>!idsToRemove.includes(String(r.pedido_id)));
+
+      for(const rec of recetaRows){
+        const rr={id:genId('REC', D.recetas||[]), pedido_id:'PROD:'+String(id), material_id:rec.material_id, cantidad:rec.cantidad, color:rec.color};
+        D.recetas.push(rr); await crear('recetas', rr);
+      }
+
+      const laborRows = (window.laborProdItems||[]).map(i=>({
+        artesano_id:document.getElementById('pra-art-'+i)?.value || '',
+        tarifa_id:document.getElementById('pra-tar-'+i)?.value || '',
+        factor:Number(document.getElementById('pra-factor-'+i)?.value || 0),
+        nota:document.getElementById('pra-nota-'+i)?.value || ''
+      })).filter(x=>x.artesano_id && x.factor>0);
+
+      for(const row of laborRows){
+        const rr={id:genId('REC', D.recetas||[]), pedido_id:'PRODLAB:'+String(id), material_id:'ART:'+row.artesano_id, ref_id:row.tarifa_id, cantidad:row.factor, color:row.nota};
+        D.recetas.push(rr); await crear('recetas', rr);
+      }
+
+      toast(editIds.prod ? '✓ Producto actualizado' : '✓ Producto guardado');
+      editIds.prod=null;
+      cerrar('modal-producto');
+      if(typeof renderProductos==='function') renderProductos();
+    }catch(err){
+      console.error('guardarProducto 11.5.4', err);
+      toast('Error al guardar producto: '+(err.message||err));
+    }finally{
+      const btn = document.getElementById('btn-guardar-prod');
+      if(btn){ btn.disabled=false; btn.textContent='Guardar producto'; }
+    }
+  };
+
+  // enrich artisans render with rate summary
+  const oldRenderArt = window.renderArtesanos;
+  window.renderArtesanos = function(){
+    if(typeof oldRenderArt==='function') oldRenderArt();
+    const el = document.getElementById('art-list');
+    if(!el) return;
+    const cards = Array.from(el.querySelectorAll('.card'));
+    cards.forEach(card=>{
+      const title = card.querySelector('.card-title')?.textContent?.trim() || '';
+      const art = arr(D.artesanos).find(a=>a.nombre===title);
+      if(!art) return;
+      const rates = tarifasDeArtesano(art.id);
+      if(!rates.length) return;
+      const note = document.createElement('div');
+      note.className='card-note';
+      note.style.marginTop='4px';
+      note.textContent = rates.length + ' tarifa' + (rates.length!==1?'s':'') + ' configurada' + (rates.length!==1?'s':'');
+      const holder = card.querySelector('.card-row > div');
+      if(holder) holder.appendChild(note);
+    });
+  };
+
+  // ensure dynamic recalc
+  document.addEventListener('input', function(e){
+    const id = e.target?.id || '';
+    if(/^prm-/.test(id) || /^pra-/.test(id)) window.calcCostoEstimadoProducto?.();
+  }, true);
+  document.addEventListener('change', function(e){
+    const id = e.target?.id || '';
+    if(/^prm-/.test(id) || /^pra-/.test(id) || id==='pr-cat') window.calcCostoEstimadoProducto?.();
+  }, true);
+})();
+</script>
+
 </body></html>`;
   cerrar('det-pedido');
   abrirPDF(html);
@@ -5178,6 +5802,318 @@ document.addEventListener('DOMContentLoaded', () => {
     if(/^prm-(mat|qty|color)-/.test(id) || /^pra-(art|factor|nota)-/.test(id) || id==='pr-cat'){
       if(getV('pr-cat')==='fabricacion') calcCostoEstimadoProducto();
     }
+  }, true);
+})();
+</script>
+
+
+<div class="overlay" id="modal-tarifa-artesano">
+  <div class="modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div class="modal-title" id="tit-tar-art">Nueva tarifa de artesano</div>
+    <div class="form-group"><label class="form-label">Artesano *</label><select class="form-input" id="ta-artesano"></select></div>
+    <div class="form-group"><label class="form-label">Concepto *</label><input type="text" class="form-input" id="ta-concepto" placeholder="Ej: Tejido matrimonial"></div>
+    <div class="form-group"><label class="form-label">Tipo de cobro</label>
+      <select class="form-input" id="ta-tipo">
+        <option value="por_pieza">Por pieza</option>
+        <option value="por_tubo">Por tubo</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Tarifa ($) *</label><input type="number" class="form-input" id="ta-tarifa" placeholder="0.00"></div>
+    <button class="btn btn-primary" onclick="guardarTarifaArtesano()">Guardar tarifa</button>
+    <button class="btn btn-secondary" onclick="cerrar('modal-tarifa-artesano')">Cancelar</button>
+  </div>
+</div>
+
+
+<script>
+(function(){
+  // persistence for multiple artisan rates
+  const KEY_TAR = 'erp_tarifas_artesano';
+  window.D = window.D || {};
+  D.tarifas_artesano = D.tarifas_artesano || [];
+
+  function arr(v){ return Array.isArray(v)?v:[]; }
+  function loadTarifasArtesano(){
+    try{
+      const rows = JSON.parse(localStorage.getItem(KEY_TAR)||'[]');
+      D.tarifas_artesano = Array.isArray(rows) ? rows : [];
+    }catch(_){ D.tarifas_artesano=[]; }
+  }
+  function saveTarifasArtesano(){
+    try{ localStorage.setItem(KEY_TAR, JSON.stringify(D.tarifas_artesano||[])); }catch(_){}
+  }
+  loadTarifasArtesano();
+
+  window.tarifasDeArtesano = function(artId){
+    return arr(D.tarifas_artesano).filter(t=>String(t.artesano_id)===String(artId) && String(t.activo||'true')!=='false');
+  };
+
+  window.abrirModalTarifaArtesano = function(artId=''){
+    const sel = document.getElementById('ta-artesano');
+    if(sel){
+      sel.innerHTML = '<option value="">— Selecciona artesano —</option>' + arr(D.artesanos).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(artId)===String(a.id)?'selected':''}>${a.nombre}</option>`).join('');
+    }
+    if(typeof clr==='function') clr('ta-concepto','ta-tarifa');
+    if(typeof setV==='function') setV('ta-tipo','por_pieza');
+    abrirModal('modal-tarifa-artesano');
+  };
+
+  window.guardarTarifaArtesano = function(){
+    const artesano_id = document.getElementById('ta-artesano')?.value || '';
+    const concepto = document.getElementById('ta-concepto')?.value?.trim() || '';
+    const tipo = document.getElementById('ta-tipo')?.value || 'por_pieza';
+    const tarifa = Number(document.getElementById('ta-tarifa')?.value || 0);
+    if(!artesano_id || !concepto || !tarifa){
+      if(typeof toast==='function') toast('Completa artesano, concepto y tarifa');
+      return;
+    }
+    const row = {id:(typeof genId==='function'?genId('TAR', D.tarifas_artesano||[]):('TAR-'+Date.now())), artesano_id, concepto, tipo_cobro:tipo, tarifa, activo:true};
+    D.tarifas_artesano = arr(D.tarifas_artesano);
+    D.tarifas_artesano.push(row);
+    saveTarifasArtesano();
+    cerrar('modal-tarifa-artesano');
+    if(typeof toast==='function') toast('✓ Tarifa guardada');
+    if(typeof renderArtesanos==='function') renderArtesanos();
+    if(document.getElementById('pr-art-list')) {
+      // refresh visible options in product form
+      const ids = (window.laborProdItems||[]).slice();
+      const current = ids.map(i=>({
+        art: document.getElementById('pra-art-'+i)?.value || '',
+        tar: document.getElementById('pra-tar-'+i)?.value || '',
+        fac: document.getElementById('pra-factor-'+i)?.value || '1',
+        nota: document.getElementById('pra-nota-'+i)?.value || ''
+      }));
+      document.getElementById('pr-art-list').innerHTML='';
+      window.laborProdItems=[];
+      current.forEach(r=>window.addArtProducto(r.art, r.fac, r.nota, r.tar));
+      if(typeof calcCostoEstimadoProducto==='function') calcCostoEstimadoProducto();
+    }
+  };
+
+  // Override product cost helpers to support tariff selection
+  window.addArtProducto = function(artId='', factor=1, nota='', tarifaId=''){
+    const host = document.getElementById('pr-art-list');
+    if(!host) return;
+    window.laborProdItems = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
+    const idn = window.laborProdItems.length ? Math.max(...window.laborProdItems)+1 : 0;
+    window.laborProdItems.push(idn);
+    const row = document.createElement('div');
+    row.id = 'pra-'+idn;
+    row.style.cssText = 'background:var(--bg3);border-radius:12px;padding:10px;margin-bottom:8px';
+    row.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;margin-bottom:6px">
+        <select class="form-input" id="pra-art-${idn}" onchange="onArtProductoChange(${idn})">
+          <option value="">— Artesano —</option>
+          ${(D.artesanos||[]).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(artId)===String(a.id)?'selected':''}>${a.nombre}</option>`).join('')}
+        </select>
+        <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('pra-${idn}').remove(); laborProdItems=laborProdItems.filter(x=>x!==${idn}); calcCostoEstimadoProducto(); return false;">×</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+        <div>
+          <label class="form-label" style="margin-bottom:4px">Tarifa / concepto</label>
+          <select class="form-input" id="pra-tar-${idn}" onchange="calcCostoEstimadoProducto()"></select>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="abrirModalTarifaArtesano(document.getElementById('pra-art-${idn}').value)">+ Tarifa</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label class="form-label" style="margin-bottom:4px">Factor de participación</label><input type="number" min="0" step="0.1" class="form-input" id="pra-factor-${idn}" value="${Number(factor||0)}"></div>
+        <div><label class="form-label" style="margin-bottom:4px">Nota</label><input type="text" class="form-input" id="pra-nota-${idn}" value="${nota||''}" placeholder="Opcional"></div>
+      </div>`;
+    host.appendChild(row);
+    window.onArtProductoChange(idn, tarifaId);
+    if(typeof calcCostoEstimadoProducto==='function') calcCostoEstimadoProducto();
+  };
+
+  window.onArtProductoChange = function(idn, selectedTar=''){
+    const artId = document.getElementById('pra-art-'+idn)?.value || '';
+    const sel = document.getElementById('pra-tar-'+idn);
+    if(!sel) return;
+    const rows = tarifasDeArtesano(artId);
+    if(rows.length){
+      sel.innerHTML = '<option value="">— Selecciona tarifa —</option>' + rows.map(t=>`<option value="${t.id}" ${String(selectedTar)===String(t.id)?'selected':''}>${t.concepto} · ${t.tipo_cobro==='por_tubo'?'Por tubo':'Por pieza'} · $${typeof fmx==='function'?fmx(t.tarifa):t.tarifa}</option>`).join('');
+      if(!selectedTar) sel.value = rows[0].id;
+    }else{
+      const art = arr(D.artesanos).find(a=>String(a.id)===String(artId));
+      if(artId && art){
+        sel.innerHTML = `<option value="">Tarifa base · ${art.esquema==='por_tubo'?'Por tubo':'Por pieza'} · $${typeof fmx==='function'?fmx(art.tarifa):art.tarifa}</option>`;
+      }else{
+        sel.innerHTML = '<option value="">— Sin tarifas —</option>';
+      }
+    }
+  };
+
+  // Override calc cost to use selected tariff if any
+  window.calcCostoEstimadoProducto = function(){
+    const cat = (typeof getV==='function' ? getV('pr-cat') : 'fabricacion');
+    if(cat!=='fabricacion'){
+      return Number((document.getElementById('pr-costo')||{}).value||0);
+    }
+    const recetaIds = Array.isArray(window.recetaProdItems) ? window.recetaProdItems : [];
+    let totalMat = 0;
+    let baseQty = 0;
+    recetaIds.forEach(i=>{
+      const matId = document.getElementById('prm-mat-'+i)?.value || '';
+      const qty = Number(document.getElementById('prm-qty-'+i)?.value || 0);
+      if(!matId || qty<=0) return;
+      const mat = (D.materiales||[]).find(m=>String(m.id)===String(matId));
+      const unit = Number(mat?.costo_promedio || mat?.costo_unitario || mat?.costo || mat?.ultimo_costo || mat?.precio_compra || 0);
+      totalMat += qty * unit;
+      baseQty += qty;
+    });
+    const artIds = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
+    let totalLabor = 0;
+    artIds.forEach(i=>{
+      const artId = document.getElementById('pra-art-'+i)?.value || '';
+      const tarId = document.getElementById('pra-tar-'+i)?.value || '';
+      const factor = Number(document.getElementById('pra-factor-'+i)?.value || 0);
+      if(!artId || factor<=0) return;
+      const art = (D.artesanos||[]).find(a=>String(a.id)===String(artId)) || {};
+      const tar = tarifasDeArtesano(artId).find(t=>String(t.id)===String(tarId));
+      const esquema = String(tar?.tipo_cobro || art.esquema || 'por_pieza');
+      const tarifa = Number(tar?.tarifa || art.tarifa || 0);
+      if(esquema==='por_tubo') totalLabor += tarifa * baseQty * factor;
+      else totalLabor += tarifa * factor;
+    });
+    const total = Math.round((totalMat + totalLabor)*100)/100;
+    const inp = document.getElementById('pr-costo');
+    if(inp) inp.value = total;
+    let box = document.getElementById('pr-cost-breakdown');
+    if(!box && inp){
+      box = document.createElement('div');
+      box.id='pr-cost-breakdown';
+      box.style.cssText='margin-top:6px';
+      inp.parentElement.appendChild(box);
+    }
+    if(box){
+      box.innerHTML = `<div class="card-note">Materiales: $${typeof fmx==='function'?fmx(totalMat):totalMat} · Mano de obra: $${typeof fmx==='function'?fmx(totalLabor):totalLabor}</div>`;
+    }
+    return total;
+  };
+
+  // Override product modal open/save to store tariff ids in receta table as labor templates
+  const oldAbrir = window.abrirModalProducto;
+  window.abrirModalProducto = function(id){
+    if(typeof oldAbrir==='function') oldAbrir(id); else return;
+    // replace labor rows with tariff-aware rows
+    if(document.getElementById('pr-art-list')){
+      document.getElementById('pr-art-list').innerHTML='';
+      window.laborProdItems=[];
+      if(id){
+        const labRows = arr(D.recetas).filter(r=>String(r.pedido_id)==='PRODLAB:'+String(id));
+        if(labRows.length){
+          labRows.forEach(r=>window.addArtProducto(String(r.material_id||'').replace(/^ART:/,''), r.cantidad||1, r.color||'', r.ref_id||''));
+        } else {
+          window.addArtProducto();
+        }
+      } else {
+        window.addArtProducto();
+      }
+      window.calcCostoEstimadoProducto();
+    }
+  };
+
+  const oldGuardar = window.guardarProducto;
+  window.guardarProducto = async function(){
+    const btn = document.getElementById('btn-guardar-prod');
+    if(btn){ btn.disabled=true; }
+    try{
+      const nombre=getV('pr-nombre'), precio=getV('pr-precio');
+      if(!nombre || !precio){ toast('Nombre y precio son requeridos'); return; }
+      const id = editIds.prod || genId('PRO', D.productos||[]);
+      const cat = getV('pr-cat');
+      const recetaRows = (window.recetaProdItems||[]).map(i=>({
+        material_id:document.getElementById('prm-mat-'+i)?.value || '',
+        cantidad:Number(document.getElementById('prm-qty-'+i)?.value || 0),
+        color:document.getElementById('prm-color-'+i)?.value || ''
+      })).filter(x=>x.material_id && x.cantidad>0);
+
+      const p = {
+        id,
+        nombre,
+        categoria:cat,
+        precio_venta:Number(precio||0),
+        costo_produccion: cat==='fabricacion' ? calcCostoEstimadoProducto() : Number(getV('pr-costo')||0),
+        stock_disponible: cat==='fabricacion' ? 0 : Number(getV('pr-stock')||0),
+        dias_produccion:Number(getV('pr-dias')||7),
+        material_hilo_id: recetaRows[0]?.material_id || '',
+        tubos_hilo: Number(recetaRows[0]?.cantidad || 0)
+      };
+
+      if(editIds.prod){
+        const idx=(D.productos||[]).findIndex(x=>String(x.id)===String(id));
+        if(idx>=0) Object.assign(D.productos[idx], p);
+        await actualizar('productos', p);
+      } else {
+        D.productos.push(p);
+        await crear('productos', p);
+      }
+
+      const idsToRemove = ['PROD:'+id, 'PRODLAB:'+id];
+      const prev = arr(D.recetas).filter(r=>idsToRemove.includes(String(r.pedido_id)));
+      for(const r of prev){ if(r.id) await eliminar('recetas', r.id); }
+      D.recetas = arr(D.recetas).filter(r=>!idsToRemove.includes(String(r.pedido_id)));
+
+      for(const rec of recetaRows){
+        const rr={id:genId('REC', D.recetas||[]), pedido_id:'PROD:'+String(id), material_id:rec.material_id, cantidad:rec.cantidad, color:rec.color};
+        D.recetas.push(rr); await crear('recetas', rr);
+      }
+
+      const laborRows = (window.laborProdItems||[]).map(i=>({
+        artesano_id:document.getElementById('pra-art-'+i)?.value || '',
+        tarifa_id:document.getElementById('pra-tar-'+i)?.value || '',
+        factor:Number(document.getElementById('pra-factor-'+i)?.value || 0),
+        nota:document.getElementById('pra-nota-'+i)?.value || ''
+      })).filter(x=>x.artesano_id && x.factor>0);
+
+      for(const row of laborRows){
+        const rr={id:genId('REC', D.recetas||[]), pedido_id:'PRODLAB:'+String(id), material_id:'ART:'+row.artesano_id, ref_id:row.tarifa_id, cantidad:row.factor, color:row.nota};
+        D.recetas.push(rr); await crear('recetas', rr);
+      }
+
+      toast(editIds.prod ? '✓ Producto actualizado' : '✓ Producto guardado');
+      editIds.prod=null;
+      cerrar('modal-producto');
+      if(typeof renderProductos==='function') renderProductos();
+    }catch(err){
+      console.error('guardarProducto 11.5.4', err);
+      toast('Error al guardar producto: '+(err.message||err));
+    }finally{
+      const btn = document.getElementById('btn-guardar-prod');
+      if(btn){ btn.disabled=false; btn.textContent='Guardar producto'; }
+    }
+  };
+
+  // enrich artisans render with rate summary
+  const oldRenderArt = window.renderArtesanos;
+  window.renderArtesanos = function(){
+    if(typeof oldRenderArt==='function') oldRenderArt();
+    const el = document.getElementById('art-list');
+    if(!el) return;
+    const cards = Array.from(el.querySelectorAll('.card'));
+    cards.forEach(card=>{
+      const title = card.querySelector('.card-title')?.textContent?.trim() || '';
+      const art = arr(D.artesanos).find(a=>a.nombre===title);
+      if(!art) return;
+      const rates = tarifasDeArtesano(art.id);
+      if(!rates.length) return;
+      const note = document.createElement('div');
+      note.className='card-note';
+      note.style.marginTop='4px';
+      note.textContent = rates.length + ' tarifa' + (rates.length!==1?'s':'') + ' configurada' + (rates.length!==1?'s':'');
+      const holder = card.querySelector('.card-row > div');
+      if(holder) holder.appendChild(note);
+    });
+  };
+
+  // ensure dynamic recalc
+  document.addEventListener('input', function(e){
+    const id = e.target?.id || '';
+    if(/^prm-/.test(id) || /^pra-/.test(id)) window.calcCostoEstimadoProducto?.();
+  }, true);
+  document.addEventListener('change', function(e){
+    const id = e.target?.id || '';
+    if(/^prm-/.test(id) || /^pra-/.test(id) || id==='pr-cat') window.calcCostoEstimadoProducto?.();
   }, true);
 })();
 </script>
