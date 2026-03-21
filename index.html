@@ -1044,6 +1044,7 @@ const diasHasta = f => {
   return d;
 };
 const empty = msg => `<div style="text-align:center;padding:30px 0;color:var(--text3);font-size:13px">${msg}</div>`;
+const arr = v => Array.isArray(v) ? v : [];
 
 function toast(msg, dur=2800) {
   const el = $('toast');
@@ -3960,13 +3961,42 @@ ${recetas.length?`<div class="sec">Materiales</div>${recetas.map(r=>{const m=D.m
   abrirPDF(html);
 }
 window.waPedido = function waPedido(id) {
-  const p=D.pedidos.find(x=>String(x.id)===String(id)); if(!p){ toast('No se encontró el pedido'); return; }
+  const p=D.pedidos.find(x=>String(x.id)===String(id)); 
+  if(!p){ toast('No se encontró el pedido'); return; }
   const c=D.clientes.find(x=>String(x.id)===String(p.cliente_id));
   if(!c?.telefono){ toast('El cliente no tiene teléfono registrado'); return; }
-  const saldo=Number(p.total||0)-Number(p.anticipo||0)-abonadoPor(id);
-  const msgs={nuevo:'Hemos recibido su pedido '+id+'.',en_produccion:'Su pedido está en producción.',listo:'¡Su pedido ya está listo para recoger! Saldo: $'+fmx(saldo)+'.',entregado:'Gracias por su preferencia.'};
-  const msg=`Hola ${c.nombre}, ${msgs[p.estado]||''} — ${CFG.emp}`;
-  window.open('https://wa.me/52'+c.telefono.replace(/\D/g,'')+`?text=${encodeURIComponent(msg)}`,'_blank');
+  const tel = String(c.telefono||'').replace(/\D/g,'');
+  if(!tel){ toast('El teléfono del cliente no es válido'); return; }
+  const saldo=Math.max(0, Number(p.total||0)-Number(p.anticipo||0)-abonadoPor(id));
+  const msgs={
+    nuevo:'Hemos recibido su pedido '+id+'.',
+    en_produccion:'Su pedido está en producción.',
+    listo:'¡Su pedido ya está listo para recoger! Saldo: $'+fmx(saldo)+'.',
+    entregado:'Gracias por su preferencia.'
+  };
+  const estado = String(p.estado||'nuevo');
+  const msg=`Hola ${c.nombre}, ${msgs[estado]||('Le compartimos información de su pedido '+id+'.')} — ${CFG.emp}`;
+  const url='https://wa.me/52'+tel+'?text='+encodeURIComponent(msg);
+  try{
+    const win = window.open(url, '_blank');
+    if(!win){
+      toast('No se pudo abrir WhatsApp automáticamente');
+      try{
+        navigator.clipboard.writeText(url);
+        toast('Enlace de WhatsApp copiado');
+      }catch(_){
+        prompt('Copia este enlace y ábrelo en tu navegador:', url);
+      }
+      return;
+    }
+    toast('Abriendo WhatsApp…', 1400);
+  }catch(err){
+    console.error('waPedido', err);
+    toast('No se pudo abrir WhatsApp');
+    try{
+      prompt('Copia este enlace y ábrelo en tu navegador:', url);
+    }catch(_){}
+  }
 }
 
 // ═══════════════════════════════════════════════
