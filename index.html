@@ -418,7 +418,7 @@ body.modal-open{overflow:hidden}
 <!-- MENÚ NUEVO TRABAJO -->
 <div class="overlay" id="menu-trabajo">
   <div class="modal modal-center">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title">¿Qué necesitas?</div>
     <button class="btn btn-secondary" onclick="cerrar('menu-trabajo');abrirCotizador()">📄 Nueva cotización</button>
     <button class="btn btn-secondary" onclick="cerrar('menu-trabajo');abrirModal_pedido()">🛏 Pedido de hamaca</button>
@@ -430,7 +430,7 @@ body.modal-open{overflow:hidden}
 <!-- MODAL PEDIDO -->
 <div class="overlay" id="modal-pedido">
   <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" id="tit-pedido">Nuevo pedido</div>
     <div class="form-group">
       <label class="form-label">Cliente *</label>
@@ -463,7 +463,7 @@ body.modal-open{overflow:hidden}
 <!-- DETALLE PEDIDO -->
 <div class="overlay" id="det-pedido">
   <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" id="det-ped-tit">Pedido</div>
     <div id="det-ped-body"></div>
     <div style="height:12px"></div>
@@ -480,7 +480,7 @@ body.modal-open{overflow:hidden}
 <!-- MODAL REPARACIÓN -->
 <div class="overlay" id="modal-rep">
   <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" id="tit-rep">Nueva reparación</div>
     <div class="form-group">
       <label class="form-label">Cliente *</label>
@@ -510,7 +510,7 @@ body.modal-open{overflow:hidden}
 <!-- DETALLE REPARACIÓN -->
 <div class="overlay" id="det-rep">
   <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" id="det-rep-tit">Reparación</div>
     <div id="det-rep-body"></div>
     <div class="form-group" style="margin-top:14px"><label class="form-label">Estado</label>
@@ -533,7 +533,7 @@ body.modal-open{overflow:hidden}
 <!-- MODAL CLIENTE -->
 <div class="overlay" id="modal-cliente">
   <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" id="tit-cliente">Nuevo cliente</div>
     <div class="form-group"><label class="form-label">Nombre *</label><input type="text" class="form-input" id="c-nombre" placeholder="Nombre completo"></div>
     <div class="form-group"><label class="form-label">Teléfono</label><input type="tel" class="form-input" id="c-tel" placeholder="999 000 0000"></div>
@@ -547,7 +547,7 @@ body.modal-open{overflow:hidden}
 <!-- MODAL COMPRA -->
 <div class="overlay" id="modal-compra">
   <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" id="tit-compra">Nueva compra</div>
     <div class="desktop-grid-2">
       <div class="form-group"><label class="form-label">Proveedor</label><select class="form-input" id="co-prov"></select></div>
@@ -593,7 +593,7 @@ body.modal-open{overflow:hidden}
 <!-- MODAL GASTO -->
 <div class="overlay" id="modal-gasto">
   <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title">Nuevo gasto</div>
     <div class="form-group"><label class="form-label">Categoría</label>
       <select class="form-input" id="g-cat">
@@ -613,7 +613,7 @@ body.modal-open{overflow:hidden}
 <!-- MODAL COTIZACIÓN -->
 <div class="overlay" id="modal-cot">
   <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title">Nueva cotización</div>
     <div class="form-group">
       <label class="form-label">Tipo de cotización</label>
@@ -653,7 +653,7 @@ body.modal-open{overflow:hidden}
 <!-- MODAL ABONO/COBRO -->
 <div class="overlay" id="modal-abono">
   <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" id="tit-abono">Registrar abono</div>
     <div id="abono-info" style="margin-bottom:14px"></div>
     <div class="form-group"><label class="form-label">Monto del abono ($) *</label><input type="number" class="form-input" id="ab-monto" placeholder="0.00"></div>
@@ -666,7 +666,7 @@ body.modal-open{overflow:hidden}
 <!-- SUB REPARACIONES -->
 <div class="overlay" id="sub-reparaciones">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:90vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div class="modal-title" style="margin:0">Reparaciones</div>
       <button class="btn btn-primary btn-sm" onclick="cerrar('sub-reparaciones');abrirRep()">+ Nueva</button>
@@ -686,7 +686,7 @@ body.modal-open{overflow:hidden}
 <!-- SUB CLIENTES -->
 <div class="overlay" id="sub-clientes">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:90vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div class="modal-title" style="margin:0">Clientes</div>
       <button class="btn btn-primary btn-sm" onclick="cerrar('sub-clientes');pendingCliente='none';abrirModal('modal-cliente',true)">+ Nuevo</button>
@@ -699,7 +699,7 @@ body.modal-open{overflow:hidden}
 <!-- SUB PRODUCTOS -->
 <div class="overlay" id="sub-productos">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:90vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div class="modal-title" style="margin:0">Productos</div>
       <button class="btn btn-primary btn-sm" onclick="abrirModalProducto()">+ Nuevo</button>
@@ -717,7 +717,7 @@ body.modal-open{overflow:hidden}
 <!-- MODAL PRODUCTO -->
 <div class="overlay" id="modal-producto">
   <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" id="tit-prod">Nuevo producto</div>
     <div class="form-group"><label class="form-label">Nombre *</label><input type="text" class="form-input" id="pr-nombre" placeholder="Ej: Hamaca matrimonial algodón"></div>
     <div class="form-group"><label class="form-label">Categoría</label>
@@ -743,7 +743,7 @@ body.modal-open{overflow:hidden}
 <!-- SUB INVENTARIO -->
 <div class="overlay" id="sub-inventario">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:90vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px">
       <div class="modal-title" style="margin:0">Inventario</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
@@ -758,7 +758,7 @@ body.modal-open{overflow:hidden}
 <!-- SUB MOVIMIENTOS -->
 <div class="overlay" id="sub-movimientos">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:92vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" style="margin-bottom:12px">Movimientos de inventario</div>
     <div class="chips" id="mov-tipo-chips" style="margin-bottom:8px">
       <div class="chip active" onclick="setFiltroMovTipo('todos',this)">Todos</div>
@@ -786,7 +786,7 @@ body.modal-open{overflow:hidden}
 <!-- SUB RESERVAS -->
 <div class="overlay" id="sub-reservas">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:92vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" style="margin-bottom:12px">Reservas de inventario</div>
     <div id="res-stats" style="margin-bottom:12px"></div>
     <div class="chips" id="res-chips" style="margin-bottom:12px">
@@ -802,7 +802,7 @@ body.modal-open{overflow:hidden}
 <!-- SUB DESVIACIONES -->
 <div class="overlay" id="sub-desviaciones">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:92vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" style="margin-bottom:12px">Desviación de consumo por modelo</div>
     <div id="desv-stats" style="margin-bottom:12px"></div>
     <div class="form-group" style="margin-bottom:10px">
@@ -816,7 +816,7 @@ body.modal-open{overflow:hidden}
 <!-- MODAL MATERIAL -->
 <div class="overlay" id="modal-material">
   <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" id="tit-mat">Nuevo material</div>
     <div class="form-group"><label class="form-label">Nombre *</label><input type="text" class="form-input" id="m-nombre" placeholder="Ej: Hilo algodón blanco"></div>
     <div class="form-group"><label class="form-label">Tipo</label>
@@ -840,7 +840,7 @@ body.modal-open{overflow:hidden}
 <!-- SUB ARTESANOS -->
 <div class="overlay" id="sub-artesanos">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:90vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div class="modal-title" style="margin:0">Artesanos</div>
       <button class="btn btn-primary btn-sm" onclick="abrirModalArtesano()">+ Nuevo</button>
@@ -855,7 +855,7 @@ body.modal-open{overflow:hidden}
 <!-- MODAL ARTESANO -->
 <div class="overlay" id="modal-artesano">
   <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" id="tit-art">Nuevo artesano</div>
     <div class="form-group"><label class="form-label">Nombre *</label><input type="text" class="form-input" id="a-nombre"></div>
     <div class="form-group"><label class="form-label">Teléfono</label><input type="tel" class="form-input" id="a-tel"></div>
@@ -874,7 +874,7 @@ body.modal-open{overflow:hidden}
 <!-- SUB PROVEEDORES -->
 <div class="overlay" id="sub-proveedores">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:90vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div class="modal-title" style="margin:0">Proveedores</div>
       <button class="btn btn-primary btn-sm" onclick="abrirModalProv()">+ Nuevo</button>
@@ -886,7 +886,7 @@ body.modal-open{overflow:hidden}
 <!-- MODAL PROVEEDOR -->
 <div class="overlay" id="modal-prov">
   <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" id="tit-prov">Nuevo proveedor</div>
     <div class="form-group"><label class="form-label">Nombre *</label><input type="text" class="form-input" id="pv-nombre"></div>
     <div class="form-group"><label class="form-label">Teléfono</label><input type="tel" class="form-input" id="pv-tel"></div>
@@ -899,7 +899,7 @@ body.modal-open{overflow:hidden}
 <!-- SUB GASTOS -->
 <div class="overlay" id="sub-gastos">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:90vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div class="modal-title" style="margin:0">Gastos</div>
       <button class="btn btn-primary btn-sm" onclick="abrirGasto()">+ Nuevo</button>
@@ -911,7 +911,7 @@ body.modal-open{overflow:hidden}
 <!-- SUB COBROS -->
 <div class="overlay" id="sub-cobros">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:90vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title">Cobros pendientes</div>
     <div id="cobros-stats" style="margin-bottom:10px"></div>
     <div id="cobros-list"></div>
@@ -921,7 +921,7 @@ body.modal-open{overflow:hidden}
 <!-- SUB COTIZACIONES -->
 <div class="overlay" id="sub-cotizaciones">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:90vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div class="modal-title" style="margin:0">Cotizaciones</div>
       <button class="btn btn-primary btn-sm" onclick="cerrar('sub-cotizaciones');abrirCotizador()">+ Nueva</button>
@@ -933,7 +933,7 @@ body.modal-open{overflow:hidden}
 <!-- SUB DASHBOARD -->
 <div class="overlay" id="sub-dashboard">
   <div class="modal dashboard-modal" style="border-radius:20px 20px 0 0;max-height:92vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title">Dashboard dual</div>
     <div class="dash-nav" id="dash-nav">
       <div class="chip active" data-view="financiero" onclick="setDashView('financiero',this)">Financiero</div>
@@ -952,7 +952,7 @@ body.modal-open{overflow:hidden}
 <!-- SUB CONFIG -->
 <div class="overlay" id="sub-config">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:92vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title">Configuración</div>
     <div class="alert alert-info" style="margin-bottom:14px;font-size:12px">
       Apps Script → Implementar → Nueva implementación → Aplicación web → Ejecutar como: Yo → Acceso: Cualquier usuario → Copiar URL <code>/exec</code>
@@ -992,7 +992,7 @@ body.modal-open{overflow:hidden}
 
 <div class="overlay" id="modal-orden">
   <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="this.closest('.overlay').classList.remove('open')" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title" id="ord-tit">Orden de producción</div>
     <div id="ord-body"></div>
     <div style="height:12px"></div>
@@ -1045,6 +1045,32 @@ const diasHasta = f => {
 };
 const empty = msg => `<div style="text-align:center;padding:30px 0;color:var(--text3);font-size:13px">${msg}</div>`;
 const arr = v => Array.isArray(v) ? v : [];
+
+window.cerrarOverlayBtn = function cerrarOverlayBtn(btn){
+  try{
+    const ov = btn && btn.closest ? btn.closest('.overlay') : null;
+    if(ov){
+      ov.classList.remove('open');
+      ov.style.display='';
+    }
+    if(typeof syncModalState==='function') syncModalState();
+  }catch(err){
+    console.error('cerrarOverlayBtn', err);
+  }
+};
+
+window.cerrarYVolver = function cerrarYVolver(id){
+  try{
+    const el = typeof id==='string' ? document.getElementById(id) : id;
+    if(el){
+      el.classList.remove('open');
+      el.style.display='';
+    }
+    if(typeof syncModalState==='function') syncModalState();
+  }catch(err){
+    console.error('cerrarYVolver', err);
+  }
+};
 
 function toast(msg, dur=2800) {
   const el = $('toast');
@@ -1166,19 +1192,34 @@ function abrirModal(id, limpiar=false) {
 }
 function cerrar(id) {
   const el=$(id); 
-  if(el){ el.classList.remove('open'); el.style.display=''; }
+  if(el){
+    el.classList.remove('open');
+    el.style.display='';
+  }
   syncModalState();
 }
 // Cerrar overlays al tocar el fondo oscuro
 document.addEventListener('click', e => {
-  if(e.target.classList.contains('overlay') && e.target.classList.contains('open')) {
+  if(e.target.classList && e.target.classList.contains('overlay') && e.target.classList.contains('open')) {
     e.target.classList.remove('open');
+    e.target.style.display='';
     syncModalState();
   }
-  if(e.target.closest('.overlay button')){
+  if(e.target.closest && e.target.closest('.overlay button')){
     setTimeout(syncModalState,0);
   }
 });
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'){
+    const abierta = Array.from(document.querySelectorAll('.overlay.open')).pop();
+    if(abierta){
+      abierta.classList.remove('open');
+      abierta.style.display='';
+      if(typeof syncModalState==='function') syncModalState();
+    }
+  }
+});
+
 
 
 function bindCompraButtons(){
