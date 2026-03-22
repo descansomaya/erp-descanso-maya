@@ -1237,15 +1237,15 @@ window.addMatProducto = window.addMatProducto || function(materialId='', cantida
   row.style.cssText='background:var(--bg3);border-radius:12px;padding:10px;margin-bottom:8px';
   row.innerHTML=`
     <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;margin-bottom:6px">
-      <select class="form-input" id="prm-mat-${idn}">
+      <select class="form-input" id="prm-mat-${idn}" onchange="calcCostoEstimadoProducto()">
         <option value="">— Material —</option>
         ${arr(D.materiales).map(m=>`<option value="${m.id}" ${String(materialId)===String(m.id)?'selected':''}>${m.nombre}${m.unidad?` (${m.unidad})`:''}</option>`).join('')}
       </select>
       <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('prm-${idn}').remove(); recetaProdItems=recetaProdItems.filter(x=>x!==${idn}); return false;">×</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div><label class="form-label" style="margin-bottom:4px">Cantidad</label><input type="number" min="0" step="any" class="form-input" id="prm-qty-${idn}" value="${Number(cantidad||0)}"></div>
-      <div><label class="form-label" style="margin-bottom:4px">Color / nota</label><input type="text" class="form-input" id="prm-color-${idn}" value="${color||''}" placeholder="Opcional"></div>
+      <div><label class="form-label" style="margin-bottom:4px">Cantidad</label><input type="number" min="0" step="any" class="form-input" id="prm-qty-${idn}" value="${Number(cantidad||0)}" oninput="calcCostoEstimadoProducto()"></div>
+      <div><label class="form-label" style="margin-bottom:4px">Color / nota</label><input type="text" class="form-input" id="prm-color-${idn}" value="${color||''}" placeholder="Opcional" oninput="calcCostoEstimadoProducto()"></div>
     </div>`;
   host.appendChild(row);
 };
@@ -1268,15 +1268,15 @@ window.addMatProducto = function(materialId='', cantidad=1, color=''){
   row.style.cssText='background:var(--bg3);border-radius:12px;padding:10px;margin-bottom:8px';
   row.innerHTML=`
     <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;margin-bottom:6px">
-      <select class="form-input" id="prm-mat-${idn}">
+      <select class="form-input" id="prm-mat-${idn}" onchange="calcCostoEstimadoProducto()">
         <option value="">— Material —</option>
         ${arr(D.materiales).map(m=>`<option value="${m.id}" ${String(materialId)===String(m.id)?'selected':''}>${m.nombre}${m.unidad?` (${m.unidad})`:''}</option>`).join('')}
       </select>
       <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('prm-${idn}').remove(); recetaProdItems=recetaProdItems.filter(x=>x!==${idn}); return false;">×</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div><label class="form-label" style="margin-bottom:4px">Cantidad</label><input type="number" min="0" step="any" class="form-input" id="prm-qty-${idn}" value="${Number(cantidad||0)}"></div>
-      <div><label class="form-label" style="margin-bottom:4px">Color / nota</label><input type="text" class="form-input" id="prm-color-${idn}" value="${color||''}" placeholder="Opcional"></div>
+      <div><label class="form-label" style="margin-bottom:4px">Cantidad</label><input type="number" min="0" step="any" class="form-input" id="prm-qty-${idn}" value="${Number(cantidad||0)}" oninput="calcCostoEstimadoProducto()"></div>
+      <div><label class="form-label" style="margin-bottom:4px">Color / nota</label><input type="text" class="form-input" id="prm-color-${idn}" value="${color||''}" placeholder="Opcional" oninput="calcCostoEstimadoProducto()"></div>
     </div>`;
   host.appendChild(row);
 };
@@ -5213,10 +5213,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if(cat!=='fabricacion'){
       return Number((document.getElementById('pr-costo')||{}).value||0);
     }
-    const recetaIds = Array.isArray(window.recetaProdItems) ? window.recetaProdItems : [];
+    const recetaRowsDom = Array.from(document.querySelectorAll('#pr-receta-list > div[id^="prm-"]'));
     let totalMat = 0;
     let baseQty = 0;
-    recetaIds.forEach(i=>{
+    recetaRowsDom.forEach(row=>{
+      const i = String(row.id||'').replace('prm-','');
       const matId = document.getElementById('prm-mat-'+i)?.value || '';
       const qty = Number(document.getElementById('prm-qty-'+i)?.value || 0);
       if(!matId || qty<=0) return;
@@ -5224,9 +5225,10 @@ document.addEventListener('DOMContentLoaded', () => {
       totalMat += qty * costoMat(mat);
       baseQty += qty;
     });
-    const artIds = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
+    const laborRowsDom = Array.from(document.querySelectorAll('#pr-art-list > div[id^="pra-"]'));
     let totalLabor = 0;
-    artIds.forEach(i=>{
+    laborRowsDom.forEach(row=>{
+      const i = String(row.id||'').replace('pra-','');
       const tarifaId = document.getElementById('pra-tarifa-'+i)?.value || '';
       const factor = Number(document.getElementById('pra-factor-'+i)?.value || 0);
       if(!tarifaId || factor<=0) return;
@@ -5351,11 +5353,14 @@ document.addEventListener('DOMContentLoaded', () => {
         dias_produccion:Number(getV('pr-dias')||7)
       };
 
-      const recetaRows = (window.recetaProdItems||[]).map(i=>({
-        material_id:document.getElementById('prm-mat-'+i)?.value || '',
-        cantidad:Number(document.getElementById('prm-qty-'+i)?.value || 0),
-        color:document.getElementById('prm-color-'+i)?.value || ''
-      })).filter(x=>x.material_id && x.cantidad>0);
+      const recetaRows = Array.from(document.querySelectorAll('#pr-receta-list > div[id^="prm-"]')).map(row=>{
+        const i = String(row.id||'').replace('prm-','');
+        return {
+          material_id:document.getElementById('prm-mat-'+i)?.value || '',
+          cantidad:Number(document.getElementById('prm-qty-'+i)?.value || 0),
+          color:document.getElementById('prm-color-'+i)?.value || ''
+        };
+      }).filter(x=>x.material_id && x.cantidad>0);
 
       p.material_hilo_id = recetaRows[0]?.material_id || '';
       p.tubos_hilo = Number(recetaRows[0]?.cantidad || 0);
