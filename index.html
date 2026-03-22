@@ -780,6 +780,8 @@ body.modal-open{overflow:hidden}
       <div class="modal-title" style="margin:0">Inventario</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
         <button class="btn btn-secondary btn-sm" onclick="abrirSub('sub-movimientos')">📒 Movimientos</button>
+        <button class="btn btn-secondary btn-sm" onclick="cuadrarInventario()">🧮 Cuadrar</button>
+        <button class="btn btn-secondary btn-sm" onclick="abrirModalProduccionStock()">🏭 Producir stock</button>
         <button class="btn btn-secondary btn-sm" onclick="abrirModalMaterial()">+ Definir material</button>
       </div>
     </div>
@@ -808,6 +810,10 @@ body.modal-open{overflow:hidden}
     <div class="form-group" style="margin-bottom:10px">
       <label class="form-label">Kardex por material o producto</label>
       <select class="form-input" id="mov-kardex-select" onchange="renderMovimientos()"></select>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:-2px 0 10px">
+      <button class="btn btn-secondary btn-sm" onclick="cuadrarInventario(true)">🧮 Cuadrar este kardex</button>
+      <button class="btn btn-secondary btn-sm" onclick="cuadrarInventario()">🧮 Cuadrar todo</button>
     </div>
     <div id="mov-kardex" style="margin-bottom:12px"></div>
     <div id="mov-list"></div>
@@ -842,6 +848,20 @@ body.modal-open{overflow:hidden}
       <select class="form-input" id="desv-modelo" onchange="renderDesviacionesModelos()"></select>
     </div>
     <div id="desv-list"></div>
+  </div>
+</div>
+
+<!-- MODAL PRODUCCIÓN STOCK -->
+<div class="overlay" id="modal-produccion-stock">
+  <div class="modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div class="modal-title">Producción para stock interno</div>
+    <div class="alert alert-info" style="margin-bottom:10px;font-size:12px">Este flujo crea una orden interna sin que tengas que dar de alta un cliente manualmente. El sistema usará un cliente técnico de stock interno.</div>
+    <div class="form-group"><label class="form-label">Producto de fabricación *</label><select class="form-input" id="ps-producto"></select></div>
+    <div class="form-group"><label class="form-label">Cantidad *</label><input type="number" class="form-input" id="ps-cantidad" min="1" step="1" value="1"></div>
+    <div class="form-group"><label class="form-label">Nota interna</label><input type="text" class="form-input" id="ps-nota" placeholder="Ej: reposición de stock"></div>
+    <button class="btn btn-primary" id="btn-crear-ps" onclick="guardarProduccionStock()">Crear orden interna</button>
+    <button class="btn btn-secondary" onclick="cerrar('modal-produccion-stock')">Cancelar</button>
   </div>
 </div>
 
@@ -3592,10 +3612,12 @@ function renderMovimientos(){
     const qtyTotal=rows.reduce((s,x)=>s+Number(x.cantidad||0),0);
     const valTotal=rows.reduce((s,x)=>s+Number(x.total||0),0);
     const actual=refTipo==='material' ? Number((arr(D.materiales).find(x=>String(x.id)===String(refId))||{}).stock_actual||0) : Number((arr(D.productos).find(x=>String(x.id)===String(refId))||{}).stock_disponible||0);
+    const diff=round2(actual-qtyTotal);
     kardexEl.innerHTML=`<div class="stats" style="margin-bottom:0">
       <div class="stat accent"><div class="stat-val" style="font-size:15px">${nombre}</div><div class="stat-lbl">Kardex activo</div></div>
       <div class="stat ${actual<=0?'danger':'success'}"><div class="stat-val">${fmx(actual)}</div><div class="stat-lbl">Existencia actual</div></div>
-      <div class="stat ${qtyTotal>=0?'success':'danger'}"><div class="stat-val">${qtyTotal>=0?'+':''}${fmx(qtyTotal)}</div><div class="stat-lbl">Movimiento neto</div></div>
+      <div class="stat ${qtyTotal>=0?'success':'danger'}"><div class="stat-val">${qtyTotal>=0?'+':''}${fmx(qtyTotal)}</div><div class="stat-lbl">Saldo según kardex</div></div>
+      <div class="stat ${Math.abs(diff)<0.000001?'success':'warning'}"><div class="stat-val">${diff>0?'+':''}${fmx(diff)}</div><div class="stat-lbl">Diferencia</div></div>
       <div class="stat ${valTotal>=0?'success':'warning'}"><div class="stat-val">$${fmx(valTotal)}</div><div class="stat-lbl">Valor acumulado</div></div>
     </div>`;
   } else {
@@ -3604,7 +3626,7 @@ function renderMovimientos(){
     kardexEl.innerHTML=`<div class="stats" style="margin-bottom:0">
       <div class="stat accent"><div class="stat-val">${totalRows}</div><div class="stat-lbl">Movimientos encontrados</div></div>
       <div class="stat"><div class="stat-val">${new Set(rows.map(x=>`${x.ref_tipo||''}:${x.ref_id||''}`).filter(Boolean)).size}</div><div class="stat-lbl">Refs con movimiento</div></div>
-      <div class="stat ${qtyTotal>=0?'success':'danger'}"><div class="stat-val">${qtyTotal>=0?'+':''}${fmx(qtyTotal)}</div><div class="stat-lbl">Movimiento neto</div></div>
+      <div class="stat ${qtyTotal>=0?'success':'danger'}"><div class="stat-val">${qtyTotal>=0?'+':''}${fmx(qtyTotal)}</div><div class="stat-lbl">Saldo neto kardex</div></div>
       <div class="stat ${valTotal>=0?'success':'warning'}"><div class="stat-val">$${fmx(valTotal)}</div><div class="stat-lbl">Valor acumulado</div></div>
     </div>`;
   }
@@ -3633,6 +3655,159 @@ function renderMovimientos(){
     listEl.appendChild(div);
   });
 }
+function saldoKardexRef(refTipo, refId){
+  return round2(arr(D.movimientos).filter(m=>String(m.ref_tipo||'')===String(refTipo) && String(m.ref_id||'')===String(refId))
+    .reduce((s,m)=>s+Number(m.cantidad||0),0));
+}
+function costoBaseRef(refTipo, refId){
+  if(refTipo==='material') return Number((arr(D.materiales).find(x=>String(x.id)===String(refId))||{}).costo_unitario||0);
+  const p=arr(D.productos).find(x=>String(x.id)===String(refId))||{};
+  return Number(p.costo_produccion||p.costo_unitario||p.costo||0);
+}
+async function cuadrarInventario(soloSeleccion=false){
+  const sel=$('mov-kardex-select');
+  let refs=[];
+  if(soloSeleccion && sel?.value){
+    const [ref_tipo, ref_id]=String(sel.value).split(':');
+    if(ref_tipo && ref_id) refs=[{ref_tipo, ref_id}];
+  } else {
+    refs = [
+      ...arr(D.materiales).map(m=>({ref_tipo:'material', ref_id:m.id})),
+      ...arr(D.productos).filter(p=>Number(p.stock_disponible||0)!==0 || arr(D.movimientos).some(m=>String(m.ref_tipo)==='producto' && String(m.ref_id)===String(p.id))).map(p=>({ref_tipo:'producto', ref_id:p.id}))
+    ];
+  }
+  if(!refs.length){ toast('No hay referencias para cuadrar'); return; }
+  showLoading('Cuadrando inventario...');
+  try{
+    let ajustes=0, sinCambio=0, detalle=[];
+    for(const ref of refs){
+      const actual = ref.ref_tipo==='material'
+        ? Number((arr(D.materiales).find(x=>String(x.id)===String(ref.ref_id))||{}).stock_actual||0)
+        : Number((arr(D.productos).find(x=>String(x.id)===String(ref.ref_id))||{}).stock_disponible||0);
+      const kardex = saldoKardexRef(ref.ref_tipo, ref.ref_id);
+      const diff = round2(actual-kardex);
+      if(Math.abs(diff)<0.000001){ sinCambio++; continue; }
+      const costo = costoBaseRef(ref.ref_tipo, ref.ref_id);
+      await registrarMovimiento({
+        tipo_movimiento:'ajuste_manual',
+        origen:'ajuste',
+        origen_id:'CUADRE_AUTO',
+        ref_tipo:ref.ref_tipo,
+        ref_id:ref.ref_id,
+        cantidad:diff,
+        costo_unitario:costo,
+        total:round2(diff*costo),
+        notas:'Cuadre automático para alinear kardex con existencia actual'
+      });
+      ajustes++;
+      detalle.push(`${nombreRefMovimiento(ref)} (${diff>0?'+':''}${fmx(diff)})`);
+    }
+    if(typeof renderMovimientos==='function' && $('sub-movimientos')?.classList.contains('open')) renderMovimientos();
+    if(typeof renderInventario==='function') renderInventario();
+    toast(ajustes ? `✓ Cuadre completado: ${ajustes} ajuste(s)` : '✓ No se encontraron diferencias');
+    if(ajustes && detalle.length<=4) setTimeout(()=>toast(detalle.join('<br>'), 4200), 500);
+  }catch(err){
+    console.error('cuadrarInventario', err);
+    toast('Error al cuadrar inventario: '+(err.message||err));
+  } finally { hideLoading(); }
+}
+window.cuadrarInventario = cuadrarInventario;
+
+function clienteInternoStock(){
+  return arr(D.clientes).find(c=>String(c.nombre||'').trim().toUpperCase()==='STOCK INTERNO');
+}
+async function asegurarClienteInternoStock(){
+  let c=clienteInternoStock();
+  if(c) return c;
+  c={id:genId('CLI', arr(D.clientes)), nombre:'STOCK INTERNO', telefono:'', email:'', direccion:'', fecha_creacion:hoy()};
+  D.clientes.push(c);
+  await crear('clientes', c);
+  return c;
+}
+function abrirModalProduccionStock(){
+  const sel=$('ps-producto');
+  if(sel){
+    const opts=arr(D.productos).filter(p=>categoriaProducto(p)==='fabricacion')
+      .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')))
+      .map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
+    sel.innerHTML='<option value="">— Selecciona producto —</option>'+opts;
+  }
+  setV('ps-cantidad',1);
+  setV('ps-nota','');
+  abrirModal('modal-produccion-stock');
+}
+window.abrirModalProduccionStock = abrirModalProduccionStock;
+async function guardarProduccionStock(){
+  const productoId=getV('ps-producto');
+  const cantidad=Math.max(1, Number(getV('ps-cantidad')||1));
+  const nota=(getV('ps-nota')||'').trim();
+  if(!productoId){ toast('Selecciona un producto'); return; }
+  const prod=arr(D.productos).find(p=>String(p.id)===String(productoId));
+  if(!prod){ toast('No se encontró el producto'); return; }
+  if(categoriaProducto(prod)!=='fabricacion'){ toast('Solo aplica a productos de fabricación'); return; }
+  const btn=$('btn-crear-ps');
+  if(btn){ btn.disabled=true; btn.textContent='Creando...'; }
+  showLoading('Creando producción interna...');
+  try{
+    const cli=await asegurarClienteInternoStock();
+    const pedidoId=genId('PED', arr(D.pedidos));
+    const detalleId=genId('DET', arr(D.ped_det));
+    const pedido={
+      id:pedidoId,
+      cliente_id:cli.id,
+      estado:'nuevo',
+      total:0,
+      anticipo:0,
+      fecha_entrega:'',
+      notas:`[STOCK_INTERNO] ${nota||('Producción interna de '+prod.nombre)}`,
+      fecha_creacion:hoy(),
+      tipo_flujo:'fabricacion'
+    };
+    const det={
+      id:detalleId,
+      pedido_id:pedidoId,
+      producto_id:productoId,
+      cantidad:cantidad,
+      color_hilo:'',
+      medidas:'',
+      precio_unitario:0,
+      subtotal:0,
+      notas_especiales:'Producción para stock interno'
+    };
+    D.pedidos.push(pedido); await crear('pedidos', pedido);
+    D.ped_det.push(det); await crear('ped_det', det);
+    const plant = typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(productoId) : [];
+    for(const base of plant){
+      const rr={
+        id:genId('REC', arr(D.recetas)),
+        pedido_id:detalleId,
+        material_id:base.material_id,
+        cantidad:Number(base.cantidad||0)*cantidad,
+        color:base.color||'',
+        notas:base.notas||base.color||''
+      };
+      D.recetas.push(rr);
+      await crear('recetas', rr);
+    }
+    const ord={id:genId('ORD', arr(D.ordenes)), pedido_detalle_id:detalleId, artesano_id:'', estado:'pendiente', fecha_inicio:'', fecha_fin:'', fecha_creacion:hoy(), nota:'Producción para stock interno'};
+    D.ordenes.push(ord); await crear('ordenes', ord);
+    try{ await rebuildPedidoReservas(pedidoId, detalleId, prod); }catch(errRes){ console.warn('No se pudieron crear reservas internas', errRes); }
+    cerrar('modal-produccion-stock');
+    toast('✓ Producción interna creada');
+    if(typeof renderPedidos==='function') renderPedidos();
+    if(typeof renderProduccion==='function') renderProduccion();
+    if(typeof renderInventario==='function') renderInventario();
+    setTimeout(()=>{ try{ abrirAsignacionProduccion(pedidoId); }catch(err){ console.warn(err); } }, 120);
+  }catch(err){
+    console.error('guardarProduccionStock', err);
+    toast('Error al crear producción interna: '+(err.message||err));
+  } finally {
+    hideLoading();
+    if(btn){ btn.disabled=false; btn.textContent='Crear orden interna'; }
+  }
+}
+window.guardarProduccionStock = guardarProduccionStock;
+
 async function ajustarStockManual(materialId){
   const material=D.materiales.find(x=>x.id===materialId); if(!material) return;
   const actual=Number(material.stock_actual||0);
@@ -3720,8 +3895,9 @@ function renderInventario() {
         <div class="card-sub">Stock disponible: ${fmx(p.stock_disponible||0)} · ${categoriaProducto(p)==='reventa'?'Reventa':'Fabricación'}</div>
         <div class="card-note">Costo base: $${fmx(p.costo_produccion||0)} · Precio: $${fmx(p.precio_venta||0)}</div>
       </div>
-      <div style="text-align:right;flex-shrink:0">
+      <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px">
         <span class="badge ${categoriaProducto(p)==='reventa'?'rev':'fab'}">${categoriaProducto(p)==='reventa'?'Reventa':'Fab.'}</span>
+        ${categoriaProducto(p)==='fabricacion' ? `<button class="btn btn-secondary btn-sm" onclick="abrirModalProduccionStock();setTimeout(()=>setV('ps-producto','${p.id}'),60)">🏭 Producir</button>` : ''}
       </div>
     </div></div>`;
   });
