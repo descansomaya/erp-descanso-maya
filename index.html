@@ -1097,20 +1097,11 @@ body.modal-open{overflow:hidden}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title">Iniciar producción</div>
     <div id="ap-info" style="margin-bottom:12px"></div>
-    <div class="form-group">
-      <label class="form-label">Artesano *</label>
-      <select class="form-input" id="ap-artesano" onchange="onCambioArtesanoAsignacion()"></select>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Tarifa aplicada *</label>
-      <select class="form-input" id="ap-tarifa" onchange="recalcularPagoAsignacion()"></select>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Pago estimado ($)</label>
-      <input type="number" class="form-input" id="ap-pago" readonly>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Nota</label>
+    <div class="card-note" style="margin:0 0 10px">Puedes asignar uno o varios artesanos a la misma orden. La orden conserva un solo estado, pero cada asignación guarda su tarifa, tipo de trabajo y pago estimado.</div>
+    <div id="ap-multi-list"></div>
+    <button class="btn btn-secondary" type="button" onclick="addAsignacionProduccionRow()">+ Agregar artesano</button>
+    <div class="form-group" style="margin-top:10px">
+      <label class="form-label">Nota general</label>
       <input type="text" class="form-input" id="ap-nota" placeholder="Opcional">
     </div>
     <button class="btn btn-primary" id="btn-confirmar-produccion" onclick="confirmarInicioProduccion()">Asignar y pasar a producción</button>
@@ -1133,7 +1124,7 @@ const D = {
   pedidos:[], clientes:[], productos:[], materiales:[], artesanos:[], tarifas_artesano:[],
   ordenes:[], gastos:[], ped_det:[], proveedores:[], compras:[],
   comp_det:[], pago_art:[], abonos:[], recetas:[], reparaciones:[], movimientos:[],
-  reservas:[], consumos:[]
+  reservas:[], consumos:[], ord_art:[]
 };
 let SC = 'inicio';
 let filtroP = 'todos', filtroO = 'todos', filtroR = 'todos', filtroC = 'todos', filtroProd = 'todos';
@@ -1400,6 +1391,85 @@ function tarifaPredeterminadaArtesano(artId){
   const lista = tarifasArtesano(artId);
   return lista.find(t=>String(t.predeterminada)==='true') || lista[0] || null;
 }
+function asignacionesOrden(ordenId){
+  return arr(D.ord_art).filter(a=>String(a.orden_id)===String(ordenId));
+}
+function pagoEstimadoAsignacion(tarifa, det, prod, factor=1){
+  const t = tarifa || {};
+  const esquema=String(t.esquema_pago||'por_pieza');
+  const monto=Number(t.monto||0);
+  const qty=Number(det?.cantidad||1);
+  const baseTubos = Number(prod?.tubos_hilo||0) * qty;
+  const f = Number(factor||1);
+  if(esquema==='por_tubo') return round2(baseTubos * monto * f);
+  if(esquema==='fijo') return round2(monto * f);
+  return round2(qty * monto * f);
+}
+function plantillaLaborProducto(prodId){
+  return arr(D.recetas).filter(r=>String(r.pedido_id)===('PRODLAB:'+String(prodId)));
+}
+function resumenArtesanosOrden(orden){
+  const asigs = asignacionesOrden(orden?.id);
+  if(asigs.length){
+    return asigs.map(a=>{
+      const art = arr(D.artesanos).find(x=>String(x.id)===String(a.artesano_id));
+      const tipo = a.tipo_trabajo ? ` (${a.tipo_trabajo})` : '';
+      return art ? art.nombre + tipo : ('Sin artesano'+tipo);
+    }).join(' · ');
+  }
+  const art = arr(D.artesanos).find(x=>String(x.id)===String(orden?.artesano_id));
+  return art ? art.nombre : 'Sin artesano';
+}
+function llenarSelectTarifasEnNodo(selectEl, artId, selectedId){
+  if(!selectEl) return;
+  const lista = tarifasArtesano(artId);
+  selectEl.innerHTML = ['<option value="">— Selecciona tarifa —</option>'].concat(
+    lista.map(t=>`<option value="${t.id}" ${String(selectedId)===String(t.id)?'selected':''}>${t.nombre_tarifa||t.nombre||'Tarifa'} · ${etiquetaEsquemaTarifa(t.esquema_pago)} · $${fmx(t.monto||0)}</option>`)
+  ).join('');
+}
+window.onCambioArtesanoAsignacionRow = function(i){
+  const artId=getV('ap-artesano-'+i);
+  const pred = tarifaPredeterminadaArtesano(artId);
+  llenarSelectTarifasEnNodo($('ap-tarifa-'+i), artId, pred?.id||'');
+  recalcularPagoAsignacion();
+};
+window.addAsignacionProduccionRow = function(data={}){
+  const host=$('ap-multi-list'); if(!host) return;
+  const idx = Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  const row=document.createElement('div');
+  row.className='card';
+  row.id='ap-row-'+idx;
+  row.style.marginBottom='8px';
+  const artOpts = '<option value="">— Selecciona artesano —</option>' + arr(D.artesanos).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(data.artesano_id)===String(a.id)?'selected':''}>${a.nombre}</option>`).join('');
+  row.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:start">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label class="form-label">Artesano *</label><select class="form-input" id="ap-artesano-${idx}" onchange="onCambioArtesanoAsignacionRow('${idx}')">${artOpts}</select></div>
+        <div><label class="form-label">Tarifa *</label><select class="form-input" id="ap-tarifa-${idx}" onchange="recalcularPagoAsignacion()"></select></div>
+        <div><label class="form-label">Tipo de trabajo</label><input class="form-input" id="ap-tipo-${idx}" value="${data.tipo_trabajo||''}" placeholder="Ej. tejido, brazos"></div>
+        <div><label class="form-label">Factor</label><input type="number" min="0" step="0.1" class="form-input" id="ap-factor-${idx}" value="${Number(data.factor_participacion||data.factor||1)}" oninput="recalcularPagoAsignacion()"></div>
+        <div style="grid-column:1 / span 2"><label class="form-label">Pago estimado ($)</label><input type="number" class="form-input" id="ap-pago-${idx}" readonly></div>
+      </div>
+      <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('ap-row-${idx}').remove(); recalcularPagoAsignacion(); return false;">×</button>
+    </div>`;
+  host.appendChild(row);
+  const pred = data.tarifa_artesano_id || tarifaPredeterminadaArtesano(data.artesano_id||'')?.id || '';
+  llenarSelectTarifasEnNodo($('ap-tarifa-'+idx), data.artesano_id||'', pred);
+  recalcularPagoAsignacion();
+};
+function recolectarAsignacionesProduccion(){
+  return Array.from(document.querySelectorAll('#ap-multi-list > .card')).map(row=>{
+    const idx = String(row.id||'').replace('ap-row-','');
+    return {
+      row_id: idx,
+      artesano_id:getV('ap-artesano-'+idx),
+      tarifa_artesano_id:getV('ap-tarifa-'+idx),
+      tipo_trabajo:getV('ap-tipo-'+idx),
+      factor_participacion:Number(getV('ap-factor-'+idx)||1),
+      pago_estimado:Number(getV('ap-pago-'+idx)||0)
+    };
+  }).filter(x=>x.artesano_id && x.tarifa_artesano_id && x.factor_participacion>0);
+}
 function llenarSelectTarifasArtesano(selectId, artId, selectedId){
   const el=$(selectId); if(!el) return;
   const lista = tarifasArtesano(artId);
@@ -1416,20 +1486,16 @@ window.onCambioArtesanoAsignacion = function(){
 };
 
 window.recalcularPagoAsignacion = function(){
-  const tarifaId=getV('ap-tarifa');
   const pedId=pedidoProduccionPendiente;
-  const tarifa=tarifaArtesanoById(tarifaId);
   const det=detallePedido(pedId);
   const prod=productoPedido(pedId);
-  let monto=0;
-  if(tarifa){
-    const esquema=String(tarifa.esquema_pago||'por_pieza');
-    const baseTubos = Number(prod?.tubos_hilo||0) * Number(det?.cantidad||1);
-    if(esquema==='por_tubo') monto = baseTubos * Number(tarifa.monto||0);
-    else if(esquema==='fijo') monto = Number(tarifa.monto||0);
-    else monto = Number(det?.cantidad||1) * Number(tarifa.monto||0);
-  }
-  setV('ap-pago', round2(monto));
+  Array.from(document.querySelectorAll('#ap-multi-list > .card')).forEach(row=>{
+    const idx = String(row.id||'').replace('ap-row-','');
+    const tarifa=tarifaArtesanoById(getV('ap-tarifa-'+idx));
+    const factor=Number(getV('ap-factor-'+idx)||1);
+    setV('ap-pago-'+idx, pagoEstimadoAsignacion(tarifa, det, prod, factor));
+    if(!getV('ap-tipo-'+idx) && tarifa?.tipo_trabajo) setV('ap-tipo-'+idx, tarifa.tipo_trabajo);
+  });
 };
 
 window.abrirAsignacionProduccion = function(pedidoId){
@@ -1438,22 +1504,41 @@ window.abrirAsignacionProduccion = function(pedidoId){
   const cli=arr(D.clientes).find(x=>String(x.id)===String(p?.cliente_id));
   const det=detallePedido(pedidoId);
   const prod=productoPedido(pedidoId);
-  $('ap-artesano').innerHTML='<option value="">— Selecciona artesano —</option>'+arr(D.artesanos).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}">${a.nombre}</option>`).join('');
   $('ap-info').innerHTML = `<div class="card" style="padding:10px 12px">
     <div style="font-size:13px;font-weight:700">${prod?.nombre||'Producto'}</div>
     <div style="font-size:12px;color:var(--text3);margin-top:2px">${cli?.nombre||'Cliente'} · Pedido ${pedidoId}</div>
     <div style="font-size:12px;margin-top:8px">Cantidad: <strong>${fmx(det?.cantidad||1)}</strong></div>
   </div>`;
+  $('ap-multi-list').innerHTML='';
   const ord=arr(D.ordenes).find(o=>{
     const d=arr(D.ped_det).find(dd=>String(dd.id)===String(o.pedido_detalle_id));
     return d && String(d.pedido_id)===String(pedidoId);
   });
-  setV('ap-artesano', ord?.artesano_id||'');
   setV('ap-nota', ord?.nota||'');
-  llenarSelectTarifasArtesano('ap-tarifa', ord?.artesano_id||'', ord?.tarifa_artesano_id||'');
-  if(!getV('ap-tarifa') && ord?.artesano_id) {
-    const pred = tarifaPredeterminadaArtesano(ord.artesano_id);
-    if(pred) setV('ap-tarifa', pred.id);
+  const existentes = ord ? asignacionesOrden(ord.id) : [];
+  if(existentes.length){
+    existentes.forEach(a=>addAsignacionProduccionRow(a));
+  }else if(prod){
+    const plantilla = plantillaLaborProducto(prod.id);
+    if(plantilla.length){
+      plantilla.forEach(r=>addAsignacionProduccionRow({
+        artesano_id:r.artesano_sugerido_id||'',
+        tarifa_artesano_id:r.tarifa_artesano_id||'',
+        tipo_trabajo:r.tipo_trabajo||String(r.material_id||'').replace(/^LAB:/,''),
+        factor_participacion:Number(r.cantidad||1)
+      }));
+    }else if(ord?.artesano_id || ord?.tarifa_artesano_id){
+      addAsignacionProduccionRow({
+        artesano_id:ord?.artesano_id||'',
+        tarifa_artesano_id:ord?.tarifa_artesano_id||'',
+        tipo_trabajo:'',
+        factor_participacion:1
+      });
+    } else {
+      addAsignacionProduccionRow();
+    }
+  } else {
+    addAsignacionProduccionRow();
   }
   recalcularPagoAsignacion();
   abrirModal('modal-asignacion-prod');
@@ -1466,12 +1551,12 @@ window.confirmarInicioProduccion = async function(){
     toast('⏳ Iniciando producción...', 1200);
     const p=arr(D.pedidos).find(x=>String(x.id)===String(pedidoId)); 
     if(!p){ toast('No se encontró el pedido'); return; }
-    const artId=getV('ap-artesano'); 
-    const tarifaId=getV('ap-tarifa');
-    if(!artId){ toast('Selecciona un artesano'); return; }
-    if(!tarifaId){ toast('Selecciona una tarifa'); return; }
-    const tarifa = tarifaArtesanoById(tarifaId);
-    if(!tarifa){ toast('No se encontró la tarifa seleccionada'); return; }
+    const asigns = recolectarAsignacionesProduccion();
+    if(!asigns.length){ toast('Agrega al menos un artesano con tarifa'); return; }
+    for(const a of asigns){
+      const tarifa = tarifaArtesanoById(a.tarifa_artesano_id);
+      if(!tarifa){ toast('Hay una tarifa inválida'); return; }
+    }
     const faltantes=typeof validarStockPedido==='function' ? validarStockPedido(pedidoId,true) : [];
     if(faltantes.length){toast('⚠️ Sin disponibilidad: '+faltantes.join(', '));return;}
     const det=detallePedido(pedidoId);
@@ -1487,29 +1572,59 @@ window.confirmarInicioProduccion = async function(){
     p.estado='en_produccion';
     await actualizar('pedidos',{id:pedidoId,estado:'en_produccion'});
     if(ord){
+      const primera = asigns[0];
+      const tarifa0 = tarifaArtesanoById(primera.tarifa_artesano_id) || {};
       Object.assign(ord,{
-        artesano_id:artId,
-        tarifa_artesano_id:tarifaId,
-        tarifa_nombre:tarifa.nombre_tarifa||tarifa.nombre||'',
-        esquema_pago_aplicado:tarifa.esquema_pago||'por_pieza',
-        monto_tarifa_aplicado:Number(tarifa.monto||0),
+        artesano_id:primera.artesano_id,
+        tarifa_artesano_id:primera.tarifa_artesano_id,
+        tarifa_nombre:tarifa0.nombre_tarifa||tarifa0.nombre||'',
+        esquema_pago_aplicado:tarifa0.esquema_pago||'por_pieza',
+        monto_tarifa_aplicado:Number(tarifa0.monto||0),
         estado:'en_proceso',
         fecha_inicio:hoy(),
         nota:getV('ap-nota')||'',
-        pago_estimado:Number(getV('ap-pago')||0)
+        pago_estimado:Number(primera.pago_estimado||0)
       });
       await actualizar('ordenes', {
         id:ord.id,
-        artesano_id:artId,
-        tarifa_artesano_id:tarifaId,
-        tarifa_nombre:tarifa.nombre_tarifa||tarifa.nombre||'',
-        esquema_pago_aplicado:tarifa.esquema_pago||'por_pieza',
-        monto_tarifa_aplicado:Number(tarifa.monto||0),
-        pago_estimado:Number(getV('ap-pago')||0),
-        nota:getV('ap-nota')||'',
+        artesano_id:ord.artesano_id,
+        tarifa_artesano_id:ord.tarifa_artesano_id,
+        tarifa_nombre:ord.tarifa_nombre,
+        esquema_pago_aplicado:ord.esquema_pago_aplicado,
+        monto_tarifa_aplicado:ord.monto_tarifa_aplicado,
+        pago_estimado:ord.pago_estimado,
+        nota:ord.nota,
         estado:'en_proceso',
         fecha_inicio:hoy()
       });
+
+      const prev = asignacionesOrden(ord.id);
+      for(const a of prev){
+        await eliminar('ord_art', a.id);
+      }
+      D.ord_art = arr(D.ord_art).filter(a=>String(a.orden_id)!==String(ord.id));
+
+      for(const a of asigns){
+        const tarifa = tarifaArtesanoById(a.tarifa_artesano_id) || {};
+        const row = {
+          id: genId('OPA', arr(D.ord_art)),
+          orden_id: ord.id,
+          artesano_id: a.artesano_id,
+          tarifa_artesano_id: a.tarifa_artesano_id,
+          tarifa_nombre: tarifa.nombre_tarifa||tarifa.nombre||'',
+          tipo_trabajo: a.tipo_trabajo || tarifa.tipo_trabajo || '',
+          esquema_pago_aplicado: tarifa.esquema_pago||'por_pieza',
+          monto_tarifa_aplicado: Number(tarifa.monto||0),
+          factor_participacion: Number(a.factor_participacion||1),
+          pago_estimado: Number(a.pago_estimado||0),
+          estado: 'pendiente_pago',
+          notas: '',
+          fecha_creacion: hoy()
+        };
+        D.ord_art.push(row);
+        await crear('ord_art', row);
+      }
+
       await asegurarConsumosRealesOrden(ord.id, {silent:true});
       await sincronizarPedidoDesdeOrden(ord.id);
     }
@@ -1528,7 +1643,6 @@ window.confirmarInicioProduccion = async function(){
     hideLoading();
   }
 };
-
 
 function toast(msg, dur=2800) {
   const el = $('toast');
@@ -1847,7 +1961,7 @@ async function probarConexionDiagnostica(){
     ['artesanos','artesanos'],['tarifas_artesano','tarifas_artesano'],['ordenes','ordenes_produccion'],['gastos','gastos'],['ped_det','pedido_detalle'],
     ['proveedores','proveedores'],['compras','compras'],['comp_det','compra_detalle'],['pago_art','pago_artesanos'],
     ['abonos','abonos_clientes'],['recetas','receta_pedido'],['reparaciones','reparaciones'],
-    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion']
+    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion'],['ord_art','ordenes_produccion_artesanos']
   ];
   const details = await Promise.all(pairs.map(([k,s]) => leerDiagnostico(s,k)));
   LAST_LOAD_REPORT = {
@@ -1875,7 +1989,7 @@ const SHEET_MAP = {
   ped_det:'pedido_detalle', proveedores:'proveedores', compras:'compras',
   comp_det:'compra_detalle', pago_art:'pago_artesanos', abonos:'abonos_clientes',
   recetas:'receta_pedido', reparaciones:'reparaciones', movimientos:'movimientos_inventario',
-  reservas:'reservas_inventario', consumos:'consumos_produccion'
+  reservas:'reservas_inventario', consumos:'consumos_produccion', ord_art:'ordenes_produccion_artesanos'
 };
 function sheetName(s){ return SHEET_MAP[s]||s; }
 
@@ -1935,6 +2049,7 @@ function normalizarDatosCargados(){
   D.reservas=D.reservas||[];
   D.consumos=D.consumos||[];
   D.tarifas_artesano=D.tarifas_artesano||[];
+  D.ord_art=D.ord_art||[];
 }
 
 
@@ -1971,7 +2086,7 @@ async function cargarTodo() {
     ['artesanos','artesanos'],['tarifas_artesano','tarifas_artesano'],['ordenes','ordenes_produccion'],['gastos','gastos'],['ped_det','pedido_detalle'],
     ['proveedores','proveedores'],['compras','compras'],['comp_det','compra_detalle'],['pago_art','pago_artesanos'],
     ['abonos','abonos_clientes'],['recetas','receta_pedido'],['reparaciones','reparaciones'],
-    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion']
+    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion'],['ord_art','ordenes_produccion_artesanos']
   ];
 
   try {
@@ -2536,8 +2651,7 @@ function renderKanban() {
         titulo=prod?prod.nombre:o.id; cli=c?c.nombre:'—';
         subtit=etiquetaOrden(o);
       }
-      const art=D.artesanos.find(x=>x.id===o.artesano_id);
-      const prev={pendiente:null,en_proceso:'pendiente',listo:'en_proceso'};
+          const prev={pendiente:null,en_proceso:'pendiente',listo:'en_proceso'};
       const next={pendiente:'en_proceso',en_proceso:'listo',listo:null};
       const card=document.createElement('div');
       card.className='kcard';
@@ -2545,7 +2659,7 @@ function renderKanban() {
       card.innerHTML=`<div class="kcard-title">${titulo}</div>
         <div class="kcard-sub">${cli}</div>
         ${subtit?`<div class="kcard-sub">${subtit}</div>`:''}
-        <div class="kcard-sub">${art?'🧵 '+art.nombre:'Sin artesano'}</div>
+        <div class="kcard-sub">${resumenArtesanosOrden(o)?'🧵 '+resumenArtesanosOrden(o):'Sin artesano'}</div>
         <div class="kcard-arrows">
           ${prev[est]?`<button class="karrow" data-idx="${idx}" data-est="${prev[est]}">← ${prev[est].replace('_',' ')}</button>`:'<span></span>'}
           <div style="display:flex;gap:6px;justify-content:flex-end">
@@ -2569,8 +2683,7 @@ function renderListaOrdenes() {
     const ped=det?D.pedidos.find(x=>x.id===det.pedido_id):null;
     const rep=esRep?(D.reparaciones||[]).find(x=>x.id===o.pedido_detalle_id.replace('REP_','')):null;
     const c=D.clientes.find(x=>x.id===(rep?.cliente_id||ped?.cliente_id));
-    const art=D.artesanos.find(x=>x.id===o.artesano_id);
-    const idx=D.ordenes.indexOf(o);
+      const idx=D.ordenes.indexOf(o);
     const res=!esRep?resumenConsumoOrden(o.id):{teorico:0,real:0,desv:0};
     const div=document.createElement('div');
     div.className='card tap';div.onclick=()=>verOrden(idx);
@@ -2578,7 +2691,7 @@ function renderListaOrdenes() {
       <div>
         <div class="card-title">${esRep?(rep?.tipo||'Reparación'):prod?.nombre||o.id}</div>
         <div class="card-sub">${c?c.nombre:'—'}</div>
-        <div class="card-sub">${etiquetaOrden(o)} · ${art?'🧵 '+art.nombre:'Sin artesano'}</div>
+        <div class="card-sub">${etiquetaOrden(o)} · ${resumenArtesanosOrden(o)?'🧵 '+resumenArtesanosOrden(o):'Sin artesano'}</div>
         ${!esRep?`<div class="card-note">Teórico ${fmx(res.teorico)} · Real ${fmx(res.real||0)} ${res.desv?`· Δ ${fmx(res.desv)}`:''}</div>`:''}
       </div>
       <span class="badge ${o.estado}">${o.estado.replace('_',' ')}</span>
@@ -2644,7 +2757,6 @@ async function verOrden(idx) {
   const ped=det?D.pedidos.find(x=>x.id===det.pedido_id):null;
   const prod=det?D.productos.find(x=>x.id===det.producto_id):null;
   const cli=ped?D.clientes.find(x=>x.id===ped.cliente_id):null;
-  const art=D.artesanos.find(x=>x.id===o.artesano_id);
   if(ped && flujoPedido(ped)==='reventa'){
     verPedido(ped.id);
     return;
@@ -2657,7 +2769,7 @@ async function verOrden(idx) {
       <span style="color:var(--text3)">Pedido</span><span>${ped?.id||'—'}</span>
       <span style="color:var(--text3)">Cliente</span><span>${cli?.nombre||'—'}</span>
       <span style="color:var(--text3)">Producto</span><span>${prod?.nombre||'—'}</span>
-      <span style="color:var(--text3)">Artesano</span><span>${art?.nombre||'Sin asignar'}</span>
+      <span style="color:var(--text3)">Artesanos</span><span>${resumenArtesanosOrden(o)||'Sin asignar'}</span>
       <span style="color:var(--text3)">Estado</span><span><span class="badge ${o.estado}">${o.estado.replace('_',' ')}</span></span>
       <span style="color:var(--text3)">Consumo teórico</span><span>${fmx(res.teorico)}</span>
       <span style="color:var(--text3)">Consumo real</span><span>${fmx(res.real||0)}</span>
@@ -4036,37 +4148,44 @@ function renderArtesanos() {
 
   // Pagos pendientes
   const pagosEl=$('pagos-art-list');if(!pagosEl)return;
-  const pagados=new Set(D.pago_art.map(p=>String(p.orden_id)));
-  const pendientes=D.ordenes.filter(o=>o.estado==='listo'&&!pagados.has(String(o.id))&&o.artesano_id);
+  const pagados=new Set(arr(D.pago_art).map(p=>String(p.asignacion_id||'') || (String(p.orden_id)+'|'+String(p.artesano_id))));
+  const pendientesAsign = arr(D.ord_art).filter(a=>{
+    const key = String(a.id||'') || (String(a.orden_id)+'|'+String(a.artesano_id));
+    const ord = arr(D.ordenes).find(o=>String(o.id)===String(a.orden_id));
+    return ord && ord.estado==='listo' && !pagados.has(key);
+  });
+  const pendientesFallback = pendientesAsign.length ? [] : D.ordenes.filter(o=>o.estado==='listo'&&!pagados.has(String(o.id)+'|'+String(o.artesano_id))&&o.artesano_id).map(o=>({
+    id:'',
+    orden_id:o.id,
+    artesano_id:o.artesano_id,
+    tarifa_nombre:o.tarifa_nombre,
+    tipo_trabajo:'',
+    esquema_pago_aplicado:o.esquema_pago_aplicado,
+    monto_tarifa_aplicado:o.monto_tarifa_aplicado,
+    factor_participacion:1,
+    pago_estimado:o.pago_estimado
+  }));
+  const pendientes = pendientesAsign.length ? pendientesAsign : pendientesFallback;
   if(!pendientes.length){pagosEl.innerHTML=empty('Sin pagos pendientes ✓');return;}
   pagosEl.innerHTML='';
-  pendientes.forEach(o=>{
-    const art=D.artesanos.find(x=>x.id===o.artesano_id);if(!art)return;
-    const esRep=String(o.pedido_detalle_id||'').startsWith('REP_');
-    let monto=Number(o.pago_estimado||0);
-    let desc=(o.tarifa_nombre||'Tarifa')+' · '+etiquetaEsquemaTarifa(o.esquema_pago_aplicado||'por_pieza')+' · $'+fmx(o.monto_tarifa_aplicado||0);
-    if(!monto){
-      const det=D.ped_det.find(x=>x.id===o.pedido_detalle_id);
-      const prod=det?D.productos.find(x=>x.id===det.producto_id):null;
-      const esquema=String(o.esquema_pago_aplicado||'por_pieza');
-      const tarifa=Number(o.monto_tarifa_aplicado||0);
-      if(esquema==='por_tubo'&&prod){const t=Number(prod.tubos_hilo||0)*Number(det?.cantidad||1);monto=t*tarifa;desc=(o.tarifa_nombre||'Tarifa')+' · '+t+' tubos × $'+fmx(tarifa);}
-      else if(esquema==='fijo'){monto=tarifa;desc=(o.tarifa_nombre||'Tarifa')+' · fijo $'+fmx(tarifa);}
-      else if(det){monto=tarifa*Number(det.cantidad||1);desc=(o.tarifa_nombre||'Tarifa')+' · '+det.cantidad+' pza × $'+fmx(tarifa);}
-    }
+  pendientes.forEach(a=>{
+    const ord = arr(D.ordenes).find(o=>String(o.id)===String(a.orden_id));
+    const art=D.artesanos.find(x=>x.id===a.artesano_id);if(!art)return;
+    let monto=Number(a.pago_estimado||0);
+    let desc=(a.tarifa_nombre||'Tarifa')+(a.tipo_trabajo?(' · '+a.tipo_trabajo):'')+' · '+etiquetaEsquemaTarifa(a.esquema_pago_aplicado||'por_pieza')+' · $'+fmx(a.monto_tarifa_aplicado||0);
     const div=document.createElement('div');div.className='card';
     div.innerHTML=`<div class="card-row">
-      <div><div class="card-title">${art.nombre}</div><div class="card-sub">${esRep?'🔧 Reparación':o.id} · ${desc}</div></div>
+      <div><div class="card-title">${art.nombre}</div><div class="card-sub">${ord?.id||a.orden_id} · ${desc}</div></div>
       <div style="text-align:right">
         <div style="font-size:16px;font-weight:600;color:var(--success)">$${fmx(monto)}</div>
-        <button class="btn btn-success btn-sm" style="margin-top:4px" onclick="pagarArtesano('${o.id}','${art.id}',${monto})">✓ Pagar</button>
+        <button class="btn btn-success btn-sm" style="margin-top:4px" onclick="pagarArtesano('${a.orden_id}','${art.id}',${monto},'${a.id||''}','${(a.tipo_trabajo||'').replace(/'/g,"&#39;")}')">✓ Pagar</button>
       </div>
     </div>`;
     pagosEl.appendChild(div);
   });
 }
-async function pagarArtesano(ordenId,artId,monto) {
-  const pago={id:genId('PAG',D.pago_art),artesano_id:artId,orden_id:ordenId,monto,total:monto,tipo_pago:'pago',fecha:hoy()};
+async function pagarArtesano(ordenId,artId,monto,asignacionId='',tipoTrabajo='') {
+  const pago={id:genId('PAG',D.pago_art),artesano_id:artId,orden_id:ordenId,asignacion_id:asignacionId||'',tipo_trabajo:tipoTrabajo||'',monto,total:monto,tipo_pago:'pago',fecha:hoy()};
   D.pago_art.push(pago);await crear('pago_artesanos',pago);
   toast('✓ Pago registrado $'+fmx(monto));renderArtesanos();
 }
