@@ -742,11 +742,11 @@ body.modal-open{overflow:hidden}
       <div class="sec-title">Receta maestra del producto</div>
       <div id="pr-receta-list"></div>
       <button type="button" class="btn btn-secondary btn-sm" id="btn-add-pr-receta" onclick="addMatProducto()">+ Agregar material</button>
-      <div class="sec-title" style="margin-top:14px">Mano de obra base del producto</div>
+      <div class="sec-title" style="margin-top:14px">Plantilla de mano de obra del producto</div>
       <div id="pr-art-list"></div>
-      <button type="button" class="btn btn-secondary btn-sm" id="btn-add-pr-art" onclick="addArtProducto()">+ Agregar artesano</button>
+      <button type="button" class="btn btn-secondary btn-sm" id="btn-add-pr-art" onclick="addArtProducto()">+ Agregar trabajo</button>
       <div class="alert alert-info" style="margin-top:10px;font-size:12px">
-        Puedes agregar dos o más artesanos. Usa el factor de participación para repartir trabajo; por ejemplo 0.5 si ese artesano realiza media pieza o media carga.
+        Aquí defines la plantilla del proceso: tipo de trabajo, tarifa referencial y, si quieres, un artesano sugerido. El artesano real se asigna después en la orden de producción.
       </div>
     </div>
     <div class="form-group"><label class="form-label">Precio de venta ($) *</label><input type="number" class="form-input" id="pr-precio" placeholder="0.00"></div>
@@ -5194,6 +5194,20 @@ document.addEventListener('DOMContentLoaded', () => {
   function costoMat(m){
     return Number(m?.costo_promedio || m?.costo_unitario || m?.costo || m?.ultimo_costo || m?.precio_compra || 0);
   }
+  function tipoTrabajoFromRow(r){
+    return r?.tipo_trabajo || String(r?.material_id||'').replace(/^LAB:/,'').replace(/^ART:/,'') || '';
+  }
+  function labelTarifaGlobal(t){
+    const art = arr(D.artesanos).find(a=>String(a.id)===String(t.artesano_id));
+    const artNom = art?.nombre ? ` · ${art.nombre}` : '';
+    return `${t.nombre_tarifa||'Tarifa'}${artNom} · ${etiquetaEsquemaTarifa(t.esquema_pago)} · $${typeof fmx==='function'?fmx(t.monto):t.monto}`;
+  }
+  function llenarSelectTarifasGlobal(selId, selectedId=''){
+    const el = document.getElementById(selId);
+    if(!el) return;
+    const lista = arr(D.tarifas_artesano).filter(t=>String(t.activa)!=='false');
+    el.innerHTML = '<option value="">— Tarifa referencial —</option>' + lista.map(t=>`<option value="${t.id}" ${String(selectedId)===String(t.id)?'selected':''}>${labelTarifaGlobal(t)}</option>`).join('');
+  }
   window.calcCostoEstimadoProducto = function(){
     const cat = (typeof getV==='function' ? getV('pr-cat') : 'fabricacion');
     if(cat!=='fabricacion'){
@@ -5213,10 +5227,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const artIds = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
     let totalLabor = 0;
     artIds.forEach(i=>{
-      const artId = document.getElementById('pra-art-'+i)?.value || '';
       const tarifaId = document.getElementById('pra-tarifa-'+i)?.value || '';
       const factor = Number(document.getElementById('pra-factor-'+i)?.value || 0);
-      if(!artId || !tarifaId || factor<=0) return;
+      if(!tarifaId || factor<=0) return;
       const tarifaObj = tarifaArtesanoById(tarifaId) || {};
       const tarifa = Number(tarifaObj.monto||0);
       const esquema = String(tarifaObj.esquema_pago||'por_pieza');
@@ -5228,45 +5241,46 @@ document.addEventListener('DOMContentLoaded', () => {
     const inp = document.getElementById('pr-costo');
     if(inp) inp.value = total;
     const box = document.getElementById('pr-cost-breakdown');
-    if(box) box.innerHTML = `<div class="card-note">Materiales: $${typeof fmx==='function'?fmx(totalMat):totalMat} · Mano de obra: $${typeof fmx==='function'?fmx(totalLabor):totalLabor}</div>`;
+    if(box) box.innerHTML = `<div class="card-note">Materiales: $${typeof fmx==='function'?fmx(totalMat):totalMat} · Mano de obra estimada: $${typeof fmx==='function'?fmx(totalLabor):totalLabor}</div>`;
     return total;
   };
 
-  window.addArtProducto = function(artId='', tarifaId='', factor=1, nota=''){
+  window.addArtProducto = function(tipoTrabajo='', tarifaId='', factor=1, nota='', artesanoSugeridoId=''){
     const host = document.getElementById('pr-art-list');
     if(!host) return;
     window.laborProdItems = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
     const idn = window.laborProdItems.length ? Math.max(...window.laborProdItems)+1 : 0;
     window.laborProdItems.push(idn);
-    const tarifas = artId ? tarifasArtesano(artId) : [];
-    const pred = tarifaId ? tarifaArtesanoById(tarifaId) : tarifaPredeterminadaArtesano(artId);
-    const selTarifa = tarifaId || pred?.id || '';
     const row = document.createElement('div');
     row.id = 'pra-'+idn;
     row.style.cssText = 'background:var(--bg3);border-radius:12px;padding:10px;margin-bottom:8px';
     row.innerHTML = `
       <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;margin-bottom:6px">
-        <select class="form-input" id="pra-art-${idn}" onchange="llenarSelectTarifasArtesano('pra-tarifa-${idn}', this.value, ''); calcCostoEstimadoProducto()">
-          <option value="">— Artesano —</option>
-          ${(D.artesanos||[]).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(artId)===String(a.id)?'selected':''}>${a.nombre}</option>`).join('')}
-        </select>
+        <input type="text" class="form-input" id="pra-tipo-${idn}" value="${tipoTrabajo||''}" placeholder="Tipo de trabajo. Ej: tejido, brazos, remate" oninput="calcCostoEstimadoProducto()">
         <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('pra-${idn}').remove(); laborProdItems=laborProdItems.filter(x=>x!==${idn}); calcCostoEstimadoProducto(); return false;">×</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
         <div>
-          <label class="form-label" style="margin-bottom:4px">Tarifa</label>
-          <select class="form-input" id="pra-tarifa-${idn}" onchange="calcCostoEstimadoProducto()">
-            <option value="">— Tarifa —</option>
-            ${tarifas.map(t=>`<option value="${t.id}" ${String(selTarifa)===String(t.id)?'selected':''}>${t.nombre_tarifa||'Tarifa'} · ${etiquetaEsquemaTarifa(t.esquema_pago)} · $${typeof fmx==='function'?fmx(t.monto):t.monto}</option>`).join('')}
-          </select>
+          <label class="form-label" style="margin-bottom:4px">Tarifa referencial</label>
+          <select class="form-input" id="pra-tarifa-${idn}" onchange="calcCostoEstimadoProducto()"></select>
         </div>
         <div><label class="form-label" style="margin-bottom:4px">Factor de participación</label><input type="number" min="0" step="0.1" class="form-input" id="pra-factor-${idn}" value="${Number(factor||0)}" oninput="calcCostoEstimadoProducto()"></div>
       </div>
-      <div>
-        <label class="form-label" style="margin-bottom:4px">Nota</label>
-        <input type="text" class="form-input" id="pra-nota-${idn}" value="${nota||''}" placeholder="Opcional">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <label class="form-label" style="margin-bottom:4px">Artesano sugerido</label>
+          <select class="form-input" id="pra-art-${idn}">
+            <option value="">— Opcional —</option>
+            ${(D.artesanos||[]).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(artesanoSugeridoId)===String(a.id)?'selected':''}>${a.nombre}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="form-label" style="margin-bottom:4px">Nota</label>
+          <input type="text" class="form-input" id="pra-nota-${idn}" value="${nota||''}" placeholder="Opcional">
+        </div>
       </div>`;
     host.appendChild(row);
+    llenarSelectTarifasGlobal('pra-tarifa-'+idn, tarifaId||'');
     calcCostoEstimadoProducto();
   };
 
@@ -5286,11 +5300,11 @@ document.addEventListener('DOMContentLoaded', () => {
       setV('pr-dias', p.dias_produccion||7);
       setV('pr-precio', p.precio_venta||0);
       setV('pr-stock', p.stock_disponible||0);
-      const matRows = (typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(id) : []).filter(r=>!String(r.material_id||'').startsWith('ART:'));
+      const matRows = (typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(id) : []).filter(r=>!String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:'));
       if(matRows.length) matRows.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||''));
       else addMatProducto();
       const labRows = laborRowsProducto(id);
-      if(labRows.length) labRows.forEach(r=>addArtProducto(String(r.material_id||'').replace(/^ART:/,''), r.tarifa_artesano_id||'', r.cantidad||1, r.color||''));
+      if(labRows.length) labRows.forEach(r=>addArtProducto(tipoTrabajoFromRow(r), r.tarifa_artesano_id||'', r.cantidad||1, r.color||'', r.artesano_sugerido_id||String(r.material_id||'').replace(/^ART:/,'')));
       else addArtProducto();
       setTimeout(()=>calcCostoEstimadoProducto(), 30);
     } else {
@@ -5371,20 +5385,23 @@ document.addEventListener('DOMContentLoaded', () => {
       D.recetas = (D.recetas||[]).filter(r=>String(r.pedido_id)!==labId);
 
       const laborRows = (window.laborProdItems||[]).map(i=>({
-        artesano_id:document.getElementById('pra-art-'+i)?.value || '',
+        tipo_trabajo:document.getElementById('pra-tipo-'+i)?.value || '',
         tarifa_artesano_id:document.getElementById('pra-tarifa-'+i)?.value || '',
         factor:Number(document.getElementById('pra-factor-'+i)?.value || 0),
-        nota:document.getElementById('pra-nota-'+i)?.value || ''
-      })).filter(x=>x.artesano_id && x.tarifa_artesano_id && x.factor>0);
+        nota:document.getElementById('pra-nota-'+i)?.value || '',
+        artesano_sugerido_id:document.getElementById('pra-art-'+i)?.value || ''
+      })).filter(x=>x.tipo_trabajo && x.tarifa_artesano_id && x.factor>0);
 
       for(const row of laborRows){
         const tarifa = tarifaArtesanoById(row.tarifa_artesano_id) || {};
         const rr={
           id:genId('REC', D.recetas||[]),
           pedido_id:labId,
-          material_id:'ART:'+row.artesano_id,
+          material_id:'LAB:'+row.tipo_trabajo,
           cantidad:row.factor,
           color:row.nota,
+          tipo_trabajo:row.tipo_trabajo,
+          artesano_sugerido_id:row.artesano_sugerido_id,
           tarifa_artesano_id:row.tarifa_artesano_id,
           tarifa_nombre:tarifa.nombre_tarifa||tarifa.nombre||'',
           esquema_pago:tarifa.esquema_pago||'por_pieza',
@@ -5436,13 +5453,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.addEventListener('input', function(e){
     const id = e.target && e.target.id ? e.target.id : '';
-    if(/^prm-(mat|qty|color)-/.test(id) || /^pra-(art|factor|nota)-/.test(id) || id==='pr-cat'){
+    if(/^prm-(mat|qty|color)-/.test(id) || /^pra-(tipo|factor|nota)-/.test(id) || id==='pr-cat'){
       if(getV('pr-cat')==='fabricacion') calcCostoEstimadoProducto();
     }
   }, true);
   document.addEventListener('change', function(e){
     const id = e.target && e.target.id ? e.target.id : '';
-    if(/^prm-(mat|qty|color)-/.test(id) || /^pra-(art|factor|nota)-/.test(id) || id==='pr-cat'){
+    if(/^prm-(mat|qty|color)-/.test(id) || /^pra-(tipo|art|tarifa|factor|nota)-/.test(id) || id==='pr-cat'){
       if(getV('pr-cat')==='fabricacion') calcCostoEstimadoProducto();
     }
   }, true);
