@@ -1200,11 +1200,11 @@ window.ajustarStockPedidoProduccion = window.ajustarStockPedidoProduccion || asy
   const prod = productoPedido(pedidoId);
   const cat = typeof categoriaProducto==='function' ? categoriaProducto(prod||{}) : (prod?.categoria||'fabricacion');
   if(cat==='reventa') return;
-  const recs = arr(D.recetas).filter(r=>String(r.pedido_id)===String(det.id));
+  const recs = recetaPedidoMaterialesAplicada(det.id);
   for(const r of recs){
     const mat = arr(D.materiales).find(m=>String(m.id)===String(r.material_id));
     if(!mat) continue;
-    const qty = Number(r.cantidad||0);
+    const qty = Number(r.cantidad_aplicada ?? r.cantidad || 0);
     const actualNet = netoMovPedido(pedidoId,'material',mat.id);
     const targetNet = targetEnProduccion ? (-qty) : 0;
     const delta = Number((targetNet - actualNet).toFixed(6));
@@ -2413,6 +2413,7 @@ function renderKanban() {
       }
       const art=D.artesanos.find(x=>x.id===o.artesano_id);
       const prev={pendiente:null,en_proceso:'pendiente',listo:'en_proceso'};
+      const canBackPending = est!=='pendiente';
       const next={pendiente:'en_proceso',en_proceso:'listo',listo:null};
       const card=document.createElement('div');
       card.className='kcard';
@@ -2423,7 +2424,10 @@ function renderKanban() {
         <div class="kcard-sub">${art?'🧵 '+art.nombre:'Sin artesano'}</div>
         <div class="kcard-arrows">
           ${prev[est]?`<button class="karrow" data-idx="${idx}" data-est="${prev[est]}">← ${prev[est].replace('_',' ')}</button>`:'<span></span>'}
-          ${next[est]?`<button class="karrow" data-idx="${idx}" data-est="${next[est]}" style="color:var(--accent)">${next[est].replace('_',' ')} →</button>`:'<span></span>'}
+          <div style="display:flex;gap:6px;justify-content:flex-end">
+            ${canBackPending && est!=='pendiente' ? `<button class="karrow" data-idx="${idx}" data-est="pendiente">↺ pendiente</button>` : ''}
+            ${next[est]?`<button class="karrow" data-idx="${idx}" data-est="${next[est]}" style="color:var(--accent)">${next[est].replace('_',' ')} →</button>`:''}
+          </div>
         </div>`;
       card.querySelectorAll('.karrow').forEach(btn=>btn.addEventListener('click',e=>{e.stopPropagation();moverOrden(Number(btn.dataset.idx),btn.dataset.est);}));
       el.appendChild(card);
@@ -2482,6 +2486,7 @@ async function moverOrden(idx,nuevoEst) {
   await sincronizarPedidoDesdeOrden(o.id);
   toast('→ '+nuevoEst.replace('_',' '));
   renderProduccion();
+  if(typeof renderInventario==='function') renderInventario();
   if(typeof renderPedidos==='function') renderPedidos();
   if(typeof renderLabels==='function') renderLabels();
 }
@@ -3175,6 +3180,28 @@ function resumenConsumoOrden(ordenId){
 function recetaPedidoMateriales(detalleId){
   return arr(D.recetas).filter(r=>String(r.pedido_id)===String(detalleId) && !String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:'));
 }
+
+function cantidadRecetaAplicada(detalle, rec){
+  const qtyRec = Number(rec?.cantidad||0);
+  if(!detalle) return qtyRec;
+  const mult = Math.max(1, Number(detalle.cantidad||1));
+  if(mult<=1) return qtyRec;
+  const prod = arr(D.productos).find(p=>String(p.id)===String(detalle.producto_id));
+  const plantilla = prod && typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(prod.id) : [];
+  if(!plantilla.length) return qtyRec;
+  const base = plantilla.find(b=>String(b.material_id)===String(rec.material_id) && String(b.color||'')===String(rec.color||'')) ||
+               plantilla.find(b=>String(b.material_id)===String(rec.material_id));
+  const qtyBase = Number(base?.cantidad||0);
+  if(!(qtyBase>0)) return qtyRec;
+  const scaled = qtyBase*mult;
+  if(Math.abs(qtyRec-qtyBase) < 0.000001) return scaled;
+  if(Math.abs(qtyRec-scaled) < 0.000001) return qtyRec;
+  return qtyRec;
+}
+function recetaPedidoMaterialesAplicada(detalleId){
+  const detalle = arr(D.ped_det).find(d=>String(d.id)===String(detalleId));
+  return recetaPedidoMateriales(detalleId).map(r=>({ ...r, cantidad_aplicada:cantidadRecetaAplicada(detalle, r) }));
+}
 async function asegurarRecetaDetalleDesdeProducto(detalleId){
   const detalle = arr(D.ped_det).find(d=>String(d.id)===String(detalleId));
   if(!detalle) return [];
@@ -3204,6 +3231,7 @@ async function asegurarConsumosRealesOrden(ordenId, opts={}){
   const existentes = arr(D.consumos).filter(c=>String(c.orden_id)===String(ordenId));
   if(existentes.length) return existentes;
   let recetas = await asegurarRecetaDetalleDesdeProducto(orden.pedido_detalle_id);
+  const detalle = arr(D.ped_det).find(d=>String(d.id)===String(orden.pedido_detalle_id));
   if(!recetas.length) return [];
   const creados=[];
   for(const rec of recetas){
@@ -3212,7 +3240,7 @@ async function asegurarConsumosRealesOrden(ordenId, opts={}){
       orden_id:ordenId,
       pedido_detalle_id:orden.pedido_detalle_id,
       material_id:rec.material_id,
-      cantidad_teorica:Number(rec.cantidad||0),
+      cantidad_teorica:Number(cantidadRecetaAplicada(detalle, rec)||0),
       cantidad_real:Number(rec.cantidad_real||0)||0,
       color:rec.color||'',
       estado:Number(rec.cantidad_real||0)>0?'capturado':'pendiente',
@@ -3520,20 +3548,20 @@ async function guardarMaterial() {
   cerrar('modal-material');renderInventario();
 }
 function renderInventario() {
-  const el=$('inv-list');if(!el)return;
-  if(!D.materiales.length){el.innerHTML=empty('Sin materiales');return;}
-  el.innerHTML='';
-  [...D.materiales].sort((a,b)=>Number(a.stock_actual||0)-Number(a.stock_minimo||0)>Number(b.stock_actual||0)-Number(b.stock_minimo||0)?1:-1).forEach(m=>{
+  const el=$('inv-list'); if(!el) return;
+  const mats=[...arr(D.materiales)].sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
+  const prods=[...arr(D.productos)].filter(p=>Number(p.stock_disponible||0)>0 || categoriaProducto(p)==='reventa').sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
+  let html='';
+  html += `<div class="sec-title">Materiales</div>`;
+  if(!mats.length) html += empty('Sin materiales');
+  mats.forEach(m=>{
     const bajo=Number(m.stock_actual||0)<=Number(m.stock_minimo||0);
-    const div=document.createElement('div');div.className='card';
     const pct=m.stock_minimo>0?Math.min(100,Math.round(Number(m.stock_actual||0)/Number(m.stock_minimo||1)*50)):50;
-    div.innerHTML=`<div class="card-row">
+    html += `<div class="card"><div class="card-row">
       <div style="flex:1">
         <div class="card-title">${m.nombre}</div>
         <div class="card-sub">${m.stock_actual||0} ${m.unidad} · mín ${m.stock_minimo||0}</div>
-        <div style="background:var(--border);border-radius:4px;height:4px;margin-top:6px">
-          <div style="background:${bajo?'var(--danger)':'var(--success)'};height:4px;border-radius:4px;width:${pct}%"></div>
-        </div>
+        <div style="background:var(--border);border-radius:4px;height:4px;margin-top:6px"><div style="background:${bajo?'var(--danger)':'var(--success)'};height:4px;border-radius:4px;width:${pct}%"></div></div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
         ${bajo?'<span style="font-size:10px;color:var(--danger);font-weight:600">⚠️ BAJO</span>':''}
@@ -3543,9 +3571,23 @@ function renderInventario() {
           <button class="btn btn-secondary btn-sm" onclick="eliminarMaterial('${m.id}')">🗑</button>
         </div>
       </div>
-    </div>`;
-    el.appendChild(div);
+    </div></div>`;
   });
+  html += `<div class="sec-title" style="margin-top:12px">Hamacas / productos con stock</div>`;
+  if(!prods.length) html += empty('Sin productos con stock visible');
+  prods.forEach(p=>{
+    html += `<div class="card"><div class="card-row">
+      <div style="flex:1">
+        <div class="card-title">${p.nombre}</div>
+        <div class="card-sub">Stock disponible: ${fmx(p.stock_disponible||0)} · ${categoriaProducto(p)==='reventa'?'Reventa':'Fabricación'}</div>
+        <div class="card-note">Costo base: $${fmx(p.costo_produccion||0)} · Precio: $${fmx(p.precio_venta||0)}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <span class="badge ${categoriaProducto(p)==='reventa'?'rev':'fab'}">${categoriaProducto(p)==='reventa'?'Reventa':'Fab.'}</span>
+      </div>
+    </div></div>`;
+  });
+  el.innerHTML=html;
 }
 
 // ═══════════════════════════════════════════════
@@ -5049,9 +5091,9 @@ document.addEventListener('DOMContentLoaded', () => {
         D.reservas.push(res); await crear('reservas',res);
       }
     } else {
-      const recs=arr(D.recetas).filter(r=>String(r.pedido_id)===String(detalleId));
+      const recs=recetaPedidoMaterialesAplicada(detalleId);
       for(const rr of recs){
-        const qty=Number(rr.cantidad||0);
+        const qty=Number(rr.cantidad_aplicada ?? rr.cantidad || 0);
         if(qty>0){
           const res={id:genId('RES',arr(D.reservas)),pedido_id:pedidoId,pedido_detalle_id:detalleId,ref_tipo:'material',tipo:'material',ref_id:rr.material_id,cantidad:qty,estado:'activa',fecha:hoy(),activa:'si'};
           D.reservas.push(res); await crear('reservas',res);
