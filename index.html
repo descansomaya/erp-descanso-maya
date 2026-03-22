@@ -1051,7 +1051,7 @@ body.modal-open{overflow:hidden}
     <div class="modal-title" id="ord-tit">Orden de producción</div>
     <div id="ord-body"></div>
     <div style="height:12px"></div>
-    <button class="btn btn-primary" onclick="guardarConsumosOrden()">💾 Guardar consumo real</button>
+    <button class="btn btn-primary" onclick="guardarConsumosOrden()">💾 Guardar consumo real usado</button>
     <button class="btn btn-secondary" onclick="cerrar('modal-orden')">Cerrar</button>
   </div>
 </div>
@@ -1421,6 +1421,8 @@ window.confirmarInicioProduccion = async function(){
         estado:'en_proceso',
         fecha_inicio:hoy()
       });
+      await asegurarConsumosRealesOrden(ord.id, {silent:true});
+      await sincronizarPedidoDesdeOrden(ord.id);
     }
     cerrar('modal-asignacion-prod');
     cerrar('det-pedido');
@@ -2421,11 +2423,14 @@ async function moverOrden(idx,nuevoEst) {
   if(nuevoEst==='listo') await asegurarConsumosRealesOrden(o.id);
   o.estado=nuevoEst;
   await actualizar('ordenes_produccion',{id:o.id,estado:nuevoEst});
+  await sincronizarPedidoDesdeOrden(o.id);
   toast('→ '+nuevoEst.replace('_',' '));
   renderProduccion();
+  if(typeof renderPedidos==='function') renderPedidos();
+  if(typeof renderLabels==='function') renderLabels();
 }
 
-function verOrden(idx) {
+async function verOrden(idx) {
   const o=D.ordenes[idx]; if(!o) return;
   ordenActiva=o.id;
   const esRep=String(o.pedido_detalle_id||'').startsWith('REP_');
@@ -2444,6 +2449,7 @@ function verOrden(idx) {
     verPedido(ped.id);
     return;
   }
+  await asegurarConsumosRealesOrden(o.id, {silent:true});
   const res=resumenConsumoOrden(o.id);
   $('ord-tit').textContent='Orden '+o.id;
   $('ord-body').innerHTML=`
@@ -2457,21 +2463,26 @@ function verOrden(idx) {
       <span style="color:var(--text3)">Consumo real</span><span>${fmx(res.real||0)}</span>
       <span style="color:var(--text3)">Desviación</span><span style="color:${res.desv>0?'var(--accent2)':res.desv<0?'var(--success)':'var(--text)'}">${fmx(res.desv)}</span>
     </div>
+    <div class="alert alert-info" style="margin-top:10px">El <strong>consumo teórico</strong> sale de la receta del pedido. El <strong>consumo real</strong> es lo que realmente se usó en producción para comparar merma o sobrante.</div>
     <div class="sec-title" style="margin-top:10px">Consumo real vs teórico</div>
     <div style="display:grid;gap:8px">${res.rows.length?res.rows.map(r=>{
       const m=D.materiales.find(x=>x.id===r.material_id);
       return `<div style="border:1px solid var(--border);border-radius:12px;padding:10px">
         <div style="font-weight:600">${m?.nombre||r.material_id}</div>
         <div style="font-size:12px;color:var(--text3);margin:3px 0 8px">Teórico: ${fmx(r.cantidad_teorica)}${r.color?` · ${r.color}`:''}</div>
-        <input type="number" class="form-input" step="0.01" id="con-real-${r.id}" value="${r.cantidad_real||''}" placeholder="Consumo real">
+        <input type="number" class="form-input" step="0.01" id="con-real-${r.id}" value="${r.cantidad_real||''}" placeholder="Consumo real capturado">
       </div>`;
-    }).join(''):`<div class="alert alert-info">No hay receta asociada.</div>`}</div>`;
+    }).join(''):`<div class="alert alert-info">No hay receta asociada para generar consumo teórico.</div>`}</div>`;
   abrirModal('modal-orden');
 }
 async function guardarConsumosOrden(){
   const ordenId=ordenActiva; if(!ordenId) return;
   const rows=(D.consumos||[]).filter(c=>String(c.orden_id)===String(ordenId));
-  for(const r of rows){
+  if(!rows.length){
+    await asegurarConsumosRealesOrden(ordenId);
+  }
+  const rows2=(D.consumos||[]).filter(c=>String(c.orden_id)===String(ordenId));
+  for(const r of rows2){
     const v=Number(getV('con-real-'+r.id)||0);
     r.cantidad_real=v;
     r.estado=v>0?'capturado':'pendiente';
@@ -2479,7 +2490,7 @@ async function guardarConsumosOrden(){
   }
   toast('✓ Consumo real guardado');
   renderProduccion();
-  verOrden(D.ordenes.findIndex(x=>x.id===ordenId));
+  await verOrden(D.ordenes.findIndex(x=>x.id===ordenId));
 }
 // ═══════════════════════════════════════════════
 // COMPRAS
@@ -3103,6 +3114,86 @@ function resumenConsumoOrden(ordenId){
   const teorico=rows.reduce((s,r)=>s+Number(r.cantidad_teorica||0),0);
   const real=rows.reduce((s,r)=>s+Number(r.cantidad_real||0),0);
   return {rows, teorico, real, desv: real-teorico};
+}
+
+function recetaPedidoMateriales(detalleId){
+  return arr(D.recetas).filter(r=>String(r.pedido_id)===String(detalleId) && !String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:'));
+}
+async function asegurarRecetaDetalleDesdeProducto(detalleId){
+  const detalle = arr(D.ped_det).find(d=>String(d.id)===String(detalleId));
+  if(!detalle) return [];
+  let recetas = recetaPedidoMateriales(detalleId);
+  if(recetas.length) return recetas;
+  const plant = typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(detalle.producto_id) : [];
+  if(!plant.length) return [];
+  for(const base of plant){
+    const rr={
+      id:genId('REC', arr(D.recetas)),
+      pedido_id:detalleId,
+      material_id:base.material_id,
+      cantidad:Number(base.cantidad||0),
+      color:base.color||'',
+      notas:base.notas||base.color||''
+    };
+    D.recetas.push(rr);
+    await crear('recetas', rr);
+  }
+  return recetaPedidoMateriales(detalleId);
+}
+async function asegurarConsumosRealesOrden(ordenId, opts={}){
+  const orden = arr(D.ordenes).find(o=>String(o.id)===String(ordenId));
+  if(!orden) return [];
+  if(String(orden.pedido_detalle_id||'').startsWith('REP_')) return [];
+  const existentes = arr(D.consumos).filter(c=>String(c.orden_id)===String(ordenId));
+  if(existentes.length) return existentes;
+  let recetas = await asegurarRecetaDetalleDesdeProducto(orden.pedido_detalle_id);
+  if(!recetas.length) return [];
+  const creados=[];
+  for(const rec of recetas){
+    const row={
+      id:genId('CON', arr(D.consumos)),
+      orden_id:ordenId,
+      pedido_detalle_id:orden.pedido_detalle_id,
+      material_id:rec.material_id,
+      cantidad_teorica:Number(rec.cantidad||0),
+      cantidad_real:Number(rec.cantidad_real||0)||0,
+      color:rec.color||'',
+      estado:Number(rec.cantidad_real||0)>0?'capturado':'pendiente',
+      fecha:hoy(),
+      notas:rec.notas||''
+    };
+    D.consumos.push(row);
+    await crear('consumos', row);
+    creados.push(row);
+  }
+  if(creados.length && !opts.silent) toast('✓ Consumo teórico cargado desde la receta');
+  return creados;
+}
+async function sincronizarPedidoDesdeOrden(ordenId){
+  const orden = arr(D.ordenes).find(o=>String(o.id)===String(ordenId));
+  if(!orden || String(orden.pedido_detalle_id||'').startsWith('REP_')) return;
+  const det = arr(D.ped_det).find(d=>String(d.id)===String(orden.pedido_detalle_id));
+  if(!det) return;
+  const pedidoId = det.pedido_id;
+  const pedido = arr(D.pedidos).find(p=>String(p.id)===String(pedidoId));
+  if(!pedido) return;
+  const ordenesPedido = arr(D.ordenes).filter(o=>{
+    if(String(o.pedido_detalle_id||'').startsWith('REP_')) return false;
+    const d = arr(D.ped_det).find(dd=>String(dd.id)===String(o.pedido_detalle_id));
+    return d && String(d.pedido_id)===String(pedidoId);
+  });
+  if(!ordenesPedido.length) return;
+  const estados = ordenesPedido.map(o=>String(o.estado||'pendiente').toLowerCase());
+  let nuevo = pedido.estado || 'nuevo';
+  if(estados.every(e=>e==='entregado')) nuevo='entregado';
+  else if(estados.every(e=>e==='listo' || e==='entregado')) nuevo='listo';
+  else if(estados.every(e=>e==='pendiente')) nuevo='nuevo';
+  else if(estados.some(e=>e==='en_proceso' || e==='listo' || e==='entregado')) nuevo='en_produccion';
+  else nuevo='nuevo';
+  if(String(pedido.estado)!==String(nuevo)){
+    pedido.estado=nuevo;
+    await actualizar('pedidos',{id:pedidoId, estado:nuevo});
+  }
 }
 function renderReservasVisuales(){
   const statsEl=$('res-stats'), listEl=$('res-list');
