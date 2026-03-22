@@ -450,7 +450,7 @@ body.modal-open{overflow:hidden}
     <div class="form-group"><label class="form-label">Color / especificaciones</label><input type="text" class="form-input" id="p-color" placeholder="Ej: Azul marino"></div>
     <div class="form-group"><label class="form-label">Medidas especiales</label><input type="text" class="form-input" id="p-medidas" placeholder="Ej: 1.5m × 2m"></div>
     <div class="form-group"><label class="form-label">Precio total ($) *</label><input type="number" class="form-input" id="p-total" placeholder="0.00"></div>
-    <div class="form-group"><label class="form-label">Anticipo ($)</label><input type="number" class="form-input" id="p-anticipo" value="0"></div>
+    <div class="form-group"><label class="form-label" id="lbl-p-pago">Anticipo ($)</label><input type="number" class="form-input" id="p-anticipo" value="0"></div>
     <div class="form-group"><label class="form-label">Fecha de entrega</label><input type="date" class="form-input" id="p-fecha"></div>
     <div class="form-group"><label class="form-label">Notas</label><textarea class="form-input" id="p-notas" placeholder="Observaciones del pedido..."></textarea></div>
     <div id="p-mat-section" style="display:none">
@@ -1190,7 +1190,12 @@ window.registrarMovimiento = async function registrarMovimiento(mov){
 let recetaProdItems = [];
 let pedidoProduccionPendiente = null;
 
-window.descontarStockPedido = window.descontarStockPedido || async function(pedidoId){
+function netoMovPedido(pedidoId, refTipo, refId){
+  return arr(D.movimientos).filter(m=>String(m.origen||'')==='pedido' && String(m.origen_id||'')===String(pedidoId) && String(m.ref_tipo||'')===String(refTipo) && String(m.ref_id||'')===String(refId))
+    .reduce((s,m)=>s+Number(m.cantidad||0),0);
+}
+
+window.ajustarStockPedidoProduccion = window.ajustarStockPedidoProduccion || async function(pedidoId, targetEnProduccion=true, motivo='Ajuste de materiales por producción'){
   const det = detallePedido(pedidoId); if(!det) return;
   const prod = productoPedido(pedidoId);
   const cat = typeof categoriaProducto==='function' ? categoriaProducto(prod||{}) : (prod?.categoria||'fabricacion');
@@ -1200,20 +1205,58 @@ window.descontarStockPedido = window.descontarStockPedido || async function(pedi
     const mat = arr(D.materiales).find(m=>String(m.id)===String(r.material_id));
     if(!mat) continue;
     const qty = Number(r.cantidad||0);
-    mat.stock_actual = Math.max(0, Number(mat.stock_actual||0) - qty);
+    const actualNet = netoMovPedido(pedidoId,'material',mat.id);
+    const targetNet = targetEnProduccion ? (-qty) : 0;
+    const delta = Number((targetNet - actualNet).toFixed(6));
+    if(!delta) continue;
+    mat.stock_actual = Math.max(0, Number(mat.stock_actual||0) + delta);
     await actualizar('materiales', {id:mat.id, stock_actual:mat.stock_actual});
     await registrarMovimiento({
-      tipo_movimiento:'salida_pedido',
+      tipo_movimiento: delta<0 ? 'salida_pedido' : 'devolucion_pedido',
       origen:'pedido',
       origen_id:pedidoId,
       ref_tipo:'material',
       ref_id:mat.id,
-      cantidad:-qty,
+      cantidad:delta,
       costo_unitario:Number(mat.costo_promedio||mat.costo_unitario||mat.costo||0),
-      total:-qty*Number(mat.costo_promedio||mat.costo_unitario||mat.costo||0),
-      notas:'Consumo al iniciar producción'
+      total:delta*Number(mat.costo_promedio||mat.costo_unitario||mat.costo||0),
+      notas:motivo
     });
   }
+};
+window.descontarStockPedido = window.descontarStockPedido || async function(pedidoId){
+  return ajustarStockPedidoProduccion(pedidoId, true, 'Consumo al iniciar producción');
+};
+window.devolverStockPedido = window.devolverStockPedido || async function(pedidoId){
+  return ajustarStockPedidoProduccion(pedidoId, false, 'Devolución por regreso a pendiente');
+};
+
+window.ajustarSalidaProductoPedido = window.ajustarSalidaProductoPedido || async function(pedidoId, targetEntregado=true, motivo='Salida de producto terminado'){
+  const det = detallePedido(pedidoId); if(!det) return;
+  const prod = productoPedido(pedidoId); if(!prod) return;
+  const cat = typeof categoriaProducto==='function' ? categoriaProducto(prod||{}) : (prod?.categoria||'fabricacion');
+  if(cat!=='reventa') return;
+  const qty = Number(det.cantidad||0);
+  const actualNet = netoMovPedido(pedidoId,'producto',prod.id);
+  const targetNet = targetEntregado ? (-qty) : 0;
+  const delta = Number((targetNet - actualNet).toFixed(6));
+  if(!delta) return;
+  prod.stock_disponible = Math.max(0, Number(prod.stock_disponible||0) + delta);
+  await actualizar('productos', {id:prod.id, stock_disponible:prod.stock_disponible});
+  await registrarMovimiento({
+    tipo_movimiento: delta<0 ? 'salida_venta' : 'devolucion_venta',
+    origen:'pedido',
+    origen_id:pedidoId,
+    ref_tipo:'producto',
+    ref_id:prod.id,
+    cantidad:delta,
+    costo_unitario:Number(prod.costo_produccion||prod.costo_unitario||prod.costo||0),
+    total:delta*Number(prod.costo_produccion||prod.costo_unitario||prod.costo||0),
+    notas:motivo
+  });
+};
+window.registrarSalidaProductoPedido = window.registrarSalidaProductoPedido || async function(pedidoId){
+  return ajustarSalidaProductoPedido(pedidoId, true, 'Salida de producto por venta entregada');
 };
 
 window.consumirReservasPedido = window.consumirReservasPedido || async function(pedidoId, motivo='Reserva consumida'){
@@ -2420,7 +2463,20 @@ function setFiltroO(f,el){filtroO=f;document.querySelectorAll('#lista-view .chip
 
 async function moverOrden(idx,nuevoEst) {
   const o=D.ordenes[idx]; if(!o) return;
+  const estPrev=String(o.estado||'').toLowerCase();
+  const det=!String(o.pedido_detalle_id||'').startsWith('REP_') ? arr(D.ped_det).find(d=>String(d.id)===String(o.pedido_detalle_id)) : null;
+  const pedidoId=det?.pedido_id || '';
+  const prod=pedidoId ? productoPedido(pedidoId) : null;
   if(nuevoEst==='listo') await asegurarConsumosRealesOrden(o.id);
+  if(pedidoId && flujoPedido(arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{})==='fabricacion'){
+    if(estPrev==='pendiente' && nuevoEst==='en_proceso'){
+      await ajustarStockPedidoProduccion(pedidoId, true, 'Consumo al pasar a producción');
+      await consumirReservasPedido(pedidoId,'Material liberado a producción');
+    } else if((estPrev==='en_proceso' || estPrev==='listo') && nuevoEst==='pendiente'){
+      await devolverStockPedido(pedidoId);
+      if(det && prod) await rebuildPedidoReservas(pedidoId, det.id, prod);
+    }
+  }
   o.estado=nuevoEst;
   await actualizar('ordenes_produccion',{id:o.id,estado:nuevoEst});
   await sincronizarPedidoDesdeOrden(o.id);
@@ -3126,12 +3182,13 @@ async function asegurarRecetaDetalleDesdeProducto(detalleId){
   if(recetas.length) return recetas;
   const plant = typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(detalle.producto_id) : [];
   if(!plant.length) return [];
+  const mult = Math.max(1, Number((arr(D.ped_det).find(d=>String(d.id)===String(detalleId))||{}).cantidad||1));
   for(const base of plant){
     const rr={
       id:genId('REC', arr(D.recetas)),
       pedido_id:detalleId,
       material_id:base.material_id,
-      cantidad:Number(base.cantidad||0),
+      cantidad:Number(base.cantidad||0)*mult,
       color:base.color||'',
       notas:base.notas||base.color||''
     };
@@ -4597,7 +4654,7 @@ ${recetas.length?`<div class="sec">Materiales</div>${recetas.map(r=>{const m=D.m
 <div class="sec">Cuenta</div>
 <div class="tbox">
   <div class="trow"><span>Precio total</span><span>$${fmx(p.total)}</span></div>
-  <div class="trow"><span>Anticipo</span><span style="color:#166534">- $${fmx(p.anticipo)}</span></div>
+  <div class="trow"><span>${Number(saldo)<=0?'Pago recibido':'Anticipo'}</span><span style="color:#166534">- $${fmx(p.anticipo)}</span></div>
   ${abonado>0?`<div class="trow"><span>Abonos</span><span style="color:#166534">- $${fmx(abonado)}</span></div>`:''}
   <div class="tfin"><span>Saldo pendiente</span><span style="color:${saldo>0?'#e8a44a':'#166534'}">$${fmx(saldo)}</span></div>
 </div>
@@ -4958,6 +5015,8 @@ document.addEventListener('DOMContentLoaded', () => {
       badge.innerHTML=`<div class="alert alert-info">${cat==='reventa'?'🏷️ Reventa: descuenta producto terminado':'🧵 Fabricación: genera producción y materiales'}</div>`;
     }
     if(matSec) matSec.style.display = cat==='fabricacion' ? 'block' : 'none';
+    const lblPago=$('lbl-p-pago');
+    if(lblPago) lblPago.textContent = cat==='reventa' ? 'Pago recibido ($)' : 'Anticipo ($)';
     calcTotal();
     if(cat==='fabricacion'){ cargaRecetaProductoEnPedido(prod, true); }
   };
@@ -5030,7 +5089,7 @@ document.addEventListener('DOMContentLoaded', () => {
       $('p-total').dataset.auto='1';
       $('p-mat-list').innerHTML=''; window.matPedItems=[];
       $('p-mat-section').style.display='none';
-      $('p-badge').style.display='none'; $('p-badge').innerHTML='';
+      $('p-badge').style.display='none'; $('p-badge').innerHTML=''; const lblPago=$('lbl-p-pago'); if(lblPago) lblPago.textContent='Anticipo ($)';
     }
     $('p-cliente').innerHTML='<option value="">— Selecciona cliente —</option>'+arr(D.clientes).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
     $('p-producto').innerHTML='<option value="">— Selecciona producto —</option>'+arr(D.productos).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
@@ -5082,12 +5141,16 @@ document.addEventListener('DOMContentLoaded', () => {
       let det=pedidoId ? detallePedido(pedidoId) : null;
       const isNew=!pedidoId;
       if(isNew) pedidoId=genId('PED', arr(D.pedidos));
+      const pagoRecibido=Number(getV('p-anticipo')||0);
+      const estadoBase=(arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{}).estado || 'nuevo';
+      let estadoPedido=estadoBase;
+      if(cat==='reventa' && total>0 && pagoRecibido>=total) estadoPedido='entregado';
       const pedido={
         id:pedidoId,
         cliente_id:clienteId,
-        estado:(arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{}).estado || 'nuevo',
+        estado:estadoPedido,
         total:total,
-        anticipo:Number(getV('p-anticipo')||0),
+        anticipo:pagoRecibido,
         fecha_entrega:getV('p-fecha')||'',
         notas:getV('p-notas')||'',
         fecha_creacion:(arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{}).fecha_creacion || hoy(),
@@ -5154,6 +5217,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       await rebuildPedidoReservas(pedidoId, detalleId, prod);
+      if(cat==='reventa'){
+        if(pedido.estado==='entregado'){
+          await ajustarSalidaProductoPedido(pedidoId, true, 'Venta de contado / pedido liquidado');
+          await consumirReservasPedido(pedidoId,'Venta entregada de contado');
+        } else {
+          await ajustarSalidaProductoPedido(pedidoId, false, 'Reversión de salida por edición de pedido');
+        }
+      }
 
       const wasEdit = !!editIds.pedido;
       toast(wasEdit ? '✓ Pedido actualizado' : '✓ Pedido guardado');
