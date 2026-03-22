@@ -850,11 +850,17 @@ body.modal-open{overflow:hidden}
 <div class="overlay" id="sub-artesanos">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:90vh">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap">
       <div class="modal-title" style="margin:0">Artesanos</div>
-      <button class="btn btn-primary btn-sm" onclick="abrirModalArtesano()">+ Nuevo</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="abrirModalTarifaArtesano()">+ Tarifa</button>
+        <button class="btn btn-primary btn-sm" onclick="abrirModalArtesano()">+ Nuevo</button>
+      </div>
     </div>
     <div id="art-list"></div>
+    <div style="height:20px"></div>
+    <div class="sec-title">Tarifas de artesano</div>
+    <div id="art-tarifas-list"></div>
     <div style="height:20px"></div>
     <div class="sec-title">Pagos pendientes</div>
     <div id="pagos-art-list"></div>
@@ -868,15 +874,47 @@ body.modal-open{overflow:hidden}
     <div class="modal-title" id="tit-art">Nuevo artesano</div>
     <div class="form-group"><label class="form-label">Nombre *</label><input type="text" class="form-input" id="a-nombre"></div>
     <div class="form-group"><label class="form-label">Teléfono</label><input type="tel" class="form-input" id="a-tel"></div>
-    <div class="form-group"><label class="form-label">Esquema de pago</label>
-      <select class="form-input" id="a-esquema">
-        <option value="por_pieza">Por pieza</option>
-        <option value="por_tubo">Por tubo de hilo</option>
-      </select>
-    </div>
-    <div class="form-group"><label class="form-label">Tarifa ($)</label><input type="number" class="form-input" id="a-tarifa" placeholder="0.00"></div>
+    <div class="card-note" style="margin-bottom:12px">Las tarifas se capturan en el módulo independiente de tarifas.</div>
     <button class="btn btn-primary" id="btn-guardar-art" onclick="guardarArtesano()">Guardar artesano</button>
     <button class="btn btn-secondary" onclick="cerrar('modal-artesano')">Cancelar</button>
+  </div>
+</div>
+
+<!-- MODAL TARIFA ARTESANO -->
+<div class="overlay" id="modal-tarifa-artesano">
+  <div class="modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div class="modal-title" id="tit-tar-art">Nueva tarifa</div>
+    <div class="form-group"><label class="form-label">Artesano *</label><select class="form-input" id="ta-artesano"></select></div>
+    <div class="form-group"><label class="form-label">Nombre de tarifa *</label><input type="text" class="form-input" id="ta-nombre" placeholder="Ej: Tejido matrimonial"></div>
+    <div class="form-group"><label class="form-label">Tipo de trabajo</label>
+      <select class="form-input" id="ta-tipo">
+        <option value="tejido">Tejido</option>
+        <option value="brazos">Brazos</option>
+        <option value="remate">Remate</option>
+        <option value="reparacion">Reparación</option>
+        <option value="crochet">Crochet</option>
+        <option value="otro">Otro</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Esquema de pago</label>
+      <select class="form-input" id="ta-esquema">
+        <option value="por_pieza">Por pieza</option>
+        <option value="por_tubo">Por tubo de hilo</option>
+        <option value="fijo">Fijo</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Monto ($)</label><input type="number" class="form-input" id="ta-monto" value="0" step="0.01"></div>
+    <div class="form-group"><label class="form-label">Producto / referencia (opcional)</label><input type="text" class="form-input" id="ta-producto_ref" placeholder="Ej: Hamaca matrimonial"></div>
+    <div class="form-group"><label class="form-label">Predeterminada</label>
+      <select class="form-input" id="ta-pred">
+        <option value="true">Sí</option>
+        <option value="false" selected>No</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Notas</label><input type="text" class="form-input" id="ta-notas" placeholder="Opcional"></div>
+    <button class="btn btn-primary" id="btn-guardar-ta" onclick="guardarTarifaArtesano()">Guardar tarifa</button>
+    <button class="btn btn-secondary" onclick="cerrar('modal-tarifa-artesano')">Cancelar</button>
   </div>
 </div>
 
@@ -1018,7 +1056,11 @@ body.modal-open{overflow:hidden}
     <div id="ap-info" style="margin-bottom:12px"></div>
     <div class="form-group">
       <label class="form-label">Artesano *</label>
-      <select class="form-input" id="ap-artesano" onchange="recalcularPagoAsignacion()"></select>
+      <select class="form-input" id="ap-artesano" onchange="onCambioArtesanoAsignacion()"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Tarifa aplicada *</label>
+      <select class="form-input" id="ap-tarifa" onchange="recalcularPagoAsignacion()"></select>
     </div>
     <div class="form-group">
       <label class="form-label">Pago estimado ($)</label>
@@ -1045,7 +1087,7 @@ const CFG = {
   logo: localStorage.getItem('cfg_logo') || ''
 };
 const D = {
-  pedidos:[], clientes:[], productos:[], materiales:[], artesanos:[],
+  pedidos:[], clientes:[], productos:[], materiales:[], artesanos:[], tarifas_artesano:[],
   ordenes:[], gastos:[], ped_det:[], proveedores:[], compras:[],
   comp_det:[], pago_art:[], abonos:[], recetas:[], reparaciones:[], movimientos:[],
   reservas:[], consumos:[]
@@ -1249,20 +1291,48 @@ function cargaRecetaProductoEnPedido(prod, force=false){
   }
 }
 
-window.recalcularPagoAsignacion = function(){
+
+function tarifasArtesano(artId){
+  return arr(D.tarifas_artesano).filter(t=>String(t.artesano_id)===String(artId) && String(t.activa)!=='false');
+}
+function tarifaArtesanoById(id){
+  return arr(D.tarifas_artesano).find(t=>String(t.id)===String(id));
+}
+function etiquetaEsquemaTarifa(esq){
+  return esq==='por_tubo' ? 'Por tubo' : (esq==='fijo' ? 'Fijo' : 'Por pieza');
+}
+function tarifaPredeterminadaArtesano(artId){
+  const lista = tarifasArtesano(artId);
+  return lista.find(t=>String(t.predeterminada)==='true') || lista[0] || null;
+}
+function llenarSelectTarifasArtesano(selectId, artId, selectedId){
+  const el=$(selectId); if(!el) return;
+  const lista = tarifasArtesano(artId);
+  const opts = ['<option value="">— Selecciona tarifa —</option>'].concat(
+    lista.map(t=>`<option value="${t.id}" ${String(selectedId)===String(t.id)?'selected':''}>${t.nombre_tarifa||t.nombre||'Tarifa'} · ${etiquetaEsquemaTarifa(t.esquema_pago)} · $${fmx(t.monto||0)}</option>`)
+  );
+  el.innerHTML = opts.join('');
+}
+window.onCambioArtesanoAsignacion = function(){
   const artId=getV('ap-artesano');
+  const pred = tarifaPredeterminadaArtesano(artId);
+  llenarSelectTarifasArtesano('ap-tarifa', artId, pred?.id||'');
+  recalcularPagoAsignacion();
+};
+
+window.recalcularPagoAsignacion = function(){
+  const tarifaId=getV('ap-tarifa');
   const pedId=pedidoProduccionPendiente;
-  const art=arr(D.artesanos).find(a=>String(a.id)===String(artId));
+  const tarifa=tarifaArtesanoById(tarifaId);
   const det=detallePedido(pedId);
   const prod=productoPedido(pedId);
   let monto=0;
-  if(art){
-    if(String(art.esquema||'por_pieza')==='por_tubo'){
-      const tubos = Number(prod?.tubos_hilo||0) * Number(det?.cantidad||1);
-      monto = tubos * Number(art.tarifa||0);
-    } else {
-      monto = Number(det?.cantidad||1) * Number(art.tarifa||0);
-    }
+  if(tarifa){
+    const esquema=String(tarifa.esquema_pago||'por_pieza');
+    const baseTubos = Number(prod?.tubos_hilo||0) * Number(det?.cantidad||1);
+    if(esquema==='por_tubo') monto = baseTubos * Number(tarifa.monto||0);
+    else if(esquema==='fijo') monto = Number(tarifa.monto||0);
+    else monto = Number(det?.cantidad||1) * Number(tarifa.monto||0);
   }
   setV('ap-pago', round2(monto));
 };
@@ -1273,7 +1343,7 @@ window.abrirAsignacionProduccion = function(pedidoId){
   const cli=arr(D.clientes).find(x=>String(x.id)===String(p?.cliente_id));
   const det=detallePedido(pedidoId);
   const prod=productoPedido(pedidoId);
-  $('ap-artesano').innerHTML='<option value="">— Selecciona artesano —</option>'+arr(D.artesanos).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}">${a.nombre} · ${a.esquema==='por_tubo'?'Por tubo':'Por pieza'} · $${fmx(a.tarifa)}</option>`).join('');
+  $('ap-artesano').innerHTML='<option value="">— Selecciona artesano —</option>'+arr(D.artesanos).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}">${a.nombre}</option>`).join('');
   $('ap-info').innerHTML = `<div class="card" style="padding:10px 12px">
     <div style="font-size:13px;font-weight:700">${prod?.nombre||'Producto'}</div>
     <div style="font-size:12px;color:var(--text3);margin-top:2px">${cli?.nombre||'Cliente'} · Pedido ${pedidoId}</div>
@@ -1284,7 +1354,12 @@ window.abrirAsignacionProduccion = function(pedidoId){
     return d && String(d.pedido_id)===String(pedidoId);
   });
   setV('ap-artesano', ord?.artesano_id||'');
-  setV('ap-nota','');
+  setV('ap-nota', ord?.nota||'');
+  llenarSelectTarifasArtesano('ap-tarifa', ord?.artesano_id||'', ord?.tarifa_artesano_id||'');
+  if(!getV('ap-tarifa') && ord?.artesano_id) {
+    const pred = tarifaPredeterminadaArtesano(ord.artesano_id);
+    if(pred) setV('ap-tarifa', pred.id);
+  }
   recalcularPagoAsignacion();
   abrirModal('modal-asignacion-prod');
 };
@@ -1296,7 +1371,11 @@ window.confirmarInicioProduccion = async function(){
     const p=arr(D.pedidos).find(x=>String(x.id)===String(pedidoId)); 
     if(!p){ toast('No se encontró el pedido'); return; }
     const artId=getV('ap-artesano'); 
+    const tarifaId=getV('ap-tarifa');
     if(!artId){ toast('Selecciona un artesano'); return; }
+    if(!tarifaId){ toast('Selecciona una tarifa'); return; }
+    const tarifa = tarifaArtesanoById(tarifaId);
+    if(!tarifa){ toast('No se encontró la tarifa seleccionada'); return; }
     const faltantes=typeof validarStockPedido==='function' ? validarStockPedido(pedidoId,true) : [];
     if(faltantes.length){toast('⚠️ Sin disponibilidad: '+faltantes.join(', '));return;}
     const det=detallePedido(pedidoId);
@@ -1311,8 +1390,29 @@ window.confirmarInicioProduccion = async function(){
     p.estado='en_produccion';
     await actualizar('pedidos',{id:pedidoId,estado:'en_produccion'});
     if(ord){
-      Object.assign(ord,{artesano_id:artId,estado:'en_proceso',fecha_inicio:hoy(),nota:getV('ap-nota')||'', pago_estimado:Number(getV('ap-pago')||0)});
-      await actualizar('ordenes', {id:ord.id, artesano_id:artId, estado:'en_proceso', fecha_inicio:hoy()});
+      Object.assign(ord,{
+        artesano_id:artId,
+        tarifa_artesano_id:tarifaId,
+        tarifa_nombre:tarifa.nombre_tarifa||tarifa.nombre||'',
+        esquema_pago_aplicado:tarifa.esquema_pago||'por_pieza',
+        monto_tarifa_aplicado:Number(tarifa.monto||0),
+        estado:'en_proceso',
+        fecha_inicio:hoy(),
+        nota:getV('ap-nota')||'',
+        pago_estimado:Number(getV('ap-pago')||0)
+      });
+      await actualizar('ordenes', {
+        id:ord.id,
+        artesano_id:artId,
+        tarifa_artesano_id:tarifaId,
+        tarifa_nombre:tarifa.nombre_tarifa||tarifa.nombre||'',
+        esquema_pago_aplicado:tarifa.esquema_pago||'por_pieza',
+        monto_tarifa_aplicado:Number(tarifa.monto||0),
+        pago_estimado:Number(getV('ap-pago')||0),
+        nota:getV('ap-nota')||'',
+        estado:'en_proceso',
+        fecha_inicio:hoy()
+      });
     }
     cerrar('modal-asignacion-prod');
     cerrar('det-pedido');
@@ -1614,7 +1714,7 @@ async function probarConexionDiagnostica(){
   toast('⏳ Probando conexión y hojas...');
   const pairs = [
     ['pedidos','pedidos'],['clientes','clientes'],['productos','productos'],['materiales','materiales'],
-    ['artesanos','artesanos'],['ordenes','ordenes_produccion'],['gastos','gastos'],['ped_det','pedido_detalle'],
+    ['artesanos','artesanos'],['tarifas_artesano','tarifas_artesano'],['ordenes','ordenes_produccion'],['gastos','gastos'],['ped_det','pedido_detalle'],
     ['proveedores','proveedores'],['compras','compras'],['comp_det','compra_detalle'],['pago_art','pago_artesanos'],
     ['abonos','abonos_clientes'],['recetas','receta_pedido'],['reparaciones','reparaciones'],
     ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion']
@@ -1641,7 +1741,7 @@ async function probarConexionDiagnostica(){
 // Mapeo de nombres internos a nombres de hojas en Sheets
 const SHEET_MAP = {
   pedidos:'pedidos', clientes:'clientes', productos:'productos', materiales:'materiales',
-  artesanos:'artesanos', ordenes:'ordenes_produccion', gastos:'gastos',
+  artesanos:'artesanos', tarifas_artesano:'tarifas_artesano', ordenes:'ordenes_produccion', gastos:'gastos',
   ped_det:'pedido_detalle', proveedores:'proveedores', compras:'compras',
   comp_det:'compra_detalle', pago_art:'pago_artesanos', abonos:'abonos_clientes',
   recetas:'receta_pedido', reparaciones:'reparaciones', movimientos:'movimientos_inventario',
@@ -1704,6 +1804,7 @@ function normalizarDatosCargados(){
   D.movimientos=D.movimientos||[];
   D.reservas=D.reservas||[];
   D.consumos=D.consumos||[];
+  D.tarifas_artesano=D.tarifas_artesano||[];
 }
 
 
@@ -1737,7 +1838,7 @@ async function cargarTodo() {
   toast('⏳ Cargando datos...');
   const pairs = [
     ['pedidos','pedidos'],['clientes','clientes'],['productos','productos'],['materiales','materiales'],
-    ['artesanos','artesanos'],['ordenes','ordenes_produccion'],['gastos','gastos'],['ped_det','pedido_detalle'],
+    ['artesanos','artesanos'],['tarifas_artesano','tarifas_artesano'],['ordenes','ordenes_produccion'],['gastos','gastos'],['ped_det','pedido_detalle'],
     ['proveedores','proveedores'],['compras','compras'],['comp_det','compra_detalle'],['pago_art','pago_artesanos'],
     ['abonos','abonos_clientes'],['recetas','receta_pedido'],['reparaciones','reparaciones'],
     ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion']
@@ -3298,33 +3399,129 @@ function abrirModalArtesano(id) {
   editIds.art=id||null;
   $('tit-art').textContent=id?'Editar artesano':'Nuevo artesano';
   $('btn-guardar-art').textContent=id?'Guardar cambios':'Guardar artesano';
-  if(id){const a=D.artesanos.find(x=>x.id===id);if(!a)return;setV('a-nombre',a.nombre);setV('a-tel',a.telefono||'');setV('a-esquema',a.esquema||'por_pieza');setV('a-tarifa',a.tarifa||0);}
-  else clr('a-nombre','a-tel','a-tarifa');
+  if(id){const a=D.artesanos.find(x=>x.id===id);if(!a)return;setV('a-nombre',a.nombre);setV('a-tel',a.telefono||'');}
+  else clr('a-nombre','a-tel');
   abrirModal('modal-artesano');
 }
 async function guardarArtesano() {
   const nombre=getV('a-nombre');if(!nombre){toast('El nombre es requerido');return;}
   $('btn-guardar-art').disabled=true;
   const id=editIds.art||genId('ART',D.artesanos);
-  const a={id,nombre,telefono:getV('a-tel'),esquema:getV('a-esquema'),tarifa:Number(getV('a-tarifa')||0),activo:true};
+  const a={id,nombre,telefono:getV('a-tel'),activo:true};
   if(editIds.art){const idx=D.artesanos.findIndex(x=>x.id===id);if(idx>=0)Object.assign(D.artesanos[idx],a);await actualizar('artesanos',a);}
   else{D.artesanos.push(a);await crear('artesanos',a);}
   toast('✓ Artesano guardado');$('btn-guardar-art').disabled=false;editIds.art=null;
   cerrar('modal-artesano');renderArtesanos();
 }
+function abrirModalTarifaArtesano(id, artesanoId){
+  editIds.tar_art = id || null;
+  $('tit-tar-art').textContent=id?'Editar tarifa':'Nueva tarifa';
+  $('btn-guardar-ta').textContent=id?'Guardar cambios':'Guardar tarifa';
+  $('ta-artesano').innerHTML='<option value="">— Selecciona artesano —</option>'+arr(D.artesanos).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}">${a.nombre}</option>`).join('');
+  if(id){
+    const t=arr(D.tarifas_artesano).find(x=>String(x.id)===String(id)); if(!t) return;
+    setV('ta-artesano', t.artesano_id||'');
+    setV('ta-nombre', t.nombre_tarifa||t.nombre||'');
+    setV('ta-tipo', t.tipo_trabajo||'tejido');
+    setV('ta-esquema', t.esquema_pago||'por_pieza');
+    setV('ta-monto', t.monto||0);
+    setV('ta-producto_ref', t.producto_ref||'');
+    setV('ta-pred', String(t.predeterminada)==='true' ? 'true' : 'false');
+    setV('ta-notas', t.notas||'');
+  } else {
+    clr('ta-nombre','ta-producto_ref','ta-notas');
+    setV('ta-artesano', artesanoId||'');
+    setV('ta-tipo','tejido');
+    setV('ta-esquema','por_pieza');
+    setV('ta-monto','0');
+    setV('ta-pred','false');
+  }
+  abrirModal('modal-tarifa-artesano');
+}
+async function guardarTarifaArtesano(){
+  const artesano_id=getV('ta-artesano');
+  const nombre_tarifa=getV('ta-nombre');
+  if(!artesano_id || !nombre_tarifa){ toast('Artesano y nombre de tarifa son requeridos'); return; }
+  $('btn-guardar-ta').disabled=true;
+  const id = editIds.tar_art || genId('TAR', D.tarifas_artesano||[]);
+  const pred = String(getV('ta-pred'))==='true';
+  const t = {
+    id,
+    artesano_id,
+    nombre_tarifa,
+    tipo_trabajo:getV('ta-tipo')||'tejido',
+    esquema_pago:getV('ta-esquema')||'por_pieza',
+    monto:Number(getV('ta-monto')||0),
+    producto_ref:getV('ta-producto_ref')||'',
+    predeterminada:pred,
+    activa:true,
+    notas:getV('ta-notas')||''
+  };
+  if(pred){
+    arr(D.tarifas_artesano).filter(x=>String(x.artesano_id)===String(artesano_id) && String(x.id)!==String(id) && String(x.predeterminada)==='true')
+      .forEach(async x=>{
+        x.predeterminada=false;
+        await actualizar('tarifas_artesano',{id:x.id,predeterminada:false});
+      });
+  }
+  if(editIds.tar_art){
+    const idx=arr(D.tarifas_artesano).findIndex(x=>String(x.id)===String(id));
+    if(idx>=0) Object.assign(D.tarifas_artesano[idx], t);
+    await actualizar('tarifas_artesano', t);
+  }else{
+    D.tarifas_artesano.push(t);
+    await crear('tarifas_artesano', t);
+  }
+  $('btn-guardar-ta').disabled=false;
+  editIds.tar_art=null;
+  toast('✓ Tarifa guardada');
+  cerrar('modal-tarifa-artesano');
+  renderArtesanos();
+}
 function renderArtesanos() {
   const el=$('art-list');if(!el)return;
   const lista=D.artesanos.filter(a=>String(a.activo)!=='false');
-  if(!lista.length){el.innerHTML=empty('Sin artesanos');return;}
-  el.innerHTML='';
-  lista.forEach(a=>{
-    const div=document.createElement('div');div.className='card';
-    div.innerHTML=`<div class="card-row">
-      <div><div class="card-title">${a.nombre}</div><div class="card-sub">${a.esquema==='por_pieza'?'Por pieza':'Por tubo'} · $${fmx(a.tarifa)}</div></div>
-      <button class="btn btn-secondary btn-sm" onclick="abrirModalArtesano('${a.id}')">✏️</button>
-    </div>`;
-    el.appendChild(div);
-  });
+  if(!lista.length){el.innerHTML=empty('Sin artesanos');} else {
+    el.innerHTML='';
+    lista.forEach(a=>{
+      const tarifas = tarifasArtesano(a.id);
+      const pred = tarifaPredeterminadaArtesano(a.id);
+      const div=document.createElement('div');div.className='card';
+      div.innerHTML=`<div class="card-row">
+        <div>
+          <div class="card-title">${a.nombre}</div>
+          <div class="card-sub">${a.telefono||'Sin teléfono'} · ${tarifas.length} tarifa${tarifas.length===1?'':'s'}${pred ? ' · Base: '+(pred.nombre_tarifa||'Tarifa')+' $'+fmx(pred.monto||0) : ''}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          <button class="btn btn-secondary btn-sm" onclick="abrirModalTarifaArtesano('', '${a.id}')">💲 Tarifa</button>
+          <button class="btn btn-secondary btn-sm" onclick="abrirModalArtesano('${a.id}')">✏️</button>
+        </div>
+      </div>`;
+      el.appendChild(div);
+    });
+  }
+
+  const tarifasEl=$('art-tarifas-list');
+  if(tarifasEl){
+    const tarifas = arr(D.tarifas_artesano).filter(t=>String(t.activa)!=='false');
+    if(!tarifas.length){ tarifasEl.innerHTML=empty('Sin tarifas registradas'); }
+    else{
+      tarifasEl.innerHTML='';
+      tarifas.forEach(t=>{
+        const art=arr(D.artesanos).find(a=>String(a.id)===String(t.artesano_id));
+        const div=document.createElement('div');div.className='card';
+        div.innerHTML=`<div class="card-row">
+          <div>
+            <div class="card-title">${t.nombre_tarifa||'Tarifa'}</div>
+            <div class="card-sub">${art?.nombre||'Sin artesano'} · ${t.tipo_trabajo||'Trabajo'} · ${etiquetaEsquemaTarifa(t.esquema_pago)} · $${fmx(t.monto||0)}${String(t.predeterminada)==='true' ? ' · Predeterminada' : ''}</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="abrirModalTarifaArtesano('${t.id}')">✏️</button>
+        </div>`;
+        tarifasEl.appendChild(div);
+      });
+    }
+  }
+
   // Pagos pendientes
   const pagosEl=$('pagos-art-list');if(!pagosEl)return;
   const pagados=new Set(D.pago_art.map(p=>String(p.orden_id)));
@@ -3334,13 +3531,16 @@ function renderArtesanos() {
   pendientes.forEach(o=>{
     const art=D.artesanos.find(x=>x.id===o.artesano_id);if(!art)return;
     const esRep=String(o.pedido_detalle_id||'').startsWith('REP_');
-    let monto=Number(art.tarifa||0);
-    let desc='Tarifa: $'+fmx(art.tarifa);
-    if(!esRep){
+    let monto=Number(o.pago_estimado||0);
+    let desc=(o.tarifa_nombre||'Tarifa')+' · '+etiquetaEsquemaTarifa(o.esquema_pago_aplicado||'por_pieza')+' · $'+fmx(o.monto_tarifa_aplicado||0);
+    if(!monto){
       const det=D.ped_det.find(x=>x.id===o.pedido_detalle_id);
       const prod=det?D.productos.find(x=>x.id===det.producto_id):null;
-      if(art.esquema==='por_tubo'&&prod){const t=Number(prod.tubos_hilo||0)*Number(det?.cantidad||1);monto=t*Number(art.tarifa);desc=t+' tubos × $'+fmx(art.tarifa);}
-      else if(det){monto=Number(art.tarifa)*Number(det.cantidad||1);desc=det.cantidad+' pza × $'+fmx(art.tarifa);}
+      const esquema=String(o.esquema_pago_aplicado||'por_pieza');
+      const tarifa=Number(o.monto_tarifa_aplicado||0);
+      if(esquema==='por_tubo'&&prod){const t=Number(prod.tubos_hilo||0)*Number(det?.cantidad||1);monto=t*tarifa;desc=(o.tarifa_nombre||'Tarifa')+' · '+t+' tubos × $'+fmx(tarifa);}
+      else if(esquema==='fijo'){monto=tarifa;desc=(o.tarifa_nombre||'Tarifa')+' · fijo $'+fmx(tarifa);}
+      else if(det){monto=tarifa*Number(det.cantidad||1);desc=(o.tarifa_nombre||'Tarifa')+' · '+det.cantidad+' pza × $'+fmx(tarifa);}
     }
     const div=document.createElement('div');div.className='card';
     div.innerHTML=`<div class="card-row">
@@ -3350,7 +3550,7 @@ function renderArtesanos() {
         <button class="btn btn-success btn-sm" style="margin-top:4px" onclick="pagarArtesano('${o.id}','${art.id}',${monto})">✓ Pagar</button>
       </div>
     </div>`;
-    el.appendChild(div);
+    pagosEl.appendChild(div);
   });
 }
 async function pagarArtesano(ordenId,artId,monto) {
@@ -4988,12 +5188,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let totalLabor = 0;
     artIds.forEach(i=>{
       const artId = document.getElementById('pra-art-'+i)?.value || '';
+      const tarifaId = document.getElementById('pra-tarifa-'+i)?.value || '';
       const factor = Number(document.getElementById('pra-factor-'+i)?.value || 0);
-      if(!artId || factor<=0) return;
-      const art = (D.artesanos||[]).find(a=>String(a.id)===String(artId)) || {};
-      const tarifa = Number(art.tarifa||0);
-      const esquema = String(art.esquema||'por_pieza');
+      if(!artId || !tarifaId || factor<=0) return;
+      const tarifaObj = tarifaArtesanoById(tarifaId) || {};
+      const tarifa = Number(tarifaObj.monto||0);
+      const esquema = String(tarifaObj.esquema_pago||'por_pieza');
       if(esquema==='por_tubo') totalLabor += tarifa * baseQty * factor;
+      else if(esquema==='fijo') totalLabor += tarifa * factor;
       else totalLabor += tarifa * factor;
     });
     const total = Math.round((totalMat + totalLabor)*100)/100;
@@ -5004,26 +5206,39 @@ document.addEventListener('DOMContentLoaded', () => {
     return total;
   };
 
-  window.addArtProducto = function(artId='', factor=1, nota=''){
+  window.addArtProducto = function(artId='', tarifaId='', factor=1, nota=''){
     const host = document.getElementById('pr-art-list');
     if(!host) return;
     window.laborProdItems = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
     const idn = window.laborProdItems.length ? Math.max(...window.laborProdItems)+1 : 0;
     window.laborProdItems.push(idn);
+    const tarifas = artId ? tarifasArtesano(artId) : [];
+    const pred = tarifaId ? tarifaArtesanoById(tarifaId) : tarifaPredeterminadaArtesano(artId);
+    const selTarifa = tarifaId || pred?.id || '';
     const row = document.createElement('div');
     row.id = 'pra-'+idn;
     row.style.cssText = 'background:var(--bg3);border-radius:12px;padding:10px;margin-bottom:8px';
     row.innerHTML = `
       <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;margin-bottom:6px">
-        <select class="form-input" id="pra-art-${idn}">
+        <select class="form-input" id="pra-art-${idn}" onchange="llenarSelectTarifasArtesano('pra-tarifa-${idn}', this.value, ''); calcCostoEstimadoProducto()">
           <option value="">— Artesano —</option>
-          ${(D.artesanos||[]).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(artId)===String(a.id)?'selected':''}>${a.nombre} · ${a.esquema==='por_tubo'?'Por tubo':'Por pieza'} · $${typeof fmx==='function'?fmx(a.tarifa):a.tarifa}</option>`).join('')}
+          ${(D.artesanos||[]).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(artId)===String(a.id)?'selected':''}>${a.nombre}</option>`).join('')}
         </select>
         <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('pra-${idn}').remove(); laborProdItems=laborProdItems.filter(x=>x!==${idn}); calcCostoEstimadoProducto(); return false;">×</button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div><label class="form-label" style="margin-bottom:4px">Factor de participación</label><input type="number" min="0" step="0.1" class="form-input" id="pra-factor-${idn}" value="${Number(factor||0)}"></div>
-        <div><label class="form-label" style="margin-bottom:4px">Nota</label><input type="text" class="form-input" id="pra-nota-${idn}" value="${nota||''}" placeholder="Opcional"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div>
+          <label class="form-label" style="margin-bottom:4px">Tarifa</label>
+          <select class="form-input" id="pra-tarifa-${idn}" onchange="calcCostoEstimadoProducto()">
+            <option value="">— Tarifa —</option>
+            ${tarifas.map(t=>`<option value="${t.id}" ${String(selTarifa)===String(t.id)?'selected':''}>${t.nombre_tarifa||'Tarifa'} · ${etiquetaEsquemaTarifa(t.esquema_pago)} · $${typeof fmx==='function'?fmx(t.monto):t.monto}</option>`).join('')}
+          </select>
+        </div>
+        <div><label class="form-label" style="margin-bottom:4px">Factor de participación</label><input type="number" min="0" step="0.1" class="form-input" id="pra-factor-${idn}" value="${Number(factor||0)}" oninput="calcCostoEstimadoProducto()"></div>
+      </div>
+      <div>
+        <label class="form-label" style="margin-bottom:4px">Nota</label>
+        <input type="text" class="form-input" id="pra-nota-${idn}" value="${nota||''}" placeholder="Opcional">
       </div>`;
     host.appendChild(row);
     calcCostoEstimadoProducto();
@@ -5049,7 +5264,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if(matRows.length) matRows.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||''));
       else addMatProducto();
       const labRows = laborRowsProducto(id);
-      if(labRows.length) labRows.forEach(r=>addArtProducto(String(r.material_id||'').replace(/^ART:/,''), r.cantidad||1, r.color||''));
+      if(labRows.length) labRows.forEach(r=>addArtProducto(String(r.material_id||'').replace(/^ART:/,''), r.tarifa_artesano_id||'', r.cantidad||1, r.color||''));
       else addArtProducto();
       setTimeout(()=>calcCostoEstimadoProducto(), 30);
     } else {
@@ -5131,12 +5346,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const laborRows = (window.laborProdItems||[]).map(i=>({
         artesano_id:document.getElementById('pra-art-'+i)?.value || '',
+        tarifa_artesano_id:document.getElementById('pra-tarifa-'+i)?.value || '',
         factor:Number(document.getElementById('pra-factor-'+i)?.value || 0),
         nota:document.getElementById('pra-nota-'+i)?.value || ''
-      })).filter(x=>x.artesano_id && x.factor>0);
+      })).filter(x=>x.artesano_id && x.tarifa_artesano_id && x.factor>0);
 
       for(const row of laborRows){
-        const rr={id:genId('REC', D.recetas||[]), pedido_id:labId, material_id:'ART:'+row.artesano_id, cantidad:row.factor, color:row.nota};
+        const tarifa = tarifaArtesanoById(row.tarifa_artesano_id) || {};
+        const rr={
+          id:genId('REC', D.recetas||[]),
+          pedido_id:labId,
+          material_id:'ART:'+row.artesano_id,
+          cantidad:row.factor,
+          color:row.nota,
+          tarifa_artesano_id:row.tarifa_artesano_id,
+          tarifa_nombre:tarifa.nombre_tarifa||tarifa.nombre||'',
+          esquema_pago:tarifa.esquema_pago||'por_pieza',
+          monto_tarifa:Number(tarifa.monto||0)
+        };
         D.recetas.push(rr); await crear('recetas', rr);
       }
 
