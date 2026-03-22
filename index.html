@@ -56,13 +56,6 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 /* TOAST */
 #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(30,24,60,.92);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;opacity:0;transition:all .25s;z-index:1000;pointer-events:none;white-space:nowrap;max-width:90vw;text-align:center}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-#loading-overlay{position:fixed;inset:0;background:rgba(17,24,39,.18);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;z-index:1200;padding:20px}
-#loading-overlay.show{display:flex}
-.loading-card{background:#fff;border:1px solid var(--border);box-shadow:var(--shadow);border-radius:18px;padding:18px 20px;min-width:220px;max-width:86vw;text-align:center}
-.loading-spinner{width:30px;height:30px;border-radius:50%;border:3px solid rgba(124,106,247,.18);border-top-color:var(--accent);margin:0 auto 10px;animation:spin 1s linear infinite}
-.loading-text{font-size:14px;font-weight:700;color:var(--text)}
-.loading-sub{font-size:12px;color:var(--text3);margin-top:4px}
-@keyframes spin{to{transform:rotate(360deg)}}
 
 /* CARDS */
 .card{background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px}
@@ -234,13 +227,6 @@ body.modal-open{overflow:hidden}
 </div>
 
 <div id="toast"></div>
-<div id="loading-overlay" aria-live="polite" aria-busy="true">
-  <div class="loading-card">
-    <div class="loading-spinner"></div>
-    <div class="loading-text" id="loading-text">Procesando...</div>
-    <div class="loading-sub">Espera un momento</div>
-  </div>
-</div>
 <div class="app">
 
 <!-- HEADER -->
@@ -454,27 +440,19 @@ body.modal-open{overflow:hidden}
     <div class="form-group">
       <label class="form-label">Producto *</label>
       <select class="form-input" id="p-producto" onchange="onProdChange()"></select>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
-        <button class="btn btn-secondary btn-sm" type="button" onclick="crearProductoRapidoDesdePedido()">+ Nuevo producto</button>
-        <div style="font-size:11px;color:var(--text3)">El producto guarda la receta maestra. El pedido solo copia esa receta y puedes ajustarla para este encargo.</div>
-      </div>
     </div>
     <div id="p-badge" style="display:none;margin-bottom:10px"></div>
     <div class="form-group"><label class="form-label">Cantidad</label><input type="number" class="form-input" id="p-cant" value="1" min="1" oninput="calcTotal()"></div>
     <div class="form-group"><label class="form-label">Color / especificaciones</label><input type="text" class="form-input" id="p-color" placeholder="Ej: Azul marino"></div>
     <div class="form-group"><label class="form-label">Medidas especiales</label><input type="text" class="form-input" id="p-medidas" placeholder="Ej: 1.5m × 2m"></div>
     <div class="form-group"><label class="form-label">Precio total ($) *</label><input type="number" class="form-input" id="p-total" placeholder="0.00"></div>
-    <div class="form-group"><label class="form-label" id="lbl-p-pago">Anticipo ($)</label><input type="number" class="form-input" id="p-anticipo" value="0"></div>
+    <div class="form-group"><label class="form-label">Anticipo ($)</label><input type="number" class="form-input" id="p-anticipo" value="0"></div>
     <div class="form-group"><label class="form-label">Fecha de entrega</label><input type="date" class="form-input" id="p-fecha"></div>
     <div class="form-group"><label class="form-label">Notas</label><textarea class="form-input" id="p-notas" placeholder="Observaciones del pedido..."></textarea></div>
     <div id="p-mat-section" style="display:none">
-      <div class="sec-title">Receta de este encargo</div>
-      <div class="alert alert-info" style="margin-bottom:8px;font-size:12px">Esta receta es una copia editable de la receta maestra del producto. Cambiarla aquí no modifica el catálogo.</div>
+      <div class="sec-title">Materiales para producción</div>
       <div id="p-mat-list"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="addMatPedido()">+ Agregar material</button>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="recargarRecetaMaestraPedido()">↺ Cargar receta maestra</button>
-      </div>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="addMatPedido()">+ Agregar material</button>
     </div>
     <div style="height:14px"></div>
     <button class="btn btn-primary" id="btn-guardar-pedido" onclick="guardarPedido()">Guardar pedido</button>
@@ -489,7 +467,6 @@ body.modal-open{overflow:hidden}
     <div class="modal-title" id="det-ped-tit">Pedido</div>
     <div id="det-ped-body"></div>
     <div style="height:12px"></div>
-    <button class="btn btn-secondary" id="btn-estado-ped-back" onclick="regresarEstadoPed()" style="display:none">← Regresar</button>
     <button class="btn btn-primary" id="btn-estado-ped" onclick="cambiarEstadoPed()">Cambiar estado</button>
     <button class="btn btn-secondary" onclick="imprimirPedido(pedActivo)">🖨 Imprimir nota</button>
     <button class="btn btn-secondary" onclick="editarPedido(pedActivo)">✏️ Editar</button>
@@ -754,14 +731,14 @@ body.modal-open{overflow:hidden}
       <input type="hidden" id="pr-material">
       <input type="hidden" id="pr-tubos" value="0">
       <div class="form-group"><label class="form-label">Días de producción</label><input type="number" class="form-input" id="pr-dias" value="7" min="1"></div>
-      <div class="sec-title">Receta maestra del producto</div>
+      <div class="sec-title">Receta base del producto</div>
       <div id="pr-receta-list"></div>
       <button type="button" class="btn btn-secondary btn-sm" id="btn-add-pr-receta" onclick="addMatProducto()">+ Agregar material</button>
-      <div class="sec-title" style="margin-top:14px">Plantilla de mano de obra del producto</div>
+      <div class="sec-title" style="margin-top:14px">Mano de obra estimada</div>
       <div id="pr-art-list"></div>
-      <button type="button" class="btn btn-secondary btn-sm" id="btn-add-pr-art" onclick="addArtProducto()">+ Agregar trabajo</button>
+      <button type="button" class="btn btn-secondary btn-sm" id="btn-add-pr-art" onclick="addArtProducto()">+ Agregar artesano</button>
       <div class="alert alert-info" style="margin-top:10px;font-size:12px">
-        Aquí defines la plantilla del proceso: tipo de trabajo, tarifa referencial y, si quieres, un artesano sugerido. El artesano real se asigna después en la orden de producción.
+        Puedes agregar dos o más artesanos. Usa el factor de participación para repartir trabajo; por ejemplo 0.5 si ese artesano realiza media pieza o media carga.
       </div>
     </div>
     <div class="form-group"><label class="form-label">Precio de venta ($) *</label><input type="number" class="form-input" id="pr-precio" placeholder="0.00"></div>
@@ -780,8 +757,6 @@ body.modal-open{overflow:hidden}
       <div class="modal-title" style="margin:0">Inventario</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
         <button class="btn btn-secondary btn-sm" onclick="abrirSub('sub-movimientos')">📒 Movimientos</button>
-        <button class="btn btn-secondary btn-sm" onclick="cuadrarInventario()">🧮 Cuadrar</button>
-        <button class="btn btn-secondary btn-sm" onclick="abrirModalProduccionStock()">🏭 Producir stock</button>
         <button class="btn btn-secondary btn-sm" onclick="abrirModalMaterial()">+ Definir material</button>
       </div>
     </div>
@@ -810,10 +785,6 @@ body.modal-open{overflow:hidden}
     <div class="form-group" style="margin-bottom:10px">
       <label class="form-label">Kardex por material o producto</label>
       <select class="form-input" id="mov-kardex-select" onchange="renderMovimientos()"></select>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:-2px 0 10px">
-      <button class="btn btn-secondary btn-sm" onclick="cuadrarInventario(true)">🧮 Cuadrar este kardex</button>
-      <button class="btn btn-secondary btn-sm" onclick="cuadrarInventario()">🧮 Cuadrar todo</button>
     </div>
     <div id="mov-kardex" style="margin-bottom:12px"></div>
     <div id="mov-list"></div>
@@ -851,20 +822,6 @@ body.modal-open{overflow:hidden}
   </div>
 </div>
 
-<!-- MODAL PRODUCCIÓN STOCK -->
-<div class="overlay" id="modal-produccion-stock">
-  <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
-    <div class="modal-title">Producción para stock interno</div>
-    <div class="alert alert-info" style="margin-bottom:10px;font-size:12px">Este flujo crea una orden interna sin que tengas que dar de alta un cliente manualmente. El sistema usará un cliente técnico de stock interno.</div>
-    <div class="form-group"><label class="form-label">Producto de fabricación *</label><select class="form-input" id="ps-producto"></select></div>
-    <div class="form-group"><label class="form-label">Cantidad *</label><input type="number" class="form-input" id="ps-cantidad" min="1" step="1" value="1"></div>
-    <div class="form-group"><label class="form-label">Nota interna</label><input type="text" class="form-input" id="ps-nota" placeholder="Ej: reposición de stock"></div>
-    <button class="btn btn-primary" id="btn-crear-ps" onclick="guardarProduccionStock()">Crear orden interna</button>
-    <button class="btn btn-secondary" onclick="cerrar('modal-produccion-stock')">Cancelar</button>
-  </div>
-</div>
-
 <!-- MODAL MATERIAL -->
 <div class="overlay" id="modal-material">
   <div class="modal">
@@ -893,17 +850,11 @@ body.modal-open{overflow:hidden}
 <div class="overlay" id="sub-artesanos">
   <div class="modal" style="border-radius:20px 20px 0 0;max-height:90vh">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div class="modal-title" style="margin:0">Artesanos</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-secondary btn-sm" onclick="abrirModalTarifaArtesano()">+ Tarifa</button>
-        <button class="btn btn-primary btn-sm" onclick="abrirModalArtesano()">+ Nuevo</button>
-      </div>
+      <button class="btn btn-primary btn-sm" onclick="abrirModalArtesano()">+ Nuevo</button>
     </div>
     <div id="art-list"></div>
-    <div style="height:20px"></div>
-    <div class="sec-title">Tarifas de artesano</div>
-    <div id="art-tarifas-list"></div>
     <div style="height:20px"></div>
     <div class="sec-title">Pagos pendientes</div>
     <div id="pagos-art-list"></div>
@@ -917,47 +868,15 @@ body.modal-open{overflow:hidden}
     <div class="modal-title" id="tit-art">Nuevo artesano</div>
     <div class="form-group"><label class="form-label">Nombre *</label><input type="text" class="form-input" id="a-nombre"></div>
     <div class="form-group"><label class="form-label">Teléfono</label><input type="tel" class="form-input" id="a-tel"></div>
-    <div class="card-note" style="margin-bottom:12px">Las tarifas se capturan en el módulo independiente de tarifas.</div>
-    <button class="btn btn-primary" id="btn-guardar-art" onclick="guardarArtesano()">Guardar artesano</button>
-    <button class="btn btn-secondary" onclick="cerrar('modal-artesano')">Cancelar</button>
-  </div>
-</div>
-
-<!-- MODAL TARIFA ARTESANO -->
-<div class="overlay" id="modal-tarifa-artesano">
-  <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
-    <div class="modal-title" id="tit-tar-art">Nueva tarifa</div>
-    <div class="form-group"><label class="form-label">Artesano *</label><select class="form-input" id="ta-artesano"></select></div>
-    <div class="form-group"><label class="form-label">Nombre de tarifa *</label><input type="text" class="form-input" id="ta-nombre" placeholder="Ej: Tejido matrimonial"></div>
-    <div class="form-group"><label class="form-label">Tipo de trabajo</label>
-      <select class="form-input" id="ta-tipo">
-        <option value="tejido">Tejido</option>
-        <option value="brazos">Brazos</option>
-        <option value="remate">Remate</option>
-        <option value="reparacion">Reparación</option>
-        <option value="crochet">Crochet</option>
-        <option value="otro">Otro</option>
-      </select>
-    </div>
     <div class="form-group"><label class="form-label">Esquema de pago</label>
-      <select class="form-input" id="ta-esquema">
+      <select class="form-input" id="a-esquema">
         <option value="por_pieza">Por pieza</option>
         <option value="por_tubo">Por tubo de hilo</option>
-        <option value="fijo">Fijo</option>
       </select>
     </div>
-    <div class="form-group"><label class="form-label">Monto ($)</label><input type="number" class="form-input" id="ta-monto" value="0" step="0.01"></div>
-    <div class="form-group"><label class="form-label">Producto / referencia (opcional)</label><input type="text" class="form-input" id="ta-producto_ref" placeholder="Ej: Hamaca matrimonial"></div>
-    <div class="form-group"><label class="form-label">Predeterminada</label>
-      <select class="form-input" id="ta-pred">
-        <option value="true">Sí</option>
-        <option value="false" selected>No</option>
-      </select>
-    </div>
-    <div class="form-group"><label class="form-label">Notas</label><input type="text" class="form-input" id="ta-notas" placeholder="Opcional"></div>
-    <button class="btn btn-primary" id="btn-guardar-ta" onclick="guardarTarifaArtesano()">Guardar tarifa</button>
-    <button class="btn btn-secondary" onclick="cerrar('modal-tarifa-artesano')">Cancelar</button>
+    <div class="form-group"><label class="form-label">Tarifa ($)</label><input type="number" class="form-input" id="a-tarifa" placeholder="0.00"></div>
+    <button class="btn btn-primary" id="btn-guardar-art" onclick="guardarArtesano()">Guardar artesano</button>
+    <button class="btn btn-secondary" onclick="cerrar('modal-artesano')">Cancelar</button>
   </div>
 </div>
 
@@ -1086,7 +1005,7 @@ body.modal-open{overflow:hidden}
     <div class="modal-title" id="ord-tit">Orden de producción</div>
     <div id="ord-body"></div>
     <div style="height:12px"></div>
-    <button class="btn btn-primary" onclick="guardarConsumosOrden()">💾 Guardar consumo real usado</button>
+    <button class="btn btn-primary" onclick="guardarConsumosOrden()">💾 Guardar consumo real</button>
     <button class="btn btn-secondary" onclick="cerrar('modal-orden')">Cerrar</button>
   </div>
 </div>
@@ -1097,11 +1016,16 @@ body.modal-open{overflow:hidden}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
     <div class="modal-title">Iniciar producción</div>
     <div id="ap-info" style="margin-bottom:12px"></div>
-    <div class="card-note" style="margin:0 0 10px">Puedes asignar uno o varios artesanos a la misma orden. La orden conserva un solo estado, pero cada asignación guarda su tarifa, tipo de trabajo y pago estimado.</div>
-    <div id="ap-multi-list"></div>
-    <button class="btn btn-secondary" type="button" onclick="addAsignacionProduccionRow()">+ Agregar artesano</button>
-    <div class="form-group" style="margin-top:10px">
-      <label class="form-label">Nota general</label>
+    <div class="form-group">
+      <label class="form-label">Artesano *</label>
+      <select class="form-input" id="ap-artesano" onchange="recalcularPagoAsignacion()"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Pago estimado ($)</label>
+      <input type="number" class="form-input" id="ap-pago" readonly>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nota</label>
       <input type="text" class="form-input" id="ap-nota" placeholder="Opcional">
     </div>
     <button class="btn btn-primary" id="btn-confirmar-produccion" onclick="confirmarInicioProduccion()">Asignar y pasar a producción</button>
@@ -1121,10 +1045,10 @@ const CFG = {
   logo: localStorage.getItem('cfg_logo') || ''
 };
 const D = {
-  pedidos:[], clientes:[], productos:[], materiales:[], artesanos:[], tarifas_artesano:[],
+  pedidos:[], clientes:[], productos:[], materiales:[], artesanos:[],
   ordenes:[], gastos:[], ped_det:[], proveedores:[], compras:[],
   comp_det:[], pago_art:[], abonos:[], recetas:[], reparaciones:[], movimientos:[],
-  reservas:[], consumos:[], ord_art:[]
+  reservas:[], consumos:[]
 };
 let SC = 'inicio';
 let filtroP = 'todos', filtroO = 'todos', filtroR = 'todos', filtroC = 'todos', filtroProd = 'todos';
@@ -1216,82 +1140,30 @@ window.registrarMovimiento = async function registrarMovimiento(mov){
 let recetaProdItems = [];
 let pedidoProduccionPendiente = null;
 
-function netoMovPedido(pedidoId, refTipo, refId){
-  return arr(D.movimientos).filter(m=>String(m.origen||'')==='pedido' && String(m.origen_id||'')===String(pedidoId) && String(m.ref_tipo||'')===String(refTipo) && String(m.ref_id||'')===String(refId))
-    .reduce((s,m)=>s+Number(m.cantidad||0),0);
-}
-
-window.ajustarStockPedidoProduccion = window.ajustarStockPedidoProduccion || async function(pedidoId, targetEnProduccion=true, motivo='Ajuste de materiales por producción'){
-  const det = detallePedido(pedidoId); if(!det) return [];
+window.descontarStockPedido = window.descontarStockPedido || async function(pedidoId){
+  const det = detallePedido(pedidoId); if(!det) return;
   const prod = productoPedido(pedidoId);
   const cat = typeof categoriaProducto==='function' ? categoriaProducto(prod||{}) : (prod?.categoria||'fabricacion');
-  if(cat==='reventa') return [];
-  let recs = recetaPedidoMaterialesAplicada(det.id);
-  if(!recs.length && typeof asegurarRecetaDetalleDesdeProducto==='function'){
-    await asegurarRecetaDetalleDesdeProducto(det.id);
-    recs = recetaPedidoMaterialesAplicada(det.id);
-  }
-  const movimientos=[];
+  if(cat==='reventa') return;
+  const recs = arr(D.recetas).filter(r=>String(r.pedido_id)===String(det.id));
   for(const r of recs){
     const mat = arr(D.materiales).find(m=>String(m.id)===String(r.material_id));
     if(!mat) continue;
-    const qty = Number((r.cantidad_aplicada ?? r.cantidad) || 0);
-    if(!(qty>0)) continue;
-    const actualNet = netoMovPedido(pedidoId,'material',mat.id);
-    const targetNet = targetEnProduccion ? (-qty) : 0;
-    const delta = Number((targetNet - actualNet).toFixed(6));
-    if(!delta) continue;
-    const nuevoStock = Number((Number(mat.stock_actual||0) + delta).toFixed(6));
-    mat.stock_actual = Math.max(0, nuevoStock);
+    const qty = Number(r.cantidad||0);
+    mat.stock_actual = Math.max(0, Number(mat.stock_actual||0) - qty);
     await actualizar('materiales', {id:mat.id, stock_actual:mat.stock_actual});
-    const mov = await registrarMovimiento({
-      tipo_movimiento: delta<0 ? 'salida_pedido' : 'devolucion_pedido',
+    await registrarMovimiento({
+      tipo_movimiento:'salida_pedido',
       origen:'pedido',
       origen_id:pedidoId,
       ref_tipo:'material',
       ref_id:mat.id,
-      cantidad:delta,
+      cantidad:-qty,
       costo_unitario:Number(mat.costo_promedio||mat.costo_unitario||mat.costo||0),
-      total:delta*Number(mat.costo_promedio||mat.costo_unitario||mat.costo||0),
-      notas:motivo
+      total:-qty*Number(mat.costo_promedio||mat.costo_unitario||mat.costo||0),
+      notas:'Consumo al iniciar producción'
     });
-    movimientos.push(mov);
   }
-  return movimientos;
-};
-window.descontarStockPedido = window.descontarStockPedido || async function(pedidoId){
-  return ajustarStockPedidoProduccion(pedidoId, true, 'Consumo al iniciar producción');
-};
-window.devolverStockPedido = window.devolverStockPedido || async function(pedidoId){
-  return ajustarStockPedidoProduccion(pedidoId, false, 'Devolución por regreso a pendiente');
-};
-
-window.ajustarSalidaProductoPedido = window.ajustarSalidaProductoPedido || async function(pedidoId, targetEntregado=true, motivo='Salida de producto terminado'){
-  const det = detallePedido(pedidoId); if(!det) return;
-  const prod = productoPedido(pedidoId); if(!prod) return;
-  const cat = typeof categoriaProducto==='function' ? categoriaProducto(prod||{}) : (prod?.categoria||'fabricacion');
-  if(cat!=='reventa') return;
-  const qty = Number(det.cantidad||0);
-  const actualNet = netoMovPedido(pedidoId,'producto',prod.id);
-  const targetNet = targetEntregado ? (-qty) : 0;
-  const delta = Number((targetNet - actualNet).toFixed(6));
-  if(!delta) return;
-  prod.stock_disponible = Math.max(0, Number(prod.stock_disponible||0) + delta);
-  await actualizar('productos', {id:prod.id, stock_disponible:prod.stock_disponible});
-  await registrarMovimiento({
-    tipo_movimiento: delta<0 ? 'salida_venta' : 'devolucion_venta',
-    origen:'pedido',
-    origen_id:pedidoId,
-    ref_tipo:'producto',
-    ref_id:prod.id,
-    cantidad:delta,
-    costo_unitario:Number(prod.costo_produccion||prod.costo_unitario||prod.costo||0),
-    total:delta*Number(prod.costo_produccion||prod.costo_unitario||prod.costo||0),
-    notas:motivo
-  });
-};
-window.registrarSalidaProductoPedido = window.registrarSalidaProductoPedido || async function(pedidoId){
-  return ajustarSalidaProductoPedido(pedidoId, true, 'Salida de producto por venta entregada');
 };
 
 window.consumirReservasPedido = window.consumirReservasPedido || async function(pedidoId, motivo='Reserva consumida'){
@@ -1315,15 +1187,15 @@ window.addMatProducto = window.addMatProducto || function(materialId='', cantida
   row.style.cssText='background:var(--bg3);border-radius:12px;padding:10px;margin-bottom:8px';
   row.innerHTML=`
     <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;margin-bottom:6px">
-      <select class="form-input" id="prm-mat-${idn}" onchange="calcCostoEstimadoProducto()">
+      <select class="form-input" id="prm-mat-${idn}">
         <option value="">— Material —</option>
         ${arr(D.materiales).map(m=>`<option value="${m.id}" ${String(materialId)===String(m.id)?'selected':''}>${m.nombre}${m.unidad?` (${m.unidad})`:''}</option>`).join('')}
       </select>
       <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('prm-${idn}').remove(); recetaProdItems=recetaProdItems.filter(x=>x!==${idn}); return false;">×</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div><label class="form-label" style="margin-bottom:4px">Cantidad</label><input type="number" min="0" step="any" class="form-input" id="prm-qty-${idn}" value="${Number(cantidad||0)}" oninput="calcCostoEstimadoProducto()"></div>
-      <div><label class="form-label" style="margin-bottom:4px">Color / nota</label><input type="text" class="form-input" id="prm-color-${idn}" value="${color||''}" placeholder="Opcional" oninput="calcCostoEstimadoProducto()"></div>
+      <div><label class="form-label" style="margin-bottom:4px">Cantidad</label><input type="number" min="0" step="any" class="form-input" id="prm-qty-${idn}" value="${Number(cantidad||0)}"></div>
+      <div><label class="form-label" style="margin-bottom:4px">Color / nota</label><input type="text" class="form-input" id="prm-color-${idn}" value="${color||''}" placeholder="Opcional"></div>
     </div>`;
   host.appendChild(row);
 };
@@ -1332,6 +1204,29 @@ window.addMatProducto = window.addMatProducto || function(materialId='', cantida
 function recetaTemplateId(prodId){ return 'PROD:'+String(prodId); }
 function recetasPlantillaProducto(prodId){
   return arr(D.recetas).filter(r=>String(r.pedido_id)===recetaTemplateId(prodId));
+}
+function materialCuentaComoTubo(matId){
+  const m = arr(D.materiales).find(x=>String(x.id)===String(matId));
+  if(!m) return true;
+  const uni = String(m.unidad||'').toLowerCase();
+  const tipo = String(m.tipo||'').toLowerCase();
+  const nom = String(m.nombre||'').toLowerCase();
+  return uni.includes('tubo') || tipo.includes('hilo') || nom.includes('hilo');
+}
+function totalTubosDesdeRecetas(rows){
+  return arr(rows)
+    .filter(r=>r && r.material_id && !String(r.material_id).startsWith('ART:') && materialCuentaComoTubo(r.material_id))
+    .reduce((acc,r)=> acc + Number(r.cantidad||0), 0);
+}
+function totalTubosPedido(pedidoId){
+  const det = typeof detallePedido==='function' ? detallePedido(pedidoId) : null;
+  const prod = typeof productoPedido==='function' ? productoPedido(pedidoId) : null;
+  const qtyPed = Number(det?.cantidad || 1);
+  const recDet = arr(D.recetas).filter(r=>String(r.pedido_id)===String(det?.id));
+  if(recDet.length) return totalTubosDesdeRecetas(recDet);
+  const recTpl = prod ? recetasPlantillaProducto(prod.id) : [];
+  if(recTpl.length) return totalTubosDesdeRecetas(recTpl) * qtyPed;
+  return Number(prod?.tubos_hilo||0) * qtyPed;
 }
 function removeRowsByPedidoIdLike(pid){
   D.recetas = arr(D.recetas).filter(r=>String(r.pedido_id)!==String(pid));
@@ -1346,15 +1241,15 @@ window.addMatProducto = function(materialId='', cantidad=1, color=''){
   row.style.cssText='background:var(--bg3);border-radius:12px;padding:10px;margin-bottom:8px';
   row.innerHTML=`
     <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;margin-bottom:6px">
-      <select class="form-input" id="prm-mat-${idn}" onchange="calcCostoEstimadoProducto()">
+      <select class="form-input" id="prm-mat-${idn}">
         <option value="">— Material —</option>
         ${arr(D.materiales).map(m=>`<option value="${m.id}" ${String(materialId)===String(m.id)?'selected':''}>${m.nombre}${m.unidad?` (${m.unidad})`:''}</option>`).join('')}
       </select>
       <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('prm-${idn}').remove(); recetaProdItems=recetaProdItems.filter(x=>x!==${idn}); return false;">×</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div><label class="form-label" style="margin-bottom:4px">Cantidad</label><input type="number" min="0" step="any" class="form-input" id="prm-qty-${idn}" value="${Number(cantidad||0)}" oninput="calcCostoEstimadoProducto()"></div>
-      <div><label class="form-label" style="margin-bottom:4px">Color / nota</label><input type="text" class="form-input" id="prm-color-${idn}" value="${color||''}" placeholder="Opcional" oninput="calcCostoEstimadoProducto()"></div>
+      <div><label class="form-label" style="margin-bottom:4px">Cantidad</label><input type="number" min="0" step="any" class="form-input" id="prm-qty-${idn}" value="${Number(cantidad||0)}"></div>
+      <div><label class="form-label" style="margin-bottom:4px">Color / nota</label><input type="text" class="form-input" id="prm-color-${idn}" value="${color||''}" placeholder="Opcional"></div>
     </div>`;
   host.appendChild(row);
 };
@@ -1377,125 +1272,21 @@ function cargaRecetaProductoEnPedido(prod, force=false){
   }
 }
 
-
-function tarifasArtesano(artId){
-  return arr(D.tarifas_artesano).filter(t=>String(t.artesano_id)===String(artId) && String(t.activa)!=='false');
-}
-function tarifaArtesanoById(id){
-  return arr(D.tarifas_artesano).find(t=>String(t.id)===String(id));
-}
-function etiquetaEsquemaTarifa(esq){
-  return esq==='por_tubo' ? 'Por tubo' : (esq==='fijo' ? 'Fijo' : 'Por pieza');
-}
-function tarifaPredeterminadaArtesano(artId){
-  const lista = tarifasArtesano(artId);
-  return lista.find(t=>String(t.predeterminada)==='true') || lista[0] || null;
-}
-function asignacionesOrden(ordenId){
-  return arr(D.ord_art).filter(a=>String(a.orden_id)===String(ordenId));
-}
-function pagoEstimadoAsignacion(tarifa, det, prod, factor=1){
-  const t = tarifa || {};
-  const esquema=String(t.esquema_pago||'por_pieza');
-  const monto=Number(t.monto||0);
-  const qty=Number(det?.cantidad||1);
-  const baseTubos = Number(prod?.tubos_hilo||0) * qty;
-  const f = Number(factor||1);
-  if(esquema==='por_tubo') return round2(baseTubos * monto * f);
-  if(esquema==='fijo') return round2(monto * f);
-  return round2(qty * monto * f);
-}
-function plantillaLaborProducto(prodId){
-  return arr(D.recetas).filter(r=>String(r.pedido_id)===('PRODLAB:'+String(prodId)));
-}
-function resumenArtesanosOrden(orden){
-  const asigs = asignacionesOrden(orden?.id);
-  if(asigs.length){
-    return asigs.map(a=>{
-      const art = arr(D.artesanos).find(x=>String(x.id)===String(a.artesano_id));
-      const tipo = a.tipo_trabajo ? ` (${a.tipo_trabajo})` : '';
-      return art ? art.nombre + tipo : ('Sin artesano'+tipo);
-    }).join(' · ');
-  }
-  const art = arr(D.artesanos).find(x=>String(x.id)===String(orden?.artesano_id));
-  return art ? art.nombre : 'Sin artesano';
-}
-function llenarSelectTarifasEnNodo(selectEl, artId, selectedId){
-  if(!selectEl) return;
-  const lista = tarifasArtesano(artId);
-  selectEl.innerHTML = ['<option value="">— Selecciona tarifa —</option>'].concat(
-    lista.map(t=>`<option value="${t.id}" ${String(selectedId)===String(t.id)?'selected':''}>${t.nombre_tarifa||t.nombre||'Tarifa'} · ${etiquetaEsquemaTarifa(t.esquema_pago)} · $${fmx(t.monto||0)}</option>`)
-  ).join('');
-}
-window.onCambioArtesanoAsignacionRow = function(i){
-  const artId=getV('ap-artesano-'+i);
-  const pred = tarifaPredeterminadaArtesano(artId);
-  llenarSelectTarifasEnNodo($('ap-tarifa-'+i), artId, pred?.id||'');
-  recalcularPagoAsignacion();
-};
-window.addAsignacionProduccionRow = function(data={}){
-  const host=$('ap-multi-list'); if(!host) return;
-  const idx = Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-  const row=document.createElement('div');
-  row.className='card';
-  row.id='ap-row-'+idx;
-  row.style.marginBottom='8px';
-  const artOpts = '<option value="">— Selecciona artesano —</option>' + arr(D.artesanos).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(data.artesano_id)===String(a.id)?'selected':''}>${a.nombre}</option>`).join('');
-  row.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:start">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div><label class="form-label">Artesano *</label><select class="form-input" id="ap-artesano-${idx}" onchange="onCambioArtesanoAsignacionRow('${idx}')">${artOpts}</select></div>
-        <div><label class="form-label">Tarifa *</label><select class="form-input" id="ap-tarifa-${idx}" onchange="recalcularPagoAsignacion()"></select></div>
-        <div><label class="form-label">Tipo de trabajo</label><input class="form-input" id="ap-tipo-${idx}" value="${data.tipo_trabajo||''}" placeholder="Ej. tejido, brazos"></div>
-        <div><label class="form-label">Factor</label><input type="number" min="0" step="0.1" class="form-input" id="ap-factor-${idx}" value="${Number(data.factor_participacion||data.factor||1)}" oninput="recalcularPagoAsignacion()"></div>
-        <div style="grid-column:1 / span 2"><label class="form-label">Pago estimado ($)</label><input type="number" class="form-input" id="ap-pago-${idx}" readonly></div>
-      </div>
-      <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('ap-row-${idx}').remove(); recalcularPagoAsignacion(); return false;">×</button>
-    </div>`;
-  host.appendChild(row);
-  const pred = data.tarifa_artesano_id || tarifaPredeterminadaArtesano(data.artesano_id||'')?.id || '';
-  llenarSelectTarifasEnNodo($('ap-tarifa-'+idx), data.artesano_id||'', pred);
-  recalcularPagoAsignacion();
-};
-function recolectarAsignacionesProduccion(){
-  return Array.from(document.querySelectorAll('#ap-multi-list > .card')).map(row=>{
-    const idx = String(row.id||'').replace('ap-row-','');
-    return {
-      row_id: idx,
-      artesano_id:getV('ap-artesano-'+idx),
-      tarifa_artesano_id:getV('ap-tarifa-'+idx),
-      tipo_trabajo:getV('ap-tipo-'+idx),
-      factor_participacion:Number(getV('ap-factor-'+idx)||1),
-      pago_estimado:Number(getV('ap-pago-'+idx)||0)
-    };
-  }).filter(x=>x.artesano_id && x.tarifa_artesano_id && x.factor_participacion>0);
-}
-function llenarSelectTarifasArtesano(selectId, artId, selectedId){
-  const el=$(selectId); if(!el) return;
-  const lista = tarifasArtesano(artId);
-  const opts = ['<option value="">— Selecciona tarifa —</option>'].concat(
-    lista.map(t=>`<option value="${t.id}" ${String(selectedId)===String(t.id)?'selected':''}>${t.nombre_tarifa||t.nombre||'Tarifa'} · ${etiquetaEsquemaTarifa(t.esquema_pago)} · $${fmx(t.monto||0)}</option>`)
-  );
-  el.innerHTML = opts.join('');
-}
-window.onCambioArtesanoAsignacion = function(){
-  const artId=getV('ap-artesano');
-  const pred = tarifaPredeterminadaArtesano(artId);
-  llenarSelectTarifasArtesano('ap-tarifa', artId, pred?.id||'');
-  recalcularPagoAsignacion();
-};
-
 window.recalcularPagoAsignacion = function(){
+  const artId=getV('ap-artesano');
   const pedId=pedidoProduccionPendiente;
+  const art=arr(D.artesanos).find(a=>String(a.id)===String(artId));
   const det=detallePedido(pedId);
-  const prod=productoPedido(pedId);
-  Array.from(document.querySelectorAll('#ap-multi-list > .card')).forEach(row=>{
-    const idx = String(row.id||'').replace('ap-row-','');
-    const tarifa=tarifaArtesanoById(getV('ap-tarifa-'+idx));
-    const factor=Number(getV('ap-factor-'+idx)||1);
-    setV('ap-pago-'+idx, pagoEstimadoAsignacion(tarifa, det, prod, factor));
-    if(!getV('ap-tipo-'+idx) && tarifa?.tipo_trabajo) setV('ap-tipo-'+idx, tarifa.tipo_trabajo);
-  });
+  let monto=0;
+  if(art){
+    if(String(art.esquema||'por_pieza')==='por_tubo'){
+      const tubos = totalTubosPedido(pedId);
+      monto = tubos * Number(art.tarifa||0);
+    } else {
+      monto = Number(det?.cantidad||1) * Number(art.tarifa||0);
+    }
+  }
+  setV('ap-pago', round2(monto));
 };
 
 window.abrirAsignacionProduccion = function(pedidoId){
@@ -1504,59 +1295,30 @@ window.abrirAsignacionProduccion = function(pedidoId){
   const cli=arr(D.clientes).find(x=>String(x.id)===String(p?.cliente_id));
   const det=detallePedido(pedidoId);
   const prod=productoPedido(pedidoId);
+  $('ap-artesano').innerHTML='<option value="">— Selecciona artesano —</option>'+arr(D.artesanos).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}">${a.nombre} · ${a.esquema==='por_tubo'?'Por tubo':'Por pieza'} · $${fmx(a.tarifa)}</option>`).join('');
   $('ap-info').innerHTML = `<div class="card" style="padding:10px 12px">
     <div style="font-size:13px;font-weight:700">${prod?.nombre||'Producto'}</div>
     <div style="font-size:12px;color:var(--text3);margin-top:2px">${cli?.nombre||'Cliente'} · Pedido ${pedidoId}</div>
     <div style="font-size:12px;margin-top:8px">Cantidad: <strong>${fmx(det?.cantidad||1)}</strong></div>
   </div>`;
-  $('ap-multi-list').innerHTML='';
   const ord=arr(D.ordenes).find(o=>{
     const d=arr(D.ped_det).find(dd=>String(dd.id)===String(o.pedido_detalle_id));
     return d && String(d.pedido_id)===String(pedidoId);
   });
-  setV('ap-nota', ord?.nota||'');
-  const existentes = ord ? asignacionesOrden(ord.id) : [];
-  if(existentes.length){
-    existentes.forEach(a=>addAsignacionProduccionRow(a));
-  }else if(prod){
-    const plantilla = plantillaLaborProducto(prod.id);
-    if(plantilla.length){
-      plantilla.forEach(r=>addAsignacionProduccionRow({
-        artesano_id:r.artesano_sugerido_id||'',
-        tarifa_artesano_id:r.tarifa_artesano_id||'',
-        tipo_trabajo:r.tipo_trabajo||String(r.material_id||'').replace(/^LAB:/,''),
-        factor_participacion:Number(r.cantidad||1)
-      }));
-    }else if(ord?.artesano_id || ord?.tarifa_artesano_id){
-      addAsignacionProduccionRow({
-        artesano_id:ord?.artesano_id||'',
-        tarifa_artesano_id:ord?.tarifa_artesano_id||'',
-        tipo_trabajo:'',
-        factor_participacion:1
-      });
-    } else {
-      addAsignacionProduccionRow();
-    }
-  } else {
-    addAsignacionProduccionRow();
-  }
+  setV('ap-artesano', ord?.artesano_id||'');
+  setV('ap-nota','');
   recalcularPagoAsignacion();
   abrirModal('modal-asignacion-prod');
 };
 
 window.confirmarInicioProduccion = async function(){
-  showLoading('Iniciando producción...');
   try{
     const pedidoId=pedidoProduccionPendiente;
     toast('⏳ Iniciando producción...', 1200);
     const p=arr(D.pedidos).find(x=>String(x.id)===String(pedidoId)); 
     if(!p){ toast('No se encontró el pedido'); return; }
-    const asigns = recolectarAsignacionesProduccion();
-    if(!asigns.length){ toast('Agrega al menos un artesano con tarifa'); return; }
-    for(const a of asigns){
-      const tarifa = tarifaArtesanoById(a.tarifa_artesano_id);
-      if(!tarifa){ toast('Hay una tarifa inválida'); return; }
-    }
+    const artId=getV('ap-artesano'); 
+    if(!artId){ toast('Selecciona un artesano'); return; }
     const faltantes=typeof validarStockPedido==='function' ? validarStockPedido(pedidoId,true) : [];
     if(faltantes.length){toast('⚠️ Sin disponibilidad: '+faltantes.join(', '));return;}
     const det=detallePedido(pedidoId);
@@ -1566,83 +1328,26 @@ window.confirmarInicioProduccion = async function(){
       D.ordenes.push(ord);
       await crear('ordenes', ord);
     }
-    if(det && typeof asegurarRecetaDetalleDesdeProducto==='function') await asegurarRecetaDetalleDesdeProducto(det.id);
     await descontarStockPedido(pedidoId);
     await consumirReservasPedido(pedidoId,'Material liberado a producción');
     p.estado='en_produccion';
     await actualizar('pedidos',{id:pedidoId,estado:'en_produccion'});
     if(ord){
-      const primera = asigns[0];
-      const tarifa0 = tarifaArtesanoById(primera.tarifa_artesano_id) || {};
-      Object.assign(ord,{
-        artesano_id:primera.artesano_id,
-        tarifa_artesano_id:primera.tarifa_artesano_id,
-        tarifa_nombre:tarifa0.nombre_tarifa||tarifa0.nombre||'',
-        esquema_pago_aplicado:tarifa0.esquema_pago||'por_pieza',
-        monto_tarifa_aplicado:Number(tarifa0.monto||0),
-        estado:'en_proceso',
-        fecha_inicio:hoy(),
-        nota:getV('ap-nota')||'',
-        pago_estimado:Number(primera.pago_estimado||0)
-      });
-      await actualizar('ordenes', {
-        id:ord.id,
-        artesano_id:ord.artesano_id,
-        tarifa_artesano_id:ord.tarifa_artesano_id,
-        tarifa_nombre:ord.tarifa_nombre,
-        esquema_pago_aplicado:ord.esquema_pago_aplicado,
-        monto_tarifa_aplicado:ord.monto_tarifa_aplicado,
-        pago_estimado:ord.pago_estimado,
-        nota:ord.nota,
-        estado:'en_proceso',
-        fecha_inicio:hoy()
-      });
-
-      const prev = asignacionesOrden(ord.id);
-      for(const a of prev){
-        await eliminar('ord_art', a.id);
-      }
-      D.ord_art = arr(D.ord_art).filter(a=>String(a.orden_id)!==String(ord.id));
-
-      for(const a of asigns){
-        const tarifa = tarifaArtesanoById(a.tarifa_artesano_id) || {};
-        const row = {
-          id: genId('OPA', arr(D.ord_art)),
-          orden_id: ord.id,
-          artesano_id: a.artesano_id,
-          tarifa_artesano_id: a.tarifa_artesano_id,
-          tarifa_nombre: tarifa.nombre_tarifa||tarifa.nombre||'',
-          tipo_trabajo: a.tipo_trabajo || tarifa.tipo_trabajo || '',
-          esquema_pago_aplicado: tarifa.esquema_pago||'por_pieza',
-          monto_tarifa_aplicado: Number(tarifa.monto||0),
-          factor_participacion: Number(a.factor_participacion||1),
-          pago_estimado: Number(a.pago_estimado||0),
-          estado: 'pendiente_pago',
-          notas: '',
-          fecha_creacion: hoy()
-        };
-        D.ord_art.push(row);
-        await crear('ord_art', row);
-      }
-
-      await asegurarConsumosRealesOrden(ord.id, {silent:true});
-      await sincronizarPedidoDesdeOrden(ord.id);
+      Object.assign(ord,{artesano_id:artId,estado:'en_proceso',fecha_inicio:hoy(),nota:getV('ap-nota')||'', pago_estimado:Number(getV('ap-pago')||0)});
+      await actualizar('ordenes', {id:ord.id, artesano_id:artId, estado:'en_proceso', fecha_inicio:hoy()});
     }
     cerrar('modal-asignacion-prod');
     cerrar('det-pedido');
     toast('✓ Producción iniciada');
     if(typeof renderProduccion==='function') renderProduccion();
-    if(typeof renderInventario==='function') renderInventario();
-    if(typeof renderMovimientos==='function' && $('sub-movimientos')?.classList.contains('open')) renderMovimientos();
     if(typeof renderPedidos==='function') renderPedidos();
     if(typeof renderLabels==='function') renderLabels();
   }catch(err){
     console.error('confirmarInicioProduccion', err);
     toast('Error al iniciar producción: '+(err.message||err));
-  } finally {
-    hideLoading();
   }
 };
+
 
 function toast(msg, dur=2800) {
   const el = $('toast');
@@ -1650,24 +1355,6 @@ function toast(msg, dur=2800) {
   el.classList.add('show');
   clearTimeout(_toastT);
   _toastT = setTimeout(() => el.classList.remove('show'), dur);
-}
-let _loadingDepth = 0;
-function showLoading(msg='Procesando...'){
-  const ov=$('loading-overlay');
-  const tx=$('loading-text');
-  if(tx) tx.textContent=msg;
-  _loadingDepth++;
-  if(ov) ov.classList.add('show');
-}
-function hideLoading(force=false){
-  const ov=$('loading-overlay');
-  _loadingDepth = force ? 0 : Math.max(0,_loadingDepth-1);
-  if(ov && _loadingDepth===0) ov.classList.remove('show');
-}
-async function withLoading(msg, fn){
-  showLoading(msg);
-  try{return await fn();}
-  finally{hideLoading();}
 }
 function setV(id, v) { const e=$(id); if(e) e.value = v==null?'':v; }
 
@@ -1692,7 +1379,6 @@ window.liberarReservasPedido = async function liberarReservasPedido(pedidoId, mo
     r.estado = 'liberada';
     r.activa = 'no';
     r.nota = motivo;
-    showLoading(editIds.pedido ? 'Actualizando pedido...' : 'Creando pedido...');
     try{
       if(r.id) await actualizar('reservas_inventario', {id:r.id, estado:'liberada', activa:'no', nota:motivo});
     }catch(err){
@@ -1853,15 +1539,7 @@ function abrirSub(id) {
   else if(id==='sub-clientes') renderClientes();
   else if(id==='sub-productos') renderProductos();
   else if(id==='sub-inventario') renderInventario();
-  else if(id==='sub-movimientos') {
-    const sel=$('mov-kardex-select');
-    if(sel) sel.value='';
-    filtroMovTipo='todos';
-    filtroMovOrigen='todos';
-    document.querySelectorAll('#mov-tipo-chips .chip').forEach((c,i)=>c.classList.toggle('active', i===0));
-    document.querySelectorAll('#mov-origen-chips .chip').forEach((c,i)=>c.classList.toggle('active', i===0));
-    renderMovimientos();
-  }
+  else if(id==='sub-movimientos') renderMovimientos();
   else if(id==='sub-artesanos') renderArtesanos();
   else if(id==='sub-proveedores') renderProveedores();
   else if(id==='sub-gastos') renderGastos();
@@ -1958,10 +1636,10 @@ async function probarConexionDiagnostica(){
   toast('⏳ Probando conexión y hojas...');
   const pairs = [
     ['pedidos','pedidos'],['clientes','clientes'],['productos','productos'],['materiales','materiales'],
-    ['artesanos','artesanos'],['tarifas_artesano','tarifas_artesano'],['ordenes','ordenes_produccion'],['gastos','gastos'],['ped_det','pedido_detalle'],
+    ['artesanos','artesanos'],['ordenes','ordenes_produccion'],['gastos','gastos'],['ped_det','pedido_detalle'],
     ['proveedores','proveedores'],['compras','compras'],['comp_det','compra_detalle'],['pago_art','pago_artesanos'],
     ['abonos','abonos_clientes'],['recetas','receta_pedido'],['reparaciones','reparaciones'],
-    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion'],['ord_art','ordenes_produccion_artesanos']
+    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion']
   ];
   const details = await Promise.all(pairs.map(([k,s]) => leerDiagnostico(s,k)));
   LAST_LOAD_REPORT = {
@@ -1985,11 +1663,11 @@ async function probarConexionDiagnostica(){
 // Mapeo de nombres internos a nombres de hojas en Sheets
 const SHEET_MAP = {
   pedidos:'pedidos', clientes:'clientes', productos:'productos', materiales:'materiales',
-  artesanos:'artesanos', tarifas_artesano:'tarifas_artesano', ordenes:'ordenes_produccion', gastos:'gastos',
+  artesanos:'artesanos', ordenes:'ordenes_produccion', gastos:'gastos',
   ped_det:'pedido_detalle', proveedores:'proveedores', compras:'compras',
   comp_det:'compra_detalle', pago_art:'pago_artesanos', abonos:'abonos_clientes',
   recetas:'receta_pedido', reparaciones:'reparaciones', movimientos:'movimientos_inventario',
-  reservas:'reservas_inventario', consumos:'consumos_produccion', ord_art:'ordenes_produccion_artesanos'
+  reservas:'reservas_inventario', consumos:'consumos_produccion'
 };
 function sheetName(s){ return SHEET_MAP[s]||s; }
 
@@ -2048,8 +1726,6 @@ function normalizarDatosCargados(){
   D.movimientos=D.movimientos||[];
   D.reservas=D.reservas||[];
   D.consumos=D.consumos||[];
-  D.tarifas_artesano=D.tarifas_artesano||[];
-  D.ord_art=D.ord_art||[];
 }
 
 
@@ -2083,10 +1759,10 @@ async function cargarTodo() {
   toast('⏳ Cargando datos...');
   const pairs = [
     ['pedidos','pedidos'],['clientes','clientes'],['productos','productos'],['materiales','materiales'],
-    ['artesanos','artesanos'],['tarifas_artesano','tarifas_artesano'],['ordenes','ordenes_produccion'],['gastos','gastos'],['ped_det','pedido_detalle'],
+    ['artesanos','artesanos'],['ordenes','ordenes_produccion'],['gastos','gastos'],['ped_det','pedido_detalle'],
     ['proveedores','proveedores'],['compras','compras'],['comp_det','compra_detalle'],['pago_art','pago_artesanos'],
     ['abonos','abonos_clientes'],['recetas','receta_pedido'],['reparaciones','reparaciones'],
-    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion'],['ord_art','ordenes_produccion_artesanos']
+    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion']
   ];
 
   try {
@@ -2321,14 +1997,8 @@ window.verPedido = function verPedido(id) {
     <div class="sec-title" style="margin-top:10px">Abonos</div>
     ${abonos.length?`<div style="font-size:12px;display:grid;gap:6px">${abonos.slice(0,5).map(a=>`<div style="padding:8px;border:1px solid var(--border);border-radius:10px;display:flex;justify-content:space-between;gap:10px"><span>${a.fecha||''}${a.nota?` · ${a.nota}`:''}</span><strong>$${fmx(a.monto)}</strong></div>`).join('')}</div>`:`<div style="font-size:12px;color:var(--text3)">Sin abonos registrados.</div>`}`;
   const btn=$('btn-estado-ped');
-  const btnBack=$('btn-estado-ped-back');
   const sig=siguienteEstadoPedido(p);
   if(sig){btn.style.display='block';btn.textContent='→ Marcar como '+sig.replace('_',' ');} else btn.style.display='none';
-  const back=estadoAnteriorPedido(p);
-  if(btnBack){
-    if(back){ btnBack.style.display='block'; btnBack.textContent='← Regresar a '+back.replace('_',' '); }
-    else btnBack.style.display='none';
-  }
   abrirModal('det-pedido');
   const detModal=$('det-pedido');
   if(detModal){
@@ -2342,7 +2012,6 @@ window.verPedido = function verPedido(id) {
     if(titulo) titulo.textContent='Pedido '+id;
     if(body) body.innerHTML='<div class="alert alert-warn">No se pudo abrir el detalle completo del pedido. Error: '+String(err.message||err)+'</div><div style="margin-top:8px;font-size:12px;color:var(--text3)">ID: '+id+'</div>';
     const btn=$('btn-estado-ped'); if(btn) btn.style.display='none';
-    const btnBack=$('btn-estado-ped-back'); if(btnBack) btnBack.style.display='none';
     const modal=$('det-pedido');
     if(modal){ modal.classList.add('open'); modal.style.display='flex'; }
     syncModalState();
@@ -2350,48 +2019,7 @@ window.verPedido = function verPedido(id) {
   }
 }
 
-
-function estadoAnteriorPedido(p) {
-  const flujo=flujoPedido(p);
-  const estado=String(p?.estado||'nuevo').toLowerCase();
-  if(flujo==='fabricacion') {
-    if(estado==='en_produccion') return 'nuevo';
-    if(estado==='listo') return 'en_produccion';
-    if(estado==='entregado') return 'listo';
-  } else {
-    if(estado==='listo') return 'nuevo';
-    if(estado==='entregado') return 'listo';
-  }
-  return null;
-}
-
-async function regresarEstadoPed() {
-  const p=D.pedidos.find(x=>x.id===pedActivo); if(!p) return;
-  const back=estadoAnteriorPedido(p); if(!back) return;
-  const orden=D.ordenes.find(o=>{const d=D.ped_det.find(dd=>dd.id===o.pedido_detalle_id);return d&&d.pedido_id===pedActivo;});
-  if(orden){
-    const map={nuevo:'pendiente',en_produccion:'en_proceso',listo:'listo'};
-    if(map[back]) {
-      const idx=D.ordenes.findIndex(x=>x.id===orden.id);
-      if(idx>-1){
-        await moverOrden(idx, map[back]);
-        cerrar('det-pedido');
-        renderScreen(SC);
-        renderLabels();
-        return;
-      }
-    }
-  }
-  p.estado=back;
-  await actualizar('pedidos',{id:pedActivo,estado:back});
-  toast('✓ Estado actualizado');
-  cerrar('det-pedido');
-  renderScreen(SC);
-  renderLabels();
-}
-
 async function cambiarEstadoPed() {
-
   const p=D.pedidos.find(x=>x.id===pedActivo); if(!p) return;
   const nuevo=siguienteEstadoPedido(p); if(!nuevo) return;
   const prod=productoPedido(p.id);
@@ -2414,7 +2042,7 @@ async function cambiarEstadoPed() {
   const orden=D.ordenes.find(o=>{const d=D.ped_det.find(dd=>dd.id===o.pedido_detalle_id);return d&&d.pedido_id===pedActivo;});
   if(orden){
     const map={en_produccion:'en_proceso',listo:'listo',entregado:'entregado'};
-    if(map[nuevo]){orden.estado=map[nuevo];await actualizar('ordenes',{id:orden.id,estado:map[nuevo]});}
+    if(map[nuevo]){orden.estado=map[nuevo];await actualizar('ordenes_produccion',{id:orden.id,estado:map[nuevo]});}
   }
   if(flujoPedido(p)==='reventa' && nuevo==='entregado') await registrarSalidaProductoPedido(p.id);
   toast('✓ Estado actualizado');
@@ -2651,7 +2279,8 @@ function renderKanban() {
         titulo=prod?prod.nombre:o.id; cli=c?c.nombre:'—';
         subtit=etiquetaOrden(o);
       }
-          const prev={pendiente:null,en_proceso:'pendiente',listo:'en_proceso'};
+      const art=D.artesanos.find(x=>x.id===o.artesano_id);
+      const prev={pendiente:null,en_proceso:'pendiente',listo:'en_proceso'};
       const next={pendiente:'en_proceso',en_proceso:'listo',listo:null};
       const card=document.createElement('div');
       card.className='kcard';
@@ -2659,12 +2288,10 @@ function renderKanban() {
       card.innerHTML=`<div class="kcard-title">${titulo}</div>
         <div class="kcard-sub">${cli}</div>
         ${subtit?`<div class="kcard-sub">${subtit}</div>`:''}
-        <div class="kcard-sub">${resumenArtesanosOrden(o)?'🧵 '+resumenArtesanosOrden(o):'Sin artesano'}</div>
+        <div class="kcard-sub">${art?'🧵 '+art.nombre:'Sin artesano'}</div>
         <div class="kcard-arrows">
           ${prev[est]?`<button class="karrow" data-idx="${idx}" data-est="${prev[est]}">← ${prev[est].replace('_',' ')}</button>`:'<span></span>'}
-          <div style="display:flex;gap:6px;justify-content:flex-end">
-            ${next[est]?`<button class="karrow" data-idx="${idx}" data-est="${next[est]}" style="color:var(--accent)">${next[est].replace('_',' ')} →</button>`:''}
-          </div>
+          ${next[est]?`<button class="karrow" data-idx="${idx}" data-est="${next[est]}" style="color:var(--accent)">${next[est].replace('_',' ')} →</button>`:'<span></span>'}
         </div>`;
       card.querySelectorAll('.karrow').forEach(btn=>btn.addEventListener('click',e=>{e.stopPropagation();moverOrden(Number(btn.dataset.idx),btn.dataset.est);}));
       el.appendChild(card);
@@ -2683,7 +2310,8 @@ function renderListaOrdenes() {
     const ped=det?D.pedidos.find(x=>x.id===det.pedido_id):null;
     const rep=esRep?(D.reparaciones||[]).find(x=>x.id===o.pedido_detalle_id.replace('REP_','')):null;
     const c=D.clientes.find(x=>x.id===(rep?.cliente_id||ped?.cliente_id));
-      const idx=D.ordenes.indexOf(o);
+    const art=D.artesanos.find(x=>x.id===o.artesano_id);
+    const idx=D.ordenes.indexOf(o);
     const res=!esRep?resumenConsumoOrden(o.id):{teorico:0,real:0,desv:0};
     const div=document.createElement('div');
     div.className='card tap';div.onclick=()=>verOrden(idx);
@@ -2691,7 +2319,7 @@ function renderListaOrdenes() {
       <div>
         <div class="card-title">${esRep?(rep?.tipo||'Reparación'):prod?.nombre||o.id}</div>
         <div class="card-sub">${c?c.nombre:'—'}</div>
-        <div class="card-sub">${etiquetaOrden(o)} · ${resumenArtesanosOrden(o)?'🧵 '+resumenArtesanosOrden(o):'Sin artesano'}</div>
+        <div class="card-sub">${etiquetaOrden(o)} · ${art?'🧵 '+art.nombre:'Sin artesano'}</div>
         ${!esRep?`<div class="card-note">Teórico ${fmx(res.teorico)} · Real ${fmx(res.real||0)} ${res.desv?`· Δ ${fmx(res.desv)}`:''}</div>`:''}
       </div>
       <span class="badge ${o.estado}">${o.estado.replace('_',' ')}</span>
@@ -2703,47 +2331,14 @@ function setFiltroO(f,el){filtroO=f;document.querySelectorAll('#lista-view .chip
 
 async function moverOrden(idx,nuevoEst) {
   const o=D.ordenes[idx]; if(!o) return;
-  const estPrev=String(o.estado||'').toLowerCase();
-  const det=!String(o.pedido_detalle_id||'').startsWith('REP_') ? arr(D.ped_det).find(d=>String(d.id)===String(o.pedido_detalle_id)) : null;
-  const pedidoId=det?.pedido_id || '';
-  const pedido=pedidoId ? (arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||null) : null;
-  const prod=pedidoId ? productoPedido(pedidoId) : null;
-  if(estPrev===nuevoEst) return;
-  let aviso='';
-  showLoading(nuevoEst==='pendiente' ? 'Regresando orden a pendiente...' : 'Actualizando producción...');
-  try {
-    if(nuevoEst==='listo') await asegurarConsumosRealesOrden(o.id);
-    if(pedidoId && flujoPedido(pedido||{})==='fabricacion'){
-      if(estPrev==='pendiente' && (nuevoEst==='en_proceso' || nuevoEst==='listo')){
-        await ajustarStockPedidoProduccion(pedidoId, true, nuevoEst==='listo' ? 'Consumo al marcar orden lista' : 'Consumo al pasar a producción');
-        await consumirReservasPedido(pedidoId,'Material liberado a producción');
-      } else if((estPrev==='en_proceso' || estPrev==='listo') && nuevoEst==='pendiente'){
-        await devolverStockPedido(pedidoId);
-        try {
-          if(det && prod) await rebuildPedidoReservas(pedidoId, det.id, prod);
-        } catch(errRes) {
-          console.error('No se pudieron reconstruir reservas al volver a pendiente', errRes);
-          aviso=' · reservas pendientes de revisar';
-        }
-      }
-    }
-    o.estado=nuevoEst;
-    await actualizar('ordenes',{id:o.id,estado:nuevoEst});
-    await sincronizarPedidoDesdeOrden(o.id);
-    toast('→ '+nuevoEst.replace('_',' ')+aviso);
-  } catch(err) {
-    console.error('Error moverOrden', err);
-    toast('No se pudo mover la orden: '+String(err.message||err));
-  } finally {
-    renderProduccion();
-    if(typeof renderInventario==='function') renderInventario();
-    if(typeof renderMovimientos==='function' && $('sub-movimientos')?.classList.contains('open')) renderMovimientos();
-    if(typeof renderPedidos==='function') renderPedidos();
-    if(typeof renderLabels==='function') renderLabels();
-    hideLoading();
-  }
+  if(nuevoEst==='listo') await asegurarConsumosRealesOrden(o.id);
+  o.estado=nuevoEst;
+  await actualizar('ordenes_produccion',{id:o.id,estado:nuevoEst});
+  toast('→ '+nuevoEst.replace('_',' '));
+  renderProduccion();
 }
-async function verOrden(idx) {
+
+function verOrden(idx) {
   const o=D.ordenes[idx]; if(!o) return;
   ordenActiva=o.id;
   const esRep=String(o.pedido_detalle_id||'').startsWith('REP_');
@@ -2757,11 +2352,11 @@ async function verOrden(idx) {
   const ped=det?D.pedidos.find(x=>x.id===det.pedido_id):null;
   const prod=det?D.productos.find(x=>x.id===det.producto_id):null;
   const cli=ped?D.clientes.find(x=>x.id===ped.cliente_id):null;
+  const art=D.artesanos.find(x=>x.id===o.artesano_id);
   if(ped && flujoPedido(ped)==='reventa'){
     verPedido(ped.id);
     return;
   }
-  await asegurarConsumosRealesOrden(o.id, {silent:true});
   const res=resumenConsumoOrden(o.id);
   $('ord-tit').textContent='Orden '+o.id;
   $('ord-body').innerHTML=`
@@ -2769,32 +2364,27 @@ async function verOrden(idx) {
       <span style="color:var(--text3)">Pedido</span><span>${ped?.id||'—'}</span>
       <span style="color:var(--text3)">Cliente</span><span>${cli?.nombre||'—'}</span>
       <span style="color:var(--text3)">Producto</span><span>${prod?.nombre||'—'}</span>
-      <span style="color:var(--text3)">Artesanos</span><span>${resumenArtesanosOrden(o)||'Sin asignar'}</span>
+      <span style="color:var(--text3)">Artesano</span><span>${art?.nombre||'Sin asignar'}</span>
       <span style="color:var(--text3)">Estado</span><span><span class="badge ${o.estado}">${o.estado.replace('_',' ')}</span></span>
       <span style="color:var(--text3)">Consumo teórico</span><span>${fmx(res.teorico)}</span>
       <span style="color:var(--text3)">Consumo real</span><span>${fmx(res.real||0)}</span>
       <span style="color:var(--text3)">Desviación</span><span style="color:${res.desv>0?'var(--accent2)':res.desv<0?'var(--success)':'var(--text)'}">${fmx(res.desv)}</span>
     </div>
-    <div class="alert alert-info" style="margin-top:10px">El <strong>consumo teórico</strong> sale de la receta del pedido. El <strong>consumo real</strong> es lo que realmente se usó en producción para comparar merma o sobrante.</div>
     <div class="sec-title" style="margin-top:10px">Consumo real vs teórico</div>
     <div style="display:grid;gap:8px">${res.rows.length?res.rows.map(r=>{
       const m=D.materiales.find(x=>x.id===r.material_id);
       return `<div style="border:1px solid var(--border);border-radius:12px;padding:10px">
         <div style="font-weight:600">${m?.nombre||r.material_id}</div>
         <div style="font-size:12px;color:var(--text3);margin:3px 0 8px">Teórico: ${fmx(r.cantidad_teorica)}${r.color?` · ${r.color}`:''}</div>
-        <input type="number" class="form-input" step="0.01" id="con-real-${r.id}" value="${r.cantidad_real||''}" placeholder="Consumo real capturado">
+        <input type="number" class="form-input" step="0.01" id="con-real-${r.id}" value="${r.cantidad_real||''}" placeholder="Consumo real">
       </div>`;
-    }).join(''):`<div class="alert alert-info">No hay receta asociada para generar consumo teórico.</div>`}</div>`;
+    }).join(''):`<div class="alert alert-info">No hay receta asociada.</div>`}</div>`;
   abrirModal('modal-orden');
 }
 async function guardarConsumosOrden(){
   const ordenId=ordenActiva; if(!ordenId) return;
   const rows=(D.consumos||[]).filter(c=>String(c.orden_id)===String(ordenId));
-  if(!rows.length){
-    await asegurarConsumosRealesOrden(ordenId);
-  }
-  const rows2=(D.consumos||[]).filter(c=>String(c.orden_id)===String(ordenId));
-  for(const r of rows2){
+  for(const r of rows){
     const v=Number(getV('con-real-'+r.id)||0);
     r.cantidad_real=v;
     r.estado=v>0?'capturado':'pendiente';
@@ -2802,7 +2392,7 @@ async function guardarConsumosOrden(){
   }
   toast('✓ Consumo real guardado');
   renderProduccion();
-  await verOrden(D.ordenes.findIndex(x=>x.id===ordenId));
+  verOrden(D.ordenes.findIndex(x=>x.id===ordenId));
 }
 // ═══════════════════════════════════════════════
 // COMPRAS
@@ -3427,110 +3017,6 @@ function resumenConsumoOrden(ordenId){
   const real=rows.reduce((s,r)=>s+Number(r.cantidad_real||0),0);
   return {rows, teorico, real, desv: real-teorico};
 }
-
-function recetaPedidoMateriales(detalleId){
-  return arr(D.recetas).filter(r=>String(r.pedido_id)===String(detalleId) && !String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:'));
-}
-
-function cantidadRecetaAplicada(detalle, rec){
-  const qtyRec = Number(rec?.cantidad||0);
-  if(!detalle) return qtyRec;
-  const mult = Math.max(1, Number(detalle.cantidad||1));
-  if(mult<=1) return qtyRec;
-  const prod = arr(D.productos).find(p=>String(p.id)===String(detalle.producto_id));
-  const plantilla = prod && typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(prod.id) : [];
-  if(!plantilla.length) return qtyRec;
-  const base = plantilla.find(b=>String(b.material_id)===String(rec.material_id) && String(b.color||'')===String(rec.color||'')) ||
-               plantilla.find(b=>String(b.material_id)===String(rec.material_id));
-  const qtyBase = Number(base?.cantidad||0);
-  if(!(qtyBase>0)) return qtyRec;
-  const scaled = qtyBase*mult;
-  if(Math.abs(qtyRec-qtyBase) < 0.000001) return scaled;
-  if(Math.abs(qtyRec-scaled) < 0.000001) return qtyRec;
-  return qtyRec;
-}
-function recetaPedidoMaterialesAplicada(detalleId){
-  const detalle = arr(D.ped_det).find(d=>String(d.id)===String(detalleId));
-  return recetaPedidoMateriales(detalleId).map(r=>({ ...r, cantidad_aplicada:cantidadRecetaAplicada(detalle, r) }));
-}
-async function asegurarRecetaDetalleDesdeProducto(detalleId){
-  const detalle = arr(D.ped_det).find(d=>String(d.id)===String(detalleId));
-  if(!detalle) return [];
-  let recetas = recetaPedidoMateriales(detalleId);
-  if(recetas.length) return recetas;
-  const plant = typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(detalle.producto_id) : [];
-  if(!plant.length) return [];
-  const mult = Math.max(1, Number((arr(D.ped_det).find(d=>String(d.id)===String(detalleId))||{}).cantidad||1));
-  for(const base of plant){
-    const rr={
-      id:genId('REC', arr(D.recetas)),
-      pedido_id:detalleId,
-      material_id:base.material_id,
-      cantidad:Number(base.cantidad||0)*mult,
-      color:base.color||'',
-      notas:base.notas||base.color||''
-    };
-    D.recetas.push(rr);
-    await crear('recetas', rr);
-  }
-  return recetaPedidoMateriales(detalleId);
-}
-async function asegurarConsumosRealesOrden(ordenId, opts={}){
-  const orden = arr(D.ordenes).find(o=>String(o.id)===String(ordenId));
-  if(!orden) return [];
-  if(String(orden.pedido_detalle_id||'').startsWith('REP_')) return [];
-  const existentes = arr(D.consumos).filter(c=>String(c.orden_id)===String(ordenId));
-  if(existentes.length) return existentes;
-  let recetas = await asegurarRecetaDetalleDesdeProducto(orden.pedido_detalle_id);
-  const detalle = arr(D.ped_det).find(d=>String(d.id)===String(orden.pedido_detalle_id));
-  if(!recetas.length) return [];
-  const creados=[];
-  for(const rec of recetas){
-    const row={
-      id:genId('CON', arr(D.consumos)),
-      orden_id:ordenId,
-      pedido_detalle_id:orden.pedido_detalle_id,
-      material_id:rec.material_id,
-      cantidad_teorica:Number(cantidadRecetaAplicada(detalle, rec)||0),
-      cantidad_real:Number(rec.cantidad_real||0)||0,
-      color:rec.color||'',
-      estado:Number(rec.cantidad_real||0)>0?'capturado':'pendiente',
-      fecha:hoy(),
-      notas:rec.notas||''
-    };
-    D.consumos.push(row);
-    await crear('consumos', row);
-    creados.push(row);
-  }
-  if(creados.length && !opts.silent) toast('✓ Consumo teórico cargado desde la receta');
-  return creados;
-}
-async function sincronizarPedidoDesdeOrden(ordenId){
-  const orden = arr(D.ordenes).find(o=>String(o.id)===String(ordenId));
-  if(!orden || String(orden.pedido_detalle_id||'').startsWith('REP_')) return;
-  const det = arr(D.ped_det).find(d=>String(d.id)===String(orden.pedido_detalle_id));
-  if(!det) return;
-  const pedidoId = det.pedido_id;
-  const pedido = arr(D.pedidos).find(p=>String(p.id)===String(pedidoId));
-  if(!pedido) return;
-  const ordenesPedido = arr(D.ordenes).filter(o=>{
-    if(String(o.pedido_detalle_id||'').startsWith('REP_')) return false;
-    const d = arr(D.ped_det).find(dd=>String(dd.id)===String(o.pedido_detalle_id));
-    return d && String(d.pedido_id)===String(pedidoId);
-  });
-  if(!ordenesPedido.length) return;
-  const estados = ordenesPedido.map(o=>String(o.estado||'pendiente').toLowerCase());
-  let nuevo = pedido.estado || 'nuevo';
-  if(estados.every(e=>e==='entregado')) nuevo='entregado';
-  else if(estados.every(e=>e==='listo' || e==='entregado')) nuevo='listo';
-  else if(estados.every(e=>e==='pendiente')) nuevo='nuevo';
-  else if(estados.some(e=>e==='en_proceso' || e==='listo' || e==='entregado')) nuevo='en_produccion';
-  else nuevo='nuevo';
-  if(String(pedido.estado)!==String(nuevo)){
-    pedido.estado=nuevo;
-    await actualizar('pedidos',{id:pedidoId, estado:nuevo});
-  }
-}
 function renderReservasVisuales(){
   const statsEl=$('res-stats'), listEl=$('res-list');
   if(!statsEl||!listEl) return;
@@ -3683,25 +3169,17 @@ function setFiltroMovTipo(f,el){
   filtroMovTipo=f;
   document.querySelectorAll('#mov-tipo-chips .chip').forEach(c=>c.classList.remove('active'));
   el.classList.add('active');
-  if(f==='todos'){
-    const sel=$('mov-kardex-select');
-    if(sel) sel.value='';
-  }
   renderMovimientos();
 }
 function setFiltroMovOrigen(f,el){
   filtroMovOrigen=f;
   document.querySelectorAll('#mov-origen-chips .chip').forEach(c=>c.classList.remove('active'));
   el.classList.add('active');
-  if(f==='todos'){
-    const sel=$('mov-kardex-select');
-    if(sel) sel.value='';
-  }
   renderMovimientos();
 }
 function opcionesKardex(){
-  const mats=[...arr(D.materiales)].sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''))).map(m=>`<option value="material:${m.id}">🧵 ${m.nombre}</option>`).join('');
-  const prods=[...arr(D.productos)].sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''))).map(p=>`<option value="producto:${p.id}">🛏 ${p.nombre}</option>`).join('');
+  const mats=[...D.materiales].sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''))).map(m=>`<option value="material:${m.id}">🧵 ${m.nombre}</option>`).join('');
+  const prods=[...D.productos].sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''))).map(p=>`<option value="producto:${p.id}">🛏 ${p.nombre}</option>`).join('');
   return '<option value="">— Ver todos los movimientos —</option>' + (mats?`<optgroup label="Materiales">${mats}</optgroup>`:'') + (prods?`<optgroup label="Productos">${prods}</optgroup>`:'');
 }
 function renderMovimientos(){
@@ -3713,41 +3191,28 @@ function renderMovimientos(){
   sel.innerHTML=opcionesKardex();
   if([...sel.options].some(o=>o.value===prev)) sel.value=prev;
   const selected=sel.value;
-  let rows=[...arr(D.movimientos)].sort((a,b)=>new Date(b.fecha||0)-new Date(a.fecha||0));
-  if(filtroMovTipo!=='todos') rows=rows.filter(x=>String(x.tipo_movimiento||'')===String(filtroMovTipo));
-  if(filtroMovOrigen!=='todos') rows=rows.filter(x=>String(x.origen||'')===String(filtroMovOrigen));
-  const totalRows=rows.length;
+  let rows=[...D.movimientos].sort((a,b)=>new Date(b.fecha||0)-new Date(a.fecha||0));
+  if(filtroMovTipo!=='todos') rows=rows.filter(x=>x.tipo_movimiento===filtroMovTipo);
+  if(filtroMovOrigen!=='todos') rows=rows.filter(x=>String(x.origen||'')===filtroMovOrigen);
   if(selected){
     const [refTipo,refId]=selected.split(':');
-    rows=rows.filter(x=>String(x.ref_tipo||'')===String(refTipo) && String(x.ref_id||'')===String(refId));
+    rows=rows.filter(x=>x.ref_tipo===refTipo && String(x.ref_id)===String(refId));
     const nombre=nombreRefMovimiento({ref_tipo:refTipo,ref_id:refId});
     const qtyTotal=rows.reduce((s,x)=>s+Number(x.cantidad||0),0);
     const valTotal=rows.reduce((s,x)=>s+Number(x.total||0),0);
-    const actual=refTipo==='material' ? Number((arr(D.materiales).find(x=>String(x.id)===String(refId))||{}).stock_actual||0) : Number((arr(D.productos).find(x=>String(x.id)===String(refId))||{}).stock_disponible||0);
-    const diff=round2(actual-qtyTotal);
+    const actual=refTipo==='material' ? Number((D.materiales.find(x=>x.id===refId)||{}).stock_actual||0) : Number((D.productos.find(x=>x.id===refId)||{}).stock_disponible||0);
     kardexEl.innerHTML=`<div class="stats" style="margin-bottom:0">
       <div class="stat accent"><div class="stat-val" style="font-size:15px">${nombre}</div><div class="stat-lbl">Kardex activo</div></div>
-      <div class="stat ${actual<=0?'danger':'success'}"><div class="stat-val">${fmx(actual)}</div><div class="stat-lbl">Existencia actual</div></div>
-      <div class="stat ${qtyTotal>=0?'success':'danger'}"><div class="stat-val">${qtyTotal>=0?'+':''}${fmx(qtyTotal)}</div><div class="stat-lbl">Saldo según kardex</div></div>
-      <div class="stat ${Math.abs(diff)<0.000001?'success':'warning'}"><div class="stat-val">${diff>0?'+':''}${fmx(diff)}</div><div class="stat-lbl">Diferencia</div></div>
+      <div class="stat ${actual<=0?'danger':'success'}"><div class="stat-val">${actual}</div><div class="stat-lbl">Existencia actual</div></div>
+      <div class="stat ${qtyTotal>=0?'success':'danger'}"><div class="stat-val">${qtyTotal>=0?'+':''}${fmx(qtyTotal)}</div><div class="stat-lbl">Movimiento neto</div></div>
       <div class="stat ${valTotal>=0?'success':'warning'}"><div class="stat-val">$${fmx(valTotal)}</div><div class="stat-lbl">Valor acumulado</div></div>
     </div>`;
   } else {
-    const qtyTotal=rows.reduce((s,x)=>s+Number(x.cantidad||0),0);
-    const valTotal=rows.reduce((s,x)=>s+Number(x.total||0),0);
-    kardexEl.innerHTML=`<div class="stats" style="margin-bottom:0">
-      <div class="stat accent"><div class="stat-val">${totalRows}</div><div class="stat-lbl">Movimientos encontrados</div></div>
-      <div class="stat"><div class="stat-val">${new Set(rows.map(x=>`${x.ref_tipo||''}:${x.ref_id||''}`).filter(Boolean)).size}</div><div class="stat-lbl">Refs con movimiento</div></div>
-      <div class="stat ${qtyTotal>=0?'success':'danger'}"><div class="stat-val">${qtyTotal>=0?'+':''}${fmx(qtyTotal)}</div><div class="stat-lbl">Saldo neto kardex</div></div>
-      <div class="stat ${valTotal>=0?'success':'warning'}"><div class="stat-val">$${fmx(valTotal)}</div><div class="stat-lbl">Valor acumulado</div></div>
-    </div>`;
+    kardexEl.innerHTML=`<div class="alert alert-info" style="margin-bottom:0">Consulta el kardex de un material o producto para ver su historial y saldo de movimientos.</div>`;
   }
-  if(!rows.length){
-    listEl.innerHTML=empty(selected ? 'Sin movimientos para el kardex y filtros actuales' : 'Sin movimientos para los filtros actuales');
-    return;
-  }
+  if(!rows.length){listEl.innerHTML=empty('Sin movimientos para los filtros actuales');return;}
   listEl.innerHTML='';
-  rows.slice(0,200).forEach(m=>{
+  rows.slice(0,150).forEach(m=>{
     const color=colorMovimiento(m.tipo_movimiento);
     const qty=Number(m.cantidad||0);
     const div=document.createElement('div');
@@ -3767,159 +3232,6 @@ function renderMovimientos(){
     listEl.appendChild(div);
   });
 }
-function saldoKardexRef(refTipo, refId){
-  return round2(arr(D.movimientos).filter(m=>String(m.ref_tipo||'')===String(refTipo) && String(m.ref_id||'')===String(refId))
-    .reduce((s,m)=>s+Number(m.cantidad||0),0));
-}
-function costoBaseRef(refTipo, refId){
-  if(refTipo==='material') return Number((arr(D.materiales).find(x=>String(x.id)===String(refId))||{}).costo_unitario||0);
-  const p=arr(D.productos).find(x=>String(x.id)===String(refId))||{};
-  return Number(p.costo_produccion||p.costo_unitario||p.costo||0);
-}
-async function cuadrarInventario(soloSeleccion=false){
-  const sel=$('mov-kardex-select');
-  let refs=[];
-  if(soloSeleccion && sel?.value){
-    const [ref_tipo, ref_id]=String(sel.value).split(':');
-    if(ref_tipo && ref_id) refs=[{ref_tipo, ref_id}];
-  } else {
-    refs = [
-      ...arr(D.materiales).map(m=>({ref_tipo:'material', ref_id:m.id})),
-      ...arr(D.productos).filter(p=>Number(p.stock_disponible||0)!==0 || arr(D.movimientos).some(m=>String(m.ref_tipo)==='producto' && String(m.ref_id)===String(p.id))).map(p=>({ref_tipo:'producto', ref_id:p.id}))
-    ];
-  }
-  if(!refs.length){ toast('No hay referencias para cuadrar'); return; }
-  showLoading('Cuadrando inventario...');
-  try{
-    let ajustes=0, sinCambio=0, detalle=[];
-    for(const ref of refs){
-      const actual = ref.ref_tipo==='material'
-        ? Number((arr(D.materiales).find(x=>String(x.id)===String(ref.ref_id))||{}).stock_actual||0)
-        : Number((arr(D.productos).find(x=>String(x.id)===String(ref.ref_id))||{}).stock_disponible||0);
-      const kardex = saldoKardexRef(ref.ref_tipo, ref.ref_id);
-      const diff = round2(actual-kardex);
-      if(Math.abs(diff)<0.000001){ sinCambio++; continue; }
-      const costo = costoBaseRef(ref.ref_tipo, ref.ref_id);
-      await registrarMovimiento({
-        tipo_movimiento:'ajuste_manual',
-        origen:'ajuste',
-        origen_id:'CUADRE_AUTO',
-        ref_tipo:ref.ref_tipo,
-        ref_id:ref.ref_id,
-        cantidad:diff,
-        costo_unitario:costo,
-        total:round2(diff*costo),
-        notas:'Cuadre automático para alinear kardex con existencia actual'
-      });
-      ajustes++;
-      detalle.push(`${nombreRefMovimiento(ref)} (${diff>0?'+':''}${fmx(diff)})`);
-    }
-    if(typeof renderMovimientos==='function' && $('sub-movimientos')?.classList.contains('open')) renderMovimientos();
-    if(typeof renderInventario==='function') renderInventario();
-    toast(ajustes ? `✓ Cuadre completado: ${ajustes} ajuste(s)` : '✓ No se encontraron diferencias');
-    if(ajustes && detalle.length<=4) setTimeout(()=>toast(detalle.join('<br>'), 4200), 500);
-  }catch(err){
-    console.error('cuadrarInventario', err);
-    toast('Error al cuadrar inventario: '+(err.message||err));
-  } finally { hideLoading(); }
-}
-window.cuadrarInventario = cuadrarInventario;
-
-function clienteInternoStock(){
-  return arr(D.clientes).find(c=>String(c.nombre||'').trim().toUpperCase()==='STOCK INTERNO');
-}
-async function asegurarClienteInternoStock(){
-  let c=clienteInternoStock();
-  if(c) return c;
-  c={id:genId('CLI', arr(D.clientes)), nombre:'STOCK INTERNO', telefono:'', email:'', direccion:'', fecha_creacion:hoy()};
-  D.clientes.push(c);
-  await crear('clientes', c);
-  return c;
-}
-function abrirModalProduccionStock(){
-  const sel=$('ps-producto');
-  if(sel){
-    const opts=arr(D.productos).filter(p=>categoriaProducto(p)==='fabricacion')
-      .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')))
-      .map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
-    sel.innerHTML='<option value="">— Selecciona producto —</option>'+opts;
-  }
-  setV('ps-cantidad',1);
-  setV('ps-nota','');
-  abrirModal('modal-produccion-stock');
-}
-window.abrirModalProduccionStock = abrirModalProduccionStock;
-async function guardarProduccionStock(){
-  const productoId=getV('ps-producto');
-  const cantidad=Math.max(1, Number(getV('ps-cantidad')||1));
-  const nota=(getV('ps-nota')||'').trim();
-  if(!productoId){ toast('Selecciona un producto'); return; }
-  const prod=arr(D.productos).find(p=>String(p.id)===String(productoId));
-  if(!prod){ toast('No se encontró el producto'); return; }
-  if(categoriaProducto(prod)!=='fabricacion'){ toast('Solo aplica a productos de fabricación'); return; }
-  const btn=$('btn-crear-ps');
-  if(btn){ btn.disabled=true; btn.textContent='Creando...'; }
-  showLoading('Creando producción interna...');
-  try{
-    const cli=await asegurarClienteInternoStock();
-    const pedidoId=genId('PED', arr(D.pedidos));
-    const detalleId=genId('DET', arr(D.ped_det));
-    const pedido={
-      id:pedidoId,
-      cliente_id:cli.id,
-      estado:'nuevo',
-      total:0,
-      anticipo:0,
-      fecha_entrega:'',
-      notas:`[STOCK_INTERNO] ${nota||('Producción interna de '+prod.nombre)}`,
-      fecha_creacion:hoy(),
-      tipo_flujo:'fabricacion'
-    };
-    const det={
-      id:detalleId,
-      pedido_id:pedidoId,
-      producto_id:productoId,
-      cantidad:cantidad,
-      color_hilo:'',
-      medidas:'',
-      precio_unitario:0,
-      subtotal:0,
-      notas_especiales:'Producción para stock interno'
-    };
-    D.pedidos.push(pedido); await crear('pedidos', pedido);
-    D.ped_det.push(det); await crear('ped_det', det);
-    const plant = typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(productoId) : [];
-    for(const base of plant){
-      const rr={
-        id:genId('REC', arr(D.recetas)),
-        pedido_id:detalleId,
-        material_id:base.material_id,
-        cantidad:Number(base.cantidad||0)*cantidad,
-        color:base.color||'',
-        notas:base.notas||base.color||''
-      };
-      D.recetas.push(rr);
-      await crear('recetas', rr);
-    }
-    const ord={id:genId('ORD', arr(D.ordenes)), pedido_detalle_id:detalleId, artesano_id:'', estado:'pendiente', fecha_inicio:'', fecha_fin:'', fecha_creacion:hoy(), nota:'Producción para stock interno'};
-    D.ordenes.push(ord); await crear('ordenes', ord);
-    try{ await rebuildPedidoReservas(pedidoId, detalleId, prod); }catch(errRes){ console.warn('No se pudieron crear reservas internas', errRes); }
-    cerrar('modal-produccion-stock');
-    toast('✓ Producción interna creada');
-    if(typeof renderPedidos==='function') renderPedidos();
-    if(typeof renderProduccion==='function') renderProduccion();
-    if(typeof renderInventario==='function') renderInventario();
-    setTimeout(()=>{ try{ abrirAsignacionProduccion(pedidoId); }catch(err){ console.warn(err); } }, 120);
-  }catch(err){
-    console.error('guardarProduccionStock', err);
-    toast('Error al crear producción interna: '+(err.message||err));
-  } finally {
-    hideLoading();
-    if(btn){ btn.disabled=false; btn.textContent='Crear orden interna'; }
-  }
-}
-window.guardarProduccionStock = guardarProduccionStock;
-
 async function ajustarStockManual(materialId){
   const material=D.materiales.find(x=>x.id===materialId); if(!material) return;
   const actual=Number(material.stock_actual||0);
@@ -3973,20 +3285,20 @@ async function guardarMaterial() {
   cerrar('modal-material');renderInventario();
 }
 function renderInventario() {
-  const el=$('inv-list'); if(!el) return;
-  const mats=[...arr(D.materiales)].sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
-  const prods=[...arr(D.productos)].filter(p=>Number(p.stock_disponible||0)>0 || categoriaProducto(p)==='reventa').sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
-  let html='';
-  html += `<div class="sec-title">Materiales</div>`;
-  if(!mats.length) html += empty('Sin materiales');
-  mats.forEach(m=>{
+  const el=$('inv-list');if(!el)return;
+  if(!D.materiales.length){el.innerHTML=empty('Sin materiales');return;}
+  el.innerHTML='';
+  [...D.materiales].sort((a,b)=>Number(a.stock_actual||0)-Number(a.stock_minimo||0)>Number(b.stock_actual||0)-Number(b.stock_minimo||0)?1:-1).forEach(m=>{
     const bajo=Number(m.stock_actual||0)<=Number(m.stock_minimo||0);
+    const div=document.createElement('div');div.className='card';
     const pct=m.stock_minimo>0?Math.min(100,Math.round(Number(m.stock_actual||0)/Number(m.stock_minimo||1)*50)):50;
-    html += `<div class="card"><div class="card-row">
+    div.innerHTML=`<div class="card-row">
       <div style="flex:1">
         <div class="card-title">${m.nombre}</div>
         <div class="card-sub">${m.stock_actual||0} ${m.unidad} · mín ${m.stock_minimo||0}</div>
-        <div style="background:var(--border);border-radius:4px;height:4px;margin-top:6px"><div style="background:${bajo?'var(--danger)':'var(--success)'};height:4px;border-radius:4px;width:${pct}%"></div></div>
+        <div style="background:var(--border);border-radius:4px;height:4px;margin-top:6px">
+          <div style="background:${bajo?'var(--danger)':'var(--success)'};height:4px;border-radius:4px;width:${pct}%"></div>
+        </div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
         ${bajo?'<span style="font-size:10px;color:var(--danger);font-weight:600">⚠️ BAJO</span>':''}
@@ -3996,24 +3308,9 @@ function renderInventario() {
           <button class="btn btn-secondary btn-sm" onclick="eliminarMaterial('${m.id}')">🗑</button>
         </div>
       </div>
-    </div></div>`;
+    </div>`;
+    el.appendChild(div);
   });
-  html += `<div class="sec-title" style="margin-top:12px">Hamacas / productos con stock</div>`;
-  if(!prods.length) html += empty('Sin productos con stock visible');
-  prods.forEach(p=>{
-    html += `<div class="card"><div class="card-row">
-      <div style="flex:1">
-        <div class="card-title">${p.nombre}</div>
-        <div class="card-sub">Stock disponible: ${fmx(p.stock_disponible||0)} · ${categoriaProducto(p)==='reventa'?'Reventa':'Fabricación'}</div>
-        <div class="card-note">Costo base: $${fmx(p.costo_produccion||0)} · Precio: $${fmx(p.precio_venta||0)}</div>
-      </div>
-      <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-        <span class="badge ${categoriaProducto(p)==='reventa'?'rev':'fab'}">${categoriaProducto(p)==='reventa'?'Reventa':'Fab.'}</span>
-        ${categoriaProducto(p)==='fabricacion' ? `<button class="btn btn-secondary btn-sm" onclick="abrirModalProduccionStock();setTimeout(()=>setV('ps-producto','${p.id}'),60)">🏭 Producir</button>` : ''}
-      </div>
-    </div></div>`;
-  });
-  el.innerHTML=html;
 }
 
 // ═══════════════════════════════════════════════
@@ -4023,169 +3320,63 @@ function abrirModalArtesano(id) {
   editIds.art=id||null;
   $('tit-art').textContent=id?'Editar artesano':'Nuevo artesano';
   $('btn-guardar-art').textContent=id?'Guardar cambios':'Guardar artesano';
-  if(id){const a=D.artesanos.find(x=>x.id===id);if(!a)return;setV('a-nombre',a.nombre);setV('a-tel',a.telefono||'');}
-  else clr('a-nombre','a-tel');
+  if(id){const a=D.artesanos.find(x=>x.id===id);if(!a)return;setV('a-nombre',a.nombre);setV('a-tel',a.telefono||'');setV('a-esquema',a.esquema||'por_pieza');setV('a-tarifa',a.tarifa||0);}
+  else clr('a-nombre','a-tel','a-tarifa');
   abrirModal('modal-artesano');
 }
 async function guardarArtesano() {
   const nombre=getV('a-nombre');if(!nombre){toast('El nombre es requerido');return;}
   $('btn-guardar-art').disabled=true;
   const id=editIds.art||genId('ART',D.artesanos);
-  const a={id,nombre,telefono:getV('a-tel'),activo:true};
+  const a={id,nombre,telefono:getV('a-tel'),esquema:getV('a-esquema'),tarifa:Number(getV('a-tarifa')||0),activo:true};
   if(editIds.art){const idx=D.artesanos.findIndex(x=>x.id===id);if(idx>=0)Object.assign(D.artesanos[idx],a);await actualizar('artesanos',a);}
   else{D.artesanos.push(a);await crear('artesanos',a);}
   toast('✓ Artesano guardado');$('btn-guardar-art').disabled=false;editIds.art=null;
   cerrar('modal-artesano');renderArtesanos();
 }
-function abrirModalTarifaArtesano(id, artesanoId){
-  editIds.tar_art = id || null;
-  $('tit-tar-art').textContent=id?'Editar tarifa':'Nueva tarifa';
-  $('btn-guardar-ta').textContent=id?'Guardar cambios':'Guardar tarifa';
-  $('ta-artesano').innerHTML='<option value="">— Selecciona artesano —</option>'+arr(D.artesanos).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}">${a.nombre}</option>`).join('');
-  if(id){
-    const t=arr(D.tarifas_artesano).find(x=>String(x.id)===String(id)); if(!t) return;
-    setV('ta-artesano', t.artesano_id||'');
-    setV('ta-nombre', t.nombre_tarifa||t.nombre||'');
-    setV('ta-tipo', t.tipo_trabajo||'tejido');
-    setV('ta-esquema', t.esquema_pago||'por_pieza');
-    setV('ta-monto', t.monto||0);
-    setV('ta-producto_ref', t.producto_ref||'');
-    setV('ta-pred', String(t.predeterminada)==='true' ? 'true' : 'false');
-    setV('ta-notas', t.notas||'');
-  } else {
-    clr('ta-nombre','ta-producto_ref','ta-notas');
-    setV('ta-artesano', artesanoId||'');
-    setV('ta-tipo','tejido');
-    setV('ta-esquema','por_pieza');
-    setV('ta-monto','0');
-    setV('ta-pred','false');
-  }
-  abrirModal('modal-tarifa-artesano');
-}
-async function guardarTarifaArtesano(){
-  const artesano_id=getV('ta-artesano');
-  const nombre_tarifa=getV('ta-nombre');
-  if(!artesano_id || !nombre_tarifa){ toast('Artesano y nombre de tarifa son requeridos'); return; }
-  $('btn-guardar-ta').disabled=true;
-  const id = editIds.tar_art || genId('TAR', D.tarifas_artesano||[]);
-  const pred = String(getV('ta-pred'))==='true';
-  const t = {
-    id,
-    artesano_id,
-    nombre_tarifa,
-    tipo_trabajo:getV('ta-tipo')||'tejido',
-    esquema_pago:getV('ta-esquema')||'por_pieza',
-    monto:Number(getV('ta-monto')||0),
-    producto_ref:getV('ta-producto_ref')||'',
-    predeterminada:pred,
-    activa:true,
-    notas:getV('ta-notas')||''
-  };
-  if(pred){
-    arr(D.tarifas_artesano).filter(x=>String(x.artesano_id)===String(artesano_id) && String(x.id)!==String(id) && String(x.predeterminada)==='true')
-      .forEach(async x=>{
-        x.predeterminada=false;
-        await actualizar('tarifas_artesano',{id:x.id,predeterminada:false});
-      });
-  }
-  if(editIds.tar_art){
-    const idx=arr(D.tarifas_artesano).findIndex(x=>String(x.id)===String(id));
-    if(idx>=0) Object.assign(D.tarifas_artesano[idx], t);
-    await actualizar('tarifas_artesano', t);
-  }else{
-    D.tarifas_artesano.push(t);
-    await crear('tarifas_artesano', t);
-  }
-  $('btn-guardar-ta').disabled=false;
-  editIds.tar_art=null;
-  toast('✓ Tarifa guardada');
-  cerrar('modal-tarifa-artesano');
-  renderArtesanos();
-}
 function renderArtesanos() {
   const el=$('art-list');if(!el)return;
   const lista=D.artesanos.filter(a=>String(a.activo)!=='false');
-  if(!lista.length){el.innerHTML=empty('Sin artesanos');} else {
-    el.innerHTML='';
-    lista.forEach(a=>{
-      const tarifas = tarifasArtesano(a.id);
-      const pred = tarifaPredeterminadaArtesano(a.id);
-      const div=document.createElement('div');div.className='card';
-      div.innerHTML=`<div class="card-row">
-        <div>
-          <div class="card-title">${a.nombre}</div>
-          <div class="card-sub">${a.telefono||'Sin teléfono'} · ${tarifas.length} tarifa${tarifas.length===1?'':'s'}${pred ? ' · Base: '+(pred.nombre_tarifa||'Tarifa')+' $'+fmx(pred.monto||0) : ''}</div>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-          <button class="btn btn-secondary btn-sm" onclick="abrirModalTarifaArtesano('', '${a.id}')">💲 Tarifa</button>
-          <button class="btn btn-secondary btn-sm" onclick="abrirModalArtesano('${a.id}')">✏️</button>
-        </div>
-      </div>`;
-      el.appendChild(div);
-    });
-  }
-
-  const tarifasEl=$('art-tarifas-list');
-  if(tarifasEl){
-    const tarifas = arr(D.tarifas_artesano).filter(t=>String(t.activa)!=='false');
-    if(!tarifas.length){ tarifasEl.innerHTML=empty('Sin tarifas registradas'); }
-    else{
-      tarifasEl.innerHTML='';
-      tarifas.forEach(t=>{
-        const art=arr(D.artesanos).find(a=>String(a.id)===String(t.artesano_id));
-        const div=document.createElement('div');div.className='card';
-        div.innerHTML=`<div class="card-row">
-          <div>
-            <div class="card-title">${t.nombre_tarifa||'Tarifa'}</div>
-            <div class="card-sub">${art?.nombre||'Sin artesano'} · ${t.tipo_trabajo||'Trabajo'} · ${etiquetaEsquemaTarifa(t.esquema_pago)} · $${fmx(t.monto||0)}${String(t.predeterminada)==='true' ? ' · Predeterminada' : ''}</div>
-          </div>
-          <button class="btn btn-secondary btn-sm" onclick="abrirModalTarifaArtesano('${t.id}')">✏️</button>
-        </div>`;
-        tarifasEl.appendChild(div);
-      });
-    }
-  }
-
-  // Pagos pendientes
-  const pagosEl=$('pagos-art-list');if(!pagosEl)return;
-  const pagados=new Set(arr(D.pago_art).map(p=>String(p.asignacion_id||'') || (String(p.orden_id)+'|'+String(p.artesano_id))));
-  const pendientesAsign = arr(D.ord_art).filter(a=>{
-    const key = String(a.id||'') || (String(a.orden_id)+'|'+String(a.artesano_id));
-    const ord = arr(D.ordenes).find(o=>String(o.id)===String(a.orden_id));
-    return ord && ord.estado==='listo' && !pagados.has(key);
-  });
-  const pendientesFallback = pendientesAsign.length ? [] : D.ordenes.filter(o=>o.estado==='listo'&&!pagados.has(String(o.id)+'|'+String(o.artesano_id))&&o.artesano_id).map(o=>({
-    id:'',
-    orden_id:o.id,
-    artesano_id:o.artesano_id,
-    tarifa_nombre:o.tarifa_nombre,
-    tipo_trabajo:'',
-    esquema_pago_aplicado:o.esquema_pago_aplicado,
-    monto_tarifa_aplicado:o.monto_tarifa_aplicado,
-    factor_participacion:1,
-    pago_estimado:o.pago_estimado
-  }));
-  const pendientes = pendientesAsign.length ? pendientesAsign : pendientesFallback;
-  if(!pendientes.length){pagosEl.innerHTML=empty('Sin pagos pendientes ✓');return;}
-  pagosEl.innerHTML='';
-  pendientes.forEach(a=>{
-    const ord = arr(D.ordenes).find(o=>String(o.id)===String(a.orden_id));
-    const art=D.artesanos.find(x=>x.id===a.artesano_id);if(!art)return;
-    let monto=Number(a.pago_estimado||0);
-    let desc=(a.tarifa_nombre||'Tarifa')+(a.tipo_trabajo?(' · '+a.tipo_trabajo):'')+' · '+etiquetaEsquemaTarifa(a.esquema_pago_aplicado||'por_pieza')+' · $'+fmx(a.monto_tarifa_aplicado||0);
+  if(!lista.length){el.innerHTML=empty('Sin artesanos');return;}
+  el.innerHTML='';
+  lista.forEach(a=>{
     const div=document.createElement('div');div.className='card';
     div.innerHTML=`<div class="card-row">
-      <div><div class="card-title">${art.nombre}</div><div class="card-sub">${ord?.id||a.orden_id} · ${desc}</div></div>
+      <div><div class="card-title">${a.nombre}</div><div class="card-sub">${a.esquema==='por_pieza'?'Por pieza':'Por tubo'} · $${fmx(a.tarifa)}</div></div>
+      <button class="btn btn-secondary btn-sm" onclick="abrirModalArtesano('${a.id}')">✏️</button>
+    </div>`;
+    el.appendChild(div);
+  });
+  // Pagos pendientes
+  const pagosEl=$('pagos-art-list');if(!pagosEl)return;
+  const pagados=new Set(D.pago_art.map(p=>String(p.orden_id)));
+  const pendientes=D.ordenes.filter(o=>o.estado==='listo'&&!pagados.has(String(o.id))&&o.artesano_id);
+  if(!pendientes.length){pagosEl.innerHTML=empty('Sin pagos pendientes ✓');return;}
+  pagosEl.innerHTML='';
+  pendientes.forEach(o=>{
+    const art=D.artesanos.find(x=>x.id===o.artesano_id);if(!art)return;
+    const esRep=String(o.pedido_detalle_id||'').startsWith('REP_');
+    let monto=Number(art.tarifa||0);
+    let desc='Tarifa: $'+fmx(art.tarifa);
+    if(!esRep){
+      const det=D.ped_det.find(x=>x.id===o.pedido_detalle_id);
+      const prod=det?D.productos.find(x=>x.id===det.producto_id):null;
+      if(art.esquema==='por_tubo'&&prod){const pedido=D.pedidos.find(pp=>String(pp.id)===String(det?.pedido_id)); const t=pedido?totalTubosPedido(pedido.id):(Number(prod.tubos_hilo||0)*Number(det?.cantidad||1)); monto=t*Number(art.tarifa);desc=t+' tubos × $'+fmx(art.tarifa);}
+      else if(det){monto=Number(art.tarifa)*Number(det.cantidad||1);desc=det.cantidad+' pza × $'+fmx(art.tarifa);}
+    }
+    const div=document.createElement('div');div.className='card';
+    div.innerHTML=`<div class="card-row">
+      <div><div class="card-title">${art.nombre}</div><div class="card-sub">${esRep?'🔧 Reparación':o.id} · ${desc}</div></div>
       <div style="text-align:right">
         <div style="font-size:16px;font-weight:600;color:var(--success)">$${fmx(monto)}</div>
-        <button class="btn btn-success btn-sm" style="margin-top:4px" onclick="pagarArtesano('${a.orden_id}','${art.id}',${monto},'${a.id||''}','${(a.tipo_trabajo||'').replace(/'/g,"&#39;")}')">✓ Pagar</button>
+        <button class="btn btn-success btn-sm" style="margin-top:4px" onclick="pagarArtesano('${o.id}','${art.id}',${monto})">✓ Pagar</button>
       </div>
     </div>`;
-    pagosEl.appendChild(div);
+    el.appendChild(div);
   });
 }
-async function pagarArtesano(ordenId,artId,monto,asignacionId='',tipoTrabajo='') {
-  const pago={id:genId('PAG',D.pago_art),artesano_id:artId,orden_id:ordenId,asignacion_id:asignacionId||'',tipo_trabajo:tipoTrabajo||'',monto,total:monto,tipo_pago:'pago',fecha:hoy()};
+async function pagarArtesano(ordenId,artId,monto) {
+  const pago={id:genId('PAG',D.pago_art),artesano_id:artId,orden_id:ordenId,monto,total:monto,tipo_pago:'pago',fecha:hoy()};
   D.pago_art.push(pago);await crear('pago_artesanos',pago);
   toast('✓ Pago registrado $'+fmx(monto));renderArtesanos();
 }
@@ -5129,7 +4320,7 @@ ${recetas.length?`<div class="sec">Materiales</div>${recetas.map(r=>{const m=D.m
 <div class="sec">Cuenta</div>
 <div class="tbox">
   <div class="trow"><span>Precio total</span><span>$${fmx(p.total)}</span></div>
-  <div class="trow"><span>${Number(saldo)<=0?'Pago recibido':'Anticipo'}</span><span style="color:#166534">- $${fmx(p.anticipo)}</span></div>
+  <div class="trow"><span>Anticipo</span><span style="color:#166534">- $${fmx(p.anticipo)}</span></div>
   ${abonado>0?`<div class="trow"><span>Abonos</span><span style="color:#166534">- $${fmx(abonado)}</span></div>`:''}
   <div class="tfin"><span>Saldo pendiente</span><span style="color:${saldo>0?'#e8a44a':'#166534'}">$${fmx(saldo)}</span></div>
 </div>
@@ -5490,8 +4681,6 @@ document.addEventListener('DOMContentLoaded', () => {
       badge.innerHTML=`<div class="alert alert-info">${cat==='reventa'?'🏷️ Reventa: descuenta producto terminado':'🧵 Fabricación: genera producción y materiales'}</div>`;
     }
     if(matSec) matSec.style.display = cat==='fabricacion' ? 'block' : 'none';
-    const lblPago=$('lbl-p-pago');
-    if(lblPago) lblPago.textContent = cat==='reventa' ? 'Pago recibido ($)' : 'Anticipo ($)';
     calcTotal();
     if(cat==='fabricacion'){ cargaRecetaProductoEnPedido(prod, true); }
   };
@@ -5524,9 +4713,9 @@ document.addEventListener('DOMContentLoaded', () => {
         D.reservas.push(res); await crear('reservas',res);
       }
     } else {
-      const recs=recetaPedidoMaterialesAplicada(detalleId);
+      const recs=arr(D.recetas).filter(r=>String(r.pedido_id)===String(detalleId));
       for(const rr of recs){
-        const qty=Number((rr.cantidad_aplicada ?? rr.cantidad) || 0);
+        const qty=Number(rr.cantidad||0);
         if(qty>0){
           const res={id:genId('RES',arr(D.reservas)),pedido_id:pedidoId,pedido_detalle_id:detalleId,ref_tipo:'material',tipo:'material',ref_id:rr.material_id,cantidad:qty,estado:'activa',fecha:hoy(),activa:'si'};
           D.reservas.push(res); await crear('reservas',res);
@@ -5534,24 +4723,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   }
-
-
-  window.crearProductoRapidoDesdePedido = function(){
-    window.pendingProducto = { flujo:'pedido' };
-    cerrar('modal-pedido');
-    if(typeof abrirModalProducto==='function') abrirModalProducto();
-  };
-
-  window.recargarRecetaMaestraPedido = function(){
-    const pid=getV('p-producto');
-    const prod=arr(D.productos).find(p=>String(p.id)===String(pid));
-    if(!prod){ toast('Selecciona primero un producto'); return; }
-    const cat=(typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion'));
-    if(cat!=='fabricacion'){ toast('Este producto no usa receta de fabricación'); return; }
-    $('p-mat-list').innerHTML=''; window.matPedItems=[];
-    cargaRecetaProductoEnPedido(prod, true);
-    toast('✓ Receta maestra cargada al pedido');
-  };
 
   window.abrirModal_pedido = function(preserveEdit=false){
     if(!preserveEdit){
@@ -5564,7 +4735,7 @@ document.addEventListener('DOMContentLoaded', () => {
       $('p-total').dataset.auto='1';
       $('p-mat-list').innerHTML=''; window.matPedItems=[];
       $('p-mat-section').style.display='none';
-      $('p-badge').style.display='none'; $('p-badge').innerHTML=''; const lblPago=$('lbl-p-pago'); if(lblPago) lblPago.textContent='Anticipo ($)';
+      $('p-badge').style.display='none'; $('p-badge').innerHTML='';
     }
     $('p-cliente').innerHTML='<option value="">— Selecciona cliente —</option>'+arr(D.clientes).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
     $('p-producto').innerHTML='<option value="">— Selecciona producto —</option>'+arr(D.productos).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
@@ -5616,16 +4787,12 @@ document.addEventListener('DOMContentLoaded', () => {
       let det=pedidoId ? detallePedido(pedidoId) : null;
       const isNew=!pedidoId;
       if(isNew) pedidoId=genId('PED', arr(D.pedidos));
-      const pagoRecibido=Number(getV('p-anticipo')||0);
-      const estadoBase=(arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{}).estado || 'nuevo';
-      let estadoPedido=estadoBase;
-      if(cat==='reventa' && total>0 && pagoRecibido>=total) estadoPedido='entregado';
       const pedido={
         id:pedidoId,
         cliente_id:clienteId,
-        estado:estadoPedido,
+        estado:(arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{}).estado || 'nuevo',
         total:total,
-        anticipo:pagoRecibido,
+        anticipo:Number(getV('p-anticipo')||0),
         fecha_entrega:getV('p-fecha')||'',
         notas:getV('p-notas')||'',
         fecha_creacion:(arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{}).fecha_creacion || hoy(),
@@ -5692,14 +4859,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       await rebuildPedidoReservas(pedidoId, detalleId, prod);
-      if(cat==='reventa'){
-        if(pedido.estado==='entregado'){
-          await ajustarSalidaProductoPedido(pedidoId, true, 'Venta de contado / pedido liquidado');
-          await consumirReservasPedido(pedidoId,'Venta entregada de contado');
-        } else {
-          await ajustarSalidaProductoPedido(pedidoId, false, 'Reversión de salida por edición de pedido');
-        }
-      }
 
       const wasEdit = !!editIds.pedido;
       toast(wasEdit ? '✓ Pedido actualizado' : '✓ Pedido guardado');
@@ -5713,7 +4872,6 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error(err);
       toast('Error al guardar pedido: '+(err.message||err));
     } finally {
-      hideLoading();
       if(btn){ btn.disabled=false; btn.textContent='Guardar pedido'; }
     }
   };
@@ -5832,60 +4990,43 @@ document.addEventListener('DOMContentLoaded', () => {
   function costoMat(m){
     return Number(m?.costo_promedio || m?.costo_unitario || m?.costo || m?.ultimo_costo || m?.precio_compra || 0);
   }
-  function tipoTrabajoFromRow(r){
-    return r?.tipo_trabajo || String(r?.material_id||'').replace(/^LAB:/,'').replace(/^ART:/,'') || '';
-  }
-  function labelTarifaGlobal(t){
-    const art = arr(D.artesanos).find(a=>String(a.id)===String(t.artesano_id));
-    const artNom = art?.nombre ? ` · ${art.nombre}` : '';
-    return `${t.nombre_tarifa||'Tarifa'}${artNom} · ${etiquetaEsquemaTarifa(t.esquema_pago)} · $${typeof fmx==='function'?fmx(t.monto):t.monto}`;
-  }
-  function llenarSelectTarifasGlobal(selId, selectedId=''){
-    const el = document.getElementById(selId);
-    if(!el) return;
-    const lista = arr(D.tarifas_artesano).filter(t=>String(t.activa)!=='false');
-    el.innerHTML = '<option value="">— Tarifa referencial —</option>' + lista.map(t=>`<option value="${t.id}" ${String(selectedId)===String(t.id)?'selected':''}>${labelTarifaGlobal(t)}</option>`).join('');
-  }
   window.calcCostoEstimadoProducto = function(){
     const cat = (typeof getV==='function' ? getV('pr-cat') : 'fabricacion');
     if(cat!=='fabricacion'){
       return Number((document.getElementById('pr-costo')||{}).value||0);
     }
-    const recetaRowsDom = Array.from(document.querySelectorAll('#pr-receta-list > div[id^="prm-"]'));
+    const recetaIds = Array.isArray(window.recetaProdItems) ? window.recetaProdItems : [];
     let totalMat = 0;
     let baseQty = 0;
-    recetaRowsDom.forEach(row=>{
-      const i = String(row.id||'').replace('prm-','');
+    recetaIds.forEach(i=>{
       const matId = document.getElementById('prm-mat-'+i)?.value || '';
       const qty = Number(document.getElementById('prm-qty-'+i)?.value || 0);
       if(!matId || qty<=0) return;
       const mat = (D.materiales||[]).find(m=>String(m.id)===String(matId));
       totalMat += qty * costoMat(mat);
-      baseQty += qty;
+      if(materialCuentaComoTubo(matId)) baseQty += qty;
     });
-    const laborRowsDom = Array.from(document.querySelectorAll('#pr-art-list > div[id^="pra-"]'));
+    const artIds = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
     let totalLabor = 0;
-    laborRowsDom.forEach(row=>{
-      const i = String(row.id||'').replace('pra-','');
-      const tarifaId = document.getElementById('pra-tarifa-'+i)?.value || '';
+    artIds.forEach(i=>{
+      const artId = document.getElementById('pra-art-'+i)?.value || '';
       const factor = Number(document.getElementById('pra-factor-'+i)?.value || 0);
-      if(!tarifaId || factor<=0) return;
-      const tarifaObj = tarifaArtesanoById(tarifaId) || {};
-      const tarifa = Number(tarifaObj.monto||0);
-      const esquema = String(tarifaObj.esquema_pago||'por_pieza');
+      if(!artId || factor<=0) return;
+      const art = (D.artesanos||[]).find(a=>String(a.id)===String(artId)) || {};
+      const tarifa = Number(art.tarifa||0);
+      const esquema = String(art.esquema||'por_pieza');
       if(esquema==='por_tubo') totalLabor += tarifa * baseQty * factor;
-      else if(esquema==='fijo') totalLabor += tarifa * factor;
       else totalLabor += tarifa * factor;
     });
     const total = Math.round((totalMat + totalLabor)*100)/100;
     const inp = document.getElementById('pr-costo');
     if(inp) inp.value = total;
     const box = document.getElementById('pr-cost-breakdown');
-    if(box) box.innerHTML = `<div class="card-note">Materiales: $${typeof fmx==='function'?fmx(totalMat):totalMat} · Mano de obra estimada: $${typeof fmx==='function'?fmx(totalLabor):totalLabor}</div>`;
+    if(box) box.innerHTML = `<div class="card-note">Materiales: $${typeof fmx==='function'?fmx(totalMat):totalMat} · Mano de obra: $${typeof fmx==='function'?fmx(totalLabor):totalLabor}</div>`;
     return total;
   };
 
-  window.addArtProducto = function(tipoTrabajo='', tarifaId='', factor=1, nota='', artesanoSugeridoId=''){
+  window.addArtProducto = function(artId='', factor=1, nota=''){
     const host = document.getElementById('pr-art-list');
     if(!host) return;
     window.laborProdItems = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
@@ -5896,31 +5037,17 @@ document.addEventListener('DOMContentLoaded', () => {
     row.style.cssText = 'background:var(--bg3);border-radius:12px;padding:10px;margin-bottom:8px';
     row.innerHTML = `
       <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;margin-bottom:6px">
-        <input type="text" class="form-input" id="pra-tipo-${idn}" value="${tipoTrabajo||''}" placeholder="Tipo de trabajo. Ej: tejido, brazos, remate" oninput="calcCostoEstimadoProducto()">
+        <select class="form-input" id="pra-art-${idn}">
+          <option value="">— Artesano —</option>
+          ${(D.artesanos||[]).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(artId)===String(a.id)?'selected':''}>${a.nombre} · ${a.esquema==='por_tubo'?'Por tubo':'Por pieza'} · $${typeof fmx==='function'?fmx(a.tarifa):a.tarifa}</option>`).join('')}
+        </select>
         <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('pra-${idn}').remove(); laborProdItems=laborProdItems.filter(x=>x!==${idn}); calcCostoEstimadoProducto(); return false;">×</button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-        <div>
-          <label class="form-label" style="margin-bottom:4px">Tarifa referencial</label>
-          <select class="form-input" id="pra-tarifa-${idn}" onchange="calcCostoEstimadoProducto()"></select>
-        </div>
-        <div><label class="form-label" style="margin-bottom:4px">Factor de participación</label><input type="number" min="0" step="0.1" class="form-input" id="pra-factor-${idn}" value="${Number(factor||0)}" oninput="calcCostoEstimadoProducto()"></div>
-      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div>
-          <label class="form-label" style="margin-bottom:4px">Artesano sugerido</label>
-          <select class="form-input" id="pra-art-${idn}">
-            <option value="">— Opcional —</option>
-            ${(D.artesanos||[]).filter(a=>String(a.activo)!=='false').map(a=>`<option value="${a.id}" ${String(artesanoSugeridoId)===String(a.id)?'selected':''}>${a.nombre}</option>`).join('')}
-          </select>
-        </div>
-        <div>
-          <label class="form-label" style="margin-bottom:4px">Nota</label>
-          <input type="text" class="form-input" id="pra-nota-${idn}" value="${nota||''}" placeholder="Opcional">
-        </div>
+        <div><label class="form-label" style="margin-bottom:4px">Factor de participación</label><input type="number" min="0" step="0.1" class="form-input" id="pra-factor-${idn}" value="${Number(factor||0)}"></div>
+        <div><label class="form-label" style="margin-bottom:4px">Nota</label><input type="text" class="form-input" id="pra-nota-${idn}" value="${nota||''}" placeholder="Opcional"></div>
       </div>`;
     host.appendChild(row);
-    llenarSelectTarifasGlobal('pra-tarifa-'+idn, tarifaId||'');
     calcCostoEstimadoProducto();
   };
 
@@ -5940,11 +5067,11 @@ document.addEventListener('DOMContentLoaded', () => {
       setV('pr-dias', p.dias_produccion||7);
       setV('pr-precio', p.precio_venta||0);
       setV('pr-stock', p.stock_disponible||0);
-      const matRows = (typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(id) : []).filter(r=>!String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:'));
+      const matRows = (typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(id) : []).filter(r=>!String(r.material_id||'').startsWith('ART:'));
       if(matRows.length) matRows.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||''));
       else addMatProducto();
       const labRows = laborRowsProducto(id);
-      if(labRows.length) labRows.forEach(r=>addArtProducto(tipoTrabajoFromRow(r), r.tarifa_artesano_id||'', r.cantidad||1, r.color||'', r.artesano_sugerido_id||String(r.material_id||'').replace(/^ART:/,'')));
+      if(labRows.length) labRows.forEach(r=>addArtProducto(String(r.material_id||'').replace(/^ART:/,''), r.cantidad||1, r.color||''));
       else addArtProducto();
       setTimeout(()=>calcCostoEstimadoProducto(), 30);
     } else {
@@ -5991,14 +5118,11 @@ document.addEventListener('DOMContentLoaded', () => {
         dias_produccion:Number(getV('pr-dias')||7)
       };
 
-      const recetaRows = Array.from(document.querySelectorAll('#pr-receta-list > div[id^="prm-"]')).map(row=>{
-        const i = String(row.id||'').replace('prm-','');
-        return {
-          material_id:document.getElementById('prm-mat-'+i)?.value || '',
-          cantidad:Number(document.getElementById('prm-qty-'+i)?.value || 0),
-          color:document.getElementById('prm-color-'+i)?.value || ''
-        };
-      }).filter(x=>x.material_id && x.cantidad>0);
+      const recetaRows = (window.recetaProdItems||[]).map(i=>({
+        material_id:document.getElementById('prm-mat-'+i)?.value || '',
+        cantidad:Number(document.getElementById('prm-qty-'+i)?.value || 0),
+        color:document.getElementById('prm-color-'+i)?.value || ''
+      })).filter(x=>x.material_id && x.cantidad>0);
 
       p.material_hilo_id = recetaRows[0]?.material_id || '';
       p.tubos_hilo = Number(recetaRows[0]?.cantidad || 0);
@@ -6028,54 +5152,24 @@ document.addEventListener('DOMContentLoaded', () => {
       D.recetas = (D.recetas||[]).filter(r=>String(r.pedido_id)!==labId);
 
       const laborRows = (window.laborProdItems||[]).map(i=>({
-        tipo_trabajo:document.getElementById('pra-tipo-'+i)?.value || '',
-        tarifa_artesano_id:document.getElementById('pra-tarifa-'+i)?.value || '',
+        artesano_id:document.getElementById('pra-art-'+i)?.value || '',
         factor:Number(document.getElementById('pra-factor-'+i)?.value || 0),
-        nota:document.getElementById('pra-nota-'+i)?.value || '',
-        artesano_sugerido_id:document.getElementById('pra-art-'+i)?.value || ''
-      })).filter(x=>x.tipo_trabajo && x.tarifa_artesano_id && x.factor>0);
+        nota:document.getElementById('pra-nota-'+i)?.value || ''
+      })).filter(x=>x.artesano_id && x.factor>0);
 
       for(const row of laborRows){
-        const tarifa = tarifaArtesanoById(row.tarifa_artesano_id) || {};
-        const rr={
-          id:genId('REC', D.recetas||[]),
-          pedido_id:labId,
-          material_id:'LAB:'+row.tipo_trabajo,
-          cantidad:row.factor,
-          color:row.nota,
-          tipo_trabajo:row.tipo_trabajo,
-          artesano_sugerido_id:row.artesano_sugerido_id,
-          tarifa_artesano_id:row.tarifa_artesano_id,
-          tarifa_nombre:tarifa.nombre_tarifa||tarifa.nombre||'',
-          esquema_pago:tarifa.esquema_pago||'por_pieza',
-          monto_tarifa:Number(tarifa.monto||0)
-        };
+        const rr={id:genId('REC', D.recetas||[]), pedido_id:labId, material_id:'ART:'+row.artesano_id, cantidad:row.factor, color:row.nota};
         D.recetas.push(rr); await crear('recetas', rr);
       }
 
       toast(editIds.prod ? '✓ Producto actualizado' : '✓ Producto guardado');
-      const savedId = id;
-      const pendingProductoFlow = window.pendingProducto ? window.pendingProducto.flujo : '';
       editIds.prod = null;
       cerrar('modal-producto');
       if(typeof renderProductos==='function') renderProductos();
-      if(pendingProductoFlow==='pedido'){
-        window.pendingProducto = null;
-        if(typeof abrirModal_pedido==='function') abrirModal_pedido(true);
-        setTimeout(()=>{
-          const sel=document.getElementById('p-producto');
-          if(sel){
-            sel.innerHTML='<option value="">— Selecciona producto —</option>'+arr(D.productos).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
-            setV('p-producto', savedId);
-            if(typeof onProdChange==='function') onProdChange();
-          }
-        },80);
-      }
     }catch(err){
       console.error('guardarProducto override', err);
       toast('Error al guardar producto: '+(err.message||err));
     }finally{
-      hideLoading();
       if(btn){ btn.disabled=false; btn.textContent='Guardar producto'; }
     }
   };
@@ -6097,13 +5191,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.addEventListener('input', function(e){
     const id = e.target && e.target.id ? e.target.id : '';
-    if(/^prm-(mat|qty|color)-/.test(id) || /^pra-(tipo|factor|nota)-/.test(id) || id==='pr-cat'){
+    if(/^prm-(mat|qty|color)-/.test(id) || /^pra-(art|factor|nota)-/.test(id) || id==='pr-cat'){
       if(getV('pr-cat')==='fabricacion') calcCostoEstimadoProducto();
     }
   }, true);
   document.addEventListener('change', function(e){
     const id = e.target && e.target.id ? e.target.id : '';
-    if(/^prm-(mat|qty|color)-/.test(id) || /^pra-(tipo|art|tarifa|factor|nota)-/.test(id) || id==='pr-cat'){
+    if(/^prm-(mat|qty|color)-/.test(id) || /^pra-(art|factor|nota)-/.test(id) || id==='pr-cat'){
       if(getV('pr-cat')==='fabricacion') calcCostoEstimadoProducto();
     }
   }, true);
