@@ -56,6 +56,13 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 /* TOAST */
 #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(30,24,60,.92);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;opacity:0;transition:all .25s;z-index:1000;pointer-events:none;white-space:nowrap;max-width:90vw;text-align:center}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#loading-overlay{position:fixed;inset:0;background:rgba(17,24,39,.18);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;z-index:1200;padding:20px}
+#loading-overlay.show{display:flex}
+.loading-card{background:#fff;border:1px solid var(--border);box-shadow:var(--shadow);border-radius:18px;padding:18px 20px;min-width:220px;max-width:86vw;text-align:center}
+.loading-spinner{width:30px;height:30px;border-radius:50%;border:3px solid rgba(124,106,247,.18);border-top-color:var(--accent);margin:0 auto 10px;animation:spin 1s linear infinite}
+.loading-text{font-size:14px;font-weight:700;color:var(--text)}
+.loading-sub{font-size:12px;color:var(--text3);margin-top:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
 
 /* CARDS */
 .card{background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px}
@@ -227,6 +234,13 @@ body.modal-open{overflow:hidden}
 </div>
 
 <div id="toast"></div>
+<div id="loading-overlay" aria-live="polite" aria-busy="true">
+  <div class="loading-card">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loading-text">Procesando...</div>
+    <div class="loading-sub">Espera un momento</div>
+  </div>
+</div>
 <div class="app">
 
 <!-- HEADER -->
@@ -1426,6 +1440,7 @@ window.abrirAsignacionProduccion = function(pedidoId){
 };
 
 window.confirmarInicioProduccion = async function(){
+  showLoading('Iniciando producción...');
   try{
     const pedidoId=pedidoProduccionPendiente;
     toast('⏳ Iniciando producción...', 1200);
@@ -1489,6 +1504,8 @@ window.confirmarInicioProduccion = async function(){
   }catch(err){
     console.error('confirmarInicioProduccion', err);
     toast('Error al iniciar producción: '+(err.message||err));
+  } finally {
+    hideLoading();
   }
 };
 
@@ -1499,6 +1516,24 @@ function toast(msg, dur=2800) {
   el.classList.add('show');
   clearTimeout(_toastT);
   _toastT = setTimeout(() => el.classList.remove('show'), dur);
+}
+let _loadingDepth = 0;
+function showLoading(msg='Procesando...'){
+  const ov=$('loading-overlay');
+  const tx=$('loading-text');
+  if(tx) tx.textContent=msg;
+  _loadingDepth++;
+  if(ov) ov.classList.add('show');
+}
+function hideLoading(force=false){
+  const ov=$('loading-overlay');
+  _loadingDepth = force ? 0 : Math.max(0,_loadingDepth-1);
+  if(ov && _loadingDepth===0) ov.classList.remove('show');
+}
+async function withLoading(msg, fn){
+  showLoading(msg);
+  try{return await fn();}
+  finally{hideLoading();}
 }
 function setV(id, v) { const e=$(id); if(e) e.value = v==null?'':v; }
 
@@ -1523,6 +1558,7 @@ window.liberarReservasPedido = async function liberarReservasPedido(pedidoId, mo
     r.estado = 'liberada';
     r.activa = 'no';
     r.nota = motivo;
+    showLoading(editIds.pedido ? 'Actualizando pedido...' : 'Creando pedido...');
     try{
       if(r.id) await actualizar('reservas_inventario', {id:r.id, estado:'liberada', activa:'no', nota:motivo});
     }catch(err){
@@ -2482,7 +2518,6 @@ function renderKanban() {
       }
       const art=D.artesanos.find(x=>x.id===o.artesano_id);
       const prev={pendiente:null,en_proceso:'pendiente',listo:'en_proceso'};
-      const canBackPending = est!=='pendiente';
       const next={pendiente:'en_proceso',en_proceso:'listo',listo:null};
       const card=document.createElement('div');
       card.className='kcard';
@@ -2494,7 +2529,6 @@ function renderKanban() {
         <div class="kcard-arrows">
           ${prev[est]?`<button class="karrow" data-idx="${idx}" data-est="${prev[est]}">← ${prev[est].replace('_',' ')}</button>`:'<span></span>'}
           <div style="display:flex;gap:6px;justify-content:flex-end">
-            ${canBackPending && est!=='pendiente' ? `<button class="karrow" data-idx="${idx}" data-est="pendiente">↺ pendiente</button>` : ''}
             ${next[est]?`<button class="karrow" data-idx="${idx}" data-est="${next[est]}" style="color:var(--accent)">${next[est].replace('_',' ')} →</button>`:''}
           </div>
         </div>`;
@@ -2543,6 +2577,7 @@ async function moverOrden(idx,nuevoEst) {
   const prod=pedidoId ? productoPedido(pedidoId) : null;
   if(estPrev===nuevoEst) return;
   let aviso='';
+  showLoading(nuevoEst==='pendiente' ? 'Regresando orden a pendiente...' : 'Actualizando producción...');
   try {
     if(nuevoEst==='listo') await asegurarConsumosRealesOrden(o.id);
     if(pedidoId && flujoPedido(pedido||{})==='fabricacion'){
@@ -2566,12 +2601,14 @@ async function moverOrden(idx,nuevoEst) {
   } catch(err) {
     console.error('Error moverOrden', err);
     toast('No se pudo mover la orden: '+String(err.message||err));
+  } finally {
+    renderProduccion();
+    if(typeof renderInventario==='function') renderInventario();
+    if(typeof renderMovimientos==='function' && $('sub-movimientos')?.classList.contains('open')) renderMovimientos();
+    if(typeof renderPedidos==='function') renderPedidos();
+    if(typeof renderLabels==='function') renderLabels();
+    hideLoading();
   }
-  renderProduccion();
-  if(typeof renderInventario==='function') renderInventario();
-  if(typeof renderMovimientos==='function' && $('sub-movimientos')?.classList.contains('open')) renderMovimientos();
-  if(typeof renderPedidos==='function') renderPedidos();
-  if(typeof renderLabels==='function') renderLabels();
 }
 async function verOrden(idx) {
   const o=D.ordenes[idx]; if(!o) return;
@@ -5381,6 +5418,7 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error(err);
       toast('Error al guardar pedido: '+(err.message||err));
     } finally {
+      hideLoading();
       if(btn){ btn.disabled=false; btn.textContent='Guardar pedido'; }
     }
   };
@@ -5742,6 +5780,7 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('guardarProducto override', err);
       toast('Error al guardar producto: '+(err.message||err));
     }finally{
+      hideLoading();
       if(btn){ btn.disabled=false; btn.textContent='Guardar producto'; }
     }
   };
