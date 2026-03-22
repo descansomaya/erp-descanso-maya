@@ -1204,7 +1204,7 @@ window.ajustarStockPedidoProduccion = window.ajustarStockPedidoProduccion || asy
   for(const r of recs){
     const mat = arr(D.materiales).find(m=>String(m.id)===String(r.material_id));
     if(!mat) continue;
-    const qty = Number(r.cantidad_aplicada ?? r.cantidad || 0);
+    const qty = Number((r.cantidad_aplicada ?? r.cantidad) || 0);
     const actualNet = netoMovPedido(pedidoId,'material',mat.id);
     const targetNet = targetEnProduccion ? (-qty) : 0;
     const delta = Number((targetNet - actualNet).toFixed(6));
@@ -5093,7 +5093,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       const recs=recetaPedidoMaterialesAplicada(detalleId);
       for(const rr of recs){
-        const qty=Number(rr.cantidad_aplicada ?? rr.cantidad || 0);
+        const qty=Number((rr.cantidad_aplicada ?? rr.cantidad) || 0);
         if(qty>0){
           const res={id:genId('RES',arr(D.reservas)),pedido_id:pedidoId,pedido_detalle_id:detalleId,ref_tipo:'material',tipo:'material',ref_id:rr.material_id,cantidad:qty,estado:'activa',fecha:hoy(),activa:'si'};
           D.reservas.push(res); await crear('reservas',res);
