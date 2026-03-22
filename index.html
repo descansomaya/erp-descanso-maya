@@ -475,6 +475,7 @@ body.modal-open{overflow:hidden}
     <div class="modal-title" id="det-ped-tit">Pedido</div>
     <div id="det-ped-body"></div>
     <div style="height:12px"></div>
+    <button class="btn btn-secondary" id="btn-estado-ped-back" onclick="regresarEstadoPed()" style="display:none">← Regresar</button>
     <button class="btn btn-primary" id="btn-estado-ped" onclick="cambiarEstadoPed()">Cambiar estado</button>
     <button class="btn btn-secondary" onclick="imprimirPedido(pedActivo)">🖨 Imprimir nota</button>
     <button class="btn btn-secondary" onclick="editarPedido(pedActivo)">✏️ Editar</button>
@@ -2149,8 +2150,14 @@ window.verPedido = function verPedido(id) {
     <div class="sec-title" style="margin-top:10px">Abonos</div>
     ${abonos.length?`<div style="font-size:12px;display:grid;gap:6px">${abonos.slice(0,5).map(a=>`<div style="padding:8px;border:1px solid var(--border);border-radius:10px;display:flex;justify-content:space-between;gap:10px"><span>${a.fecha||''}${a.nota?` · ${a.nota}`:''}</span><strong>$${fmx(a.monto)}</strong></div>`).join('')}</div>`:`<div style="font-size:12px;color:var(--text3)">Sin abonos registrados.</div>`}`;
   const btn=$('btn-estado-ped');
+  const btnBack=$('btn-estado-ped-back');
   const sig=siguienteEstadoPedido(p);
   if(sig){btn.style.display='block';btn.textContent='→ Marcar como '+sig.replace('_',' ');} else btn.style.display='none';
+  const back=estadoAnteriorPedido(p);
+  if(btnBack){
+    if(back){ btnBack.style.display='block'; btnBack.textContent='← Regresar a '+back.replace('_',' '); }
+    else btnBack.style.display='none';
+  }
   abrirModal('det-pedido');
   const detModal=$('det-pedido');
   if(detModal){
@@ -2164,6 +2171,7 @@ window.verPedido = function verPedido(id) {
     if(titulo) titulo.textContent='Pedido '+id;
     if(body) body.innerHTML='<div class="alert alert-warn">No se pudo abrir el detalle completo del pedido. Error: '+String(err.message||err)+'</div><div style="margin-top:8px;font-size:12px;color:var(--text3)">ID: '+id+'</div>';
     const btn=$('btn-estado-ped'); if(btn) btn.style.display='none';
+    const btnBack=$('btn-estado-ped-back'); if(btnBack) btnBack.style.display='none';
     const modal=$('det-pedido');
     if(modal){ modal.classList.add('open'); modal.style.display='flex'; }
     syncModalState();
@@ -2171,7 +2179,48 @@ window.verPedido = function verPedido(id) {
   }
 }
 
+
+function estadoAnteriorPedido(p) {
+  const flujo=flujoPedido(p);
+  const estado=String(p?.estado||'nuevo').toLowerCase();
+  if(flujo==='fabricacion') {
+    if(estado==='en_produccion') return 'nuevo';
+    if(estado==='listo') return 'en_produccion';
+    if(estado==='entregado') return 'listo';
+  } else {
+    if(estado==='listo') return 'nuevo';
+    if(estado==='entregado') return 'listo';
+  }
+  return null;
+}
+
+async function regresarEstadoPed() {
+  const p=D.pedidos.find(x=>x.id===pedActivo); if(!p) return;
+  const back=estadoAnteriorPedido(p); if(!back) return;
+  const orden=D.ordenes.find(o=>{const d=D.ped_det.find(dd=>dd.id===o.pedido_detalle_id);return d&&d.pedido_id===pedActivo;});
+  if(orden){
+    const map={nuevo:'pendiente',en_produccion:'en_proceso',listo:'listo'};
+    if(map[back]) {
+      const idx=D.ordenes.findIndex(x=>x.id===orden.id);
+      if(idx>-1){
+        await moverOrden(idx, map[back]);
+        cerrar('det-pedido');
+        renderScreen(SC);
+        renderLabels();
+        return;
+      }
+    }
+  }
+  p.estado=back;
+  await actualizar('pedidos',{id:pedActivo,estado:back});
+  toast('✓ Estado actualizado');
+  cerrar('det-pedido');
+  renderScreen(SC);
+  renderLabels();
+}
+
 async function cambiarEstadoPed() {
+
   const p=D.pedidos.find(x=>x.id===pedActivo); if(!p) return;
   const nuevo=siguienteEstadoPedido(p); if(!nuevo) return;
   const prod=productoPedido(p.id);
@@ -2194,7 +2243,7 @@ async function cambiarEstadoPed() {
   const orden=D.ordenes.find(o=>{const d=D.ped_det.find(dd=>dd.id===o.pedido_detalle_id);return d&&d.pedido_id===pedActivo;});
   if(orden){
     const map={en_produccion:'en_proceso',listo:'listo',entregado:'entregado'};
-    if(map[nuevo]){orden.estado=map[nuevo];await actualizar('ordenes_produccion',{id:orden.id,estado:map[nuevo]});}
+    if(map[nuevo]){orden.estado=map[nuevo];await actualizar('ordenes',{id:orden.id,estado:map[nuevo]});}
   }
   if(flujoPedido(p)==='reventa' && nuevo==='entregado') await registrarSalidaProductoPedido(p.id);
   toast('✓ Estado actualizado');
@@ -2493,20 +2542,31 @@ async function moverOrden(idx,nuevoEst) {
   const pedido=pedidoId ? (arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||null) : null;
   const prod=pedidoId ? productoPedido(pedidoId) : null;
   if(estPrev===nuevoEst) return;
-  if(nuevoEst==='listo') await asegurarConsumosRealesOrden(o.id);
-  if(pedidoId && flujoPedido(pedido||{})==='fabricacion'){
-    if(estPrev==='pendiente' && (nuevoEst==='en_proceso' || nuevoEst==='listo')){
-      await ajustarStockPedidoProduccion(pedidoId, true, nuevoEst==='listo' ? 'Consumo al marcar orden lista' : 'Consumo al pasar a producción');
-      await consumirReservasPedido(pedidoId,'Material liberado a producción');
-    } else if((estPrev==='en_proceso' || estPrev==='listo') && nuevoEst==='pendiente'){
-      await devolverStockPedido(pedidoId);
-      if(det && prod) await rebuildPedidoReservas(pedidoId, det.id, prod);
+  let aviso='';
+  try {
+    if(nuevoEst==='listo') await asegurarConsumosRealesOrden(o.id);
+    if(pedidoId && flujoPedido(pedido||{})==='fabricacion'){
+      if(estPrev==='pendiente' && (nuevoEst==='en_proceso' || nuevoEst==='listo')){
+        await ajustarStockPedidoProduccion(pedidoId, true, nuevoEst==='listo' ? 'Consumo al marcar orden lista' : 'Consumo al pasar a producción');
+        await consumirReservasPedido(pedidoId,'Material liberado a producción');
+      } else if((estPrev==='en_proceso' || estPrev==='listo') && nuevoEst==='pendiente'){
+        await devolverStockPedido(pedidoId);
+        try {
+          if(det && prod) await rebuildPedidoReservas(pedidoId, det.id, prod);
+        } catch(errRes) {
+          console.error('No se pudieron reconstruir reservas al volver a pendiente', errRes);
+          aviso=' · reservas pendientes de revisar';
+        }
+      }
     }
+    o.estado=nuevoEst;
+    await actualizar('ordenes',{id:o.id,estado:nuevoEst});
+    await sincronizarPedidoDesdeOrden(o.id);
+    toast('→ '+nuevoEst.replace('_',' ')+aviso);
+  } catch(err) {
+    console.error('Error moverOrden', err);
+    toast('No se pudo mover la orden: '+String(err.message||err));
   }
-  o.estado=nuevoEst;
-  await actualizar('ordenes_produccion',{id:o.id,estado:nuevoEst});
-  await sincronizarPedidoDesdeOrden(o.id);
-  toast('→ '+nuevoEst.replace('_',' '));
   renderProduccion();
   if(typeof renderInventario==='function') renderInventario();
   if(typeof renderMovimientos==='function' && $('sub-movimientos')?.classList.contains('open')) renderMovimientos();
