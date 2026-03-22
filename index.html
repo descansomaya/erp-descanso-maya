@@ -1196,22 +1196,29 @@ function netoMovPedido(pedidoId, refTipo, refId){
 }
 
 window.ajustarStockPedidoProduccion = window.ajustarStockPedidoProduccion || async function(pedidoId, targetEnProduccion=true, motivo='Ajuste de materiales por producción'){
-  const det = detallePedido(pedidoId); if(!det) return;
+  const det = detallePedido(pedidoId); if(!det) return [];
   const prod = productoPedido(pedidoId);
   const cat = typeof categoriaProducto==='function' ? categoriaProducto(prod||{}) : (prod?.categoria||'fabricacion');
-  if(cat==='reventa') return;
-  const recs = recetaPedidoMaterialesAplicada(det.id);
+  if(cat==='reventa') return [];
+  let recs = recetaPedidoMaterialesAplicada(det.id);
+  if(!recs.length && typeof asegurarRecetaDetalleDesdeProducto==='function'){
+    await asegurarRecetaDetalleDesdeProducto(det.id);
+    recs = recetaPedidoMaterialesAplicada(det.id);
+  }
+  const movimientos=[];
   for(const r of recs){
     const mat = arr(D.materiales).find(m=>String(m.id)===String(r.material_id));
     if(!mat) continue;
     const qty = Number((r.cantidad_aplicada ?? r.cantidad) || 0);
+    if(!(qty>0)) continue;
     const actualNet = netoMovPedido(pedidoId,'material',mat.id);
     const targetNet = targetEnProduccion ? (-qty) : 0;
     const delta = Number((targetNet - actualNet).toFixed(6));
     if(!delta) continue;
-    mat.stock_actual = Math.max(0, Number(mat.stock_actual||0) + delta);
+    const nuevoStock = Number((Number(mat.stock_actual||0) + delta).toFixed(6));
+    mat.stock_actual = Math.max(0, nuevoStock);
     await actualizar('materiales', {id:mat.id, stock_actual:mat.stock_actual});
-    await registrarMovimiento({
+    const mov = await registrarMovimiento({
       tipo_movimiento: delta<0 ? 'salida_pedido' : 'devolucion_pedido',
       origen:'pedido',
       origen_id:pedidoId,
@@ -1222,7 +1229,9 @@ window.ajustarStockPedidoProduccion = window.ajustarStockPedidoProduccion || asy
       total:delta*Number(mat.costo_promedio||mat.costo_unitario||mat.costo||0),
       notas:motivo
     });
+    movimientos.push(mov);
   }
+  return movimientos;
 };
 window.descontarStockPedido = window.descontarStockPedido || async function(pedidoId){
   return ajustarStockPedidoProduccion(pedidoId, true, 'Consumo al iniciar producción');
@@ -1436,6 +1445,7 @@ window.confirmarInicioProduccion = async function(){
       D.ordenes.push(ord);
       await crear('ordenes', ord);
     }
+    if(det && typeof asegurarRecetaDetalleDesdeProducto==='function') await asegurarRecetaDetalleDesdeProducto(det.id);
     await descontarStockPedido(pedidoId);
     await consumirReservasPedido(pedidoId,'Material liberado a producción');
     p.estado='en_produccion';
@@ -1471,6 +1481,8 @@ window.confirmarInicioProduccion = async function(){
     cerrar('det-pedido');
     toast('✓ Producción iniciada');
     if(typeof renderProduccion==='function') renderProduccion();
+    if(typeof renderInventario==='function') renderInventario();
+    if(typeof renderMovimientos==='function' && $('sub-movimientos')?.classList.contains('open')) renderMovimientos();
     if(typeof renderPedidos==='function') renderPedidos();
     if(typeof renderLabels==='function') renderLabels();
   }catch(err){
@@ -1670,7 +1682,15 @@ function abrirSub(id) {
   else if(id==='sub-clientes') renderClientes();
   else if(id==='sub-productos') renderProductos();
   else if(id==='sub-inventario') renderInventario();
-  else if(id==='sub-movimientos') renderMovimientos();
+  else if(id==='sub-movimientos') {
+    const sel=$('mov-kardex-select');
+    if(sel) sel.value='';
+    filtroMovTipo='todos';
+    filtroMovOrigen='todos';
+    document.querySelectorAll('#mov-tipo-chips .chip').forEach((c,i)=>c.classList.toggle('active', i===0));
+    document.querySelectorAll('#mov-origen-chips .chip').forEach((c,i)=>c.classList.toggle('active', i===0));
+    renderMovimientos();
+  }
   else if(id==='sub-artesanos') renderArtesanos();
   else if(id==='sub-proveedores') renderProveedores();
   else if(id==='sub-gastos') renderGastos();
@@ -2470,11 +2490,13 @@ async function moverOrden(idx,nuevoEst) {
   const estPrev=String(o.estado||'').toLowerCase();
   const det=!String(o.pedido_detalle_id||'').startsWith('REP_') ? arr(D.ped_det).find(d=>String(d.id)===String(o.pedido_detalle_id)) : null;
   const pedidoId=det?.pedido_id || '';
+  const pedido=pedidoId ? (arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||null) : null;
   const prod=pedidoId ? productoPedido(pedidoId) : null;
+  if(estPrev===nuevoEst) return;
   if(nuevoEst==='listo') await asegurarConsumosRealesOrden(o.id);
-  if(pedidoId && flujoPedido(arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{})==='fabricacion'){
-    if(estPrev==='pendiente' && nuevoEst==='en_proceso'){
-      await ajustarStockPedidoProduccion(pedidoId, true, 'Consumo al pasar a producción');
+  if(pedidoId && flujoPedido(pedido||{})==='fabricacion'){
+    if(estPrev==='pendiente' && (nuevoEst==='en_proceso' || nuevoEst==='listo')){
+      await ajustarStockPedidoProduccion(pedidoId, true, nuevoEst==='listo' ? 'Consumo al marcar orden lista' : 'Consumo al pasar a producción');
       await consumirReservasPedido(pedidoId,'Material liberado a producción');
     } else if((estPrev==='en_proceso' || estPrev==='listo') && nuevoEst==='pendiente'){
       await devolverStockPedido(pedidoId);
@@ -2487,10 +2509,10 @@ async function moverOrden(idx,nuevoEst) {
   toast('→ '+nuevoEst.replace('_',' '));
   renderProduccion();
   if(typeof renderInventario==='function') renderInventario();
+  if(typeof renderMovimientos==='function' && $('sub-movimientos')?.classList.contains('open')) renderMovimientos();
   if(typeof renderPedidos==='function') renderPedidos();
   if(typeof renderLabels==='function') renderLabels();
 }
-
 async function verOrden(idx) {
   const o=D.ordenes[idx]; if(!o) return;
   ordenActiva=o.id;
@@ -3432,17 +3454,25 @@ function setFiltroMovTipo(f,el){
   filtroMovTipo=f;
   document.querySelectorAll('#mov-tipo-chips .chip').forEach(c=>c.classList.remove('active'));
   el.classList.add('active');
+  if(f==='todos'){
+    const sel=$('mov-kardex-select');
+    if(sel) sel.value='';
+  }
   renderMovimientos();
 }
 function setFiltroMovOrigen(f,el){
   filtroMovOrigen=f;
   document.querySelectorAll('#mov-origen-chips .chip').forEach(c=>c.classList.remove('active'));
   el.classList.add('active');
+  if(f==='todos'){
+    const sel=$('mov-kardex-select');
+    if(sel) sel.value='';
+  }
   renderMovimientos();
 }
 function opcionesKardex(){
-  const mats=[...D.materiales].sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''))).map(m=>`<option value="material:${m.id}">🧵 ${m.nombre}</option>`).join('');
-  const prods=[...D.productos].sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''))).map(p=>`<option value="producto:${p.id}">🛏 ${p.nombre}</option>`).join('');
+  const mats=[...arr(D.materiales)].sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''))).map(m=>`<option value="material:${m.id}">🧵 ${m.nombre}</option>`).join('');
+  const prods=[...arr(D.productos)].sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''))).map(p=>`<option value="producto:${p.id}">🛏 ${p.nombre}</option>`).join('');
   return '<option value="">— Ver todos los movimientos —</option>' + (mats?`<optgroup label="Materiales">${mats}</optgroup>`:'') + (prods?`<optgroup label="Productos">${prods}</optgroup>`:'');
 }
 function renderMovimientos(){
@@ -3454,28 +3484,39 @@ function renderMovimientos(){
   sel.innerHTML=opcionesKardex();
   if([...sel.options].some(o=>o.value===prev)) sel.value=prev;
   const selected=sel.value;
-  let rows=[...D.movimientos].sort((a,b)=>new Date(b.fecha||0)-new Date(a.fecha||0));
-  if(filtroMovTipo!=='todos') rows=rows.filter(x=>x.tipo_movimiento===filtroMovTipo);
-  if(filtroMovOrigen!=='todos') rows=rows.filter(x=>String(x.origen||'')===filtroMovOrigen);
+  let rows=[...arr(D.movimientos)].sort((a,b)=>new Date(b.fecha||0)-new Date(a.fecha||0));
+  if(filtroMovTipo!=='todos') rows=rows.filter(x=>String(x.tipo_movimiento||'')===String(filtroMovTipo));
+  if(filtroMovOrigen!=='todos') rows=rows.filter(x=>String(x.origen||'')===String(filtroMovOrigen));
+  const totalRows=rows.length;
   if(selected){
     const [refTipo,refId]=selected.split(':');
-    rows=rows.filter(x=>x.ref_tipo===refTipo && String(x.ref_id)===String(refId));
+    rows=rows.filter(x=>String(x.ref_tipo||'')===String(refTipo) && String(x.ref_id||'')===String(refId));
     const nombre=nombreRefMovimiento({ref_tipo:refTipo,ref_id:refId});
     const qtyTotal=rows.reduce((s,x)=>s+Number(x.cantidad||0),0);
     const valTotal=rows.reduce((s,x)=>s+Number(x.total||0),0);
-    const actual=refTipo==='material' ? Number((D.materiales.find(x=>x.id===refId)||{}).stock_actual||0) : Number((D.productos.find(x=>x.id===refId)||{}).stock_disponible||0);
+    const actual=refTipo==='material' ? Number((arr(D.materiales).find(x=>String(x.id)===String(refId))||{}).stock_actual||0) : Number((arr(D.productos).find(x=>String(x.id)===String(refId))||{}).stock_disponible||0);
     kardexEl.innerHTML=`<div class="stats" style="margin-bottom:0">
       <div class="stat accent"><div class="stat-val" style="font-size:15px">${nombre}</div><div class="stat-lbl">Kardex activo</div></div>
-      <div class="stat ${actual<=0?'danger':'success'}"><div class="stat-val">${actual}</div><div class="stat-lbl">Existencia actual</div></div>
+      <div class="stat ${actual<=0?'danger':'success'}"><div class="stat-val">${fmx(actual)}</div><div class="stat-lbl">Existencia actual</div></div>
       <div class="stat ${qtyTotal>=0?'success':'danger'}"><div class="stat-val">${qtyTotal>=0?'+':''}${fmx(qtyTotal)}</div><div class="stat-lbl">Movimiento neto</div></div>
       <div class="stat ${valTotal>=0?'success':'warning'}"><div class="stat-val">$${fmx(valTotal)}</div><div class="stat-lbl">Valor acumulado</div></div>
     </div>`;
   } else {
-    kardexEl.innerHTML=`<div class="alert alert-info" style="margin-bottom:0">Consulta el kardex de un material o producto para ver su historial y saldo de movimientos.</div>`;
+    const qtyTotal=rows.reduce((s,x)=>s+Number(x.cantidad||0),0);
+    const valTotal=rows.reduce((s,x)=>s+Number(x.total||0),0);
+    kardexEl.innerHTML=`<div class="stats" style="margin-bottom:0">
+      <div class="stat accent"><div class="stat-val">${totalRows}</div><div class="stat-lbl">Movimientos encontrados</div></div>
+      <div class="stat"><div class="stat-val">${new Set(rows.map(x=>`${x.ref_tipo||''}:${x.ref_id||''}`).filter(Boolean)).size}</div><div class="stat-lbl">Refs con movimiento</div></div>
+      <div class="stat ${qtyTotal>=0?'success':'danger'}"><div class="stat-val">${qtyTotal>=0?'+':''}${fmx(qtyTotal)}</div><div class="stat-lbl">Movimiento neto</div></div>
+      <div class="stat ${valTotal>=0?'success':'warning'}"><div class="stat-val">$${fmx(valTotal)}</div><div class="stat-lbl">Valor acumulado</div></div>
+    </div>`;
   }
-  if(!rows.length){listEl.innerHTML=empty('Sin movimientos para los filtros actuales');return;}
+  if(!rows.length){
+    listEl.innerHTML=empty(selected ? 'Sin movimientos para el kardex y filtros actuales' : 'Sin movimientos para los filtros actuales');
+    return;
+  }
   listEl.innerHTML='';
-  rows.slice(0,150).forEach(m=>{
+  rows.slice(0,200).forEach(m=>{
     const color=colorMovimiento(m.tipo_movimiento);
     const qty=Number(m.cantidad||0);
     const div=document.createElement('div');
