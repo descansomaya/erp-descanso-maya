@@ -440,6 +440,10 @@ body.modal-open{overflow:hidden}
     <div class="form-group">
       <label class="form-label">Producto *</label>
       <select class="form-input" id="p-producto" onchange="onProdChange()"></select>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" type="button" onclick="crearProductoRapidoDesdePedido()">+ Nuevo producto</button>
+        <div style="font-size:11px;color:var(--text3)">El producto guarda la receta maestra. El pedido solo copia esa receta y puedes ajustarla para este encargo.</div>
+      </div>
     </div>
     <div id="p-badge" style="display:none;margin-bottom:10px"></div>
     <div class="form-group"><label class="form-label">Cantidad</label><input type="number" class="form-input" id="p-cant" value="1" min="1" oninput="calcTotal()"></div>
@@ -450,9 +454,13 @@ body.modal-open{overflow:hidden}
     <div class="form-group"><label class="form-label">Fecha de entrega</label><input type="date" class="form-input" id="p-fecha"></div>
     <div class="form-group"><label class="form-label">Notas</label><textarea class="form-input" id="p-notas" placeholder="Observaciones del pedido..."></textarea></div>
     <div id="p-mat-section" style="display:none">
-      <div class="sec-title">Materiales para producción</div>
+      <div class="sec-title">Receta de este encargo</div>
+      <div class="alert alert-info" style="margin-bottom:8px;font-size:12px">Esta receta es una copia editable de la receta maestra del producto. Cambiarla aquí no modifica el catálogo.</div>
       <div id="p-mat-list"></div>
-      <button type="button" class="btn btn-secondary btn-sm" onclick="addMatPedido()">+ Agregar material</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addMatPedido()">+ Agregar material</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="recargarRecetaMaestraPedido()">↺ Cargar receta maestra</button>
+      </div>
     </div>
     <div style="height:14px"></div>
     <button class="btn btn-primary" id="btn-guardar-pedido" onclick="guardarPedido()">Guardar pedido</button>
@@ -731,10 +739,10 @@ body.modal-open{overflow:hidden}
       <input type="hidden" id="pr-material">
       <input type="hidden" id="pr-tubos" value="0">
       <div class="form-group"><label class="form-label">Días de producción</label><input type="number" class="form-input" id="pr-dias" value="7" min="1"></div>
-      <div class="sec-title">Receta base del producto</div>
+      <div class="sec-title">Receta maestra del producto</div>
       <div id="pr-receta-list"></div>
       <button type="button" class="btn btn-secondary btn-sm" id="btn-add-pr-receta" onclick="addMatProducto()">+ Agregar material</button>
-      <div class="sec-title" style="margin-top:14px">Mano de obra estimada</div>
+      <div class="sec-title" style="margin-top:14px">Mano de obra base del producto</div>
       <div id="pr-art-list"></div>
       <button type="button" class="btn btn-secondary btn-sm" id="btn-add-pr-art" onclick="addArtProducto()">+ Agregar artesano</button>
       <div class="alert alert-info" style="margin-top:10px;font-size:12px">
@@ -4902,6 +4910,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+
+  window.crearProductoRapidoDesdePedido = function(){
+    window.pendingProducto = { flujo:'pedido' };
+    cerrar('modal-pedido');
+    if(typeof abrirModalProducto==='function') abrirModalProducto();
+  };
+
+  window.recargarRecetaMaestraPedido = function(){
+    const pid=getV('p-producto');
+    const prod=arr(D.productos).find(p=>String(p.id)===String(pid));
+    if(!prod){ toast('Selecciona primero un producto'); return; }
+    const cat=(typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion'));
+    if(cat!=='fabricacion'){ toast('Este producto no usa receta de fabricación'); return; }
+    $('p-mat-list').innerHTML=''; window.matPedItems=[];
+    cargaRecetaProductoEnPedido(prod, true);
+    toast('✓ Receta maestra cargada al pedido');
+  };
+
   window.abrirModal_pedido = function(preserveEdit=false){
     if(!preserveEdit){
       editIds.pedido=null;
@@ -5368,9 +5394,23 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       toast(editIds.prod ? '✓ Producto actualizado' : '✓ Producto guardado');
+      const savedId = id;
+      const pendingProductoFlow = window.pendingProducto ? window.pendingProducto.flujo : '';
       editIds.prod = null;
       cerrar('modal-producto');
       if(typeof renderProductos==='function') renderProductos();
+      if(pendingProductoFlow==='pedido'){
+        window.pendingProducto = null;
+        if(typeof abrirModal_pedido==='function') abrirModal_pedido(true);
+        setTimeout(()=>{
+          const sel=document.getElementById('p-producto');
+          if(sel){
+            sel.innerHTML='<option value="">— Selecciona producto —</option>'+arr(D.productos).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
+            setV('p-producto', savedId);
+            if(typeof onProdChange==='function') onProdChange();
+          }
+        },80);
+      }
     }catch(err){
       console.error('guardarProducto override', err);
       toast('Error al guardar producto: '+(err.message||err));
