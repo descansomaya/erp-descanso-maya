@@ -5291,6 +5291,7 @@ function quitarLogo(){CFG.logo='';localStorage.removeItem('cfg_logo');$('logo-pr
 // ═══════════════════════════════════════════════
 window.eliminarPedido = async function(id) {
   if(!confirm('¿Eliminar pedido '+id+'? Esta acción no se puede deshacer.')) return;
+  showLoading('Eliminando pedido...');
   try{
     await liberarReservasPedido(id,'Pedido eliminado');
     const dets = arr(D.ped_det).filter(x=>String(x.pedido_id)===String(id));
@@ -5328,6 +5329,8 @@ window.eliminarPedido = async function(id) {
   }catch(err){
     console.error('eliminarPedido', err);
     toast('Error al eliminar pedido: '+(err.message||err));
+  } finally {
+    hideLoading(true);
   }
 }
 
