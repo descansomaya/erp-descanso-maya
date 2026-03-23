@@ -6167,8 +6167,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function applyLoaderWrappers(){
     [
+      ['cargarTodo', 'Cargando datos...'],
       ['guardarPedido', function(){ return (window.editIds && window.editIds.pedido) ? 'Actualizando pedido...' : 'Guardando pedido...'; }],
       ['editarPedido', 'Cargando pedido...'],
+      ['imprimirPedido', 'Generando PDF del pedido...'],
       ['regresarEstadoPed', 'Regresando estado del pedido...'],
       ['cambiarEstadoPed', 'Actualizando estado del pedido...'],
       ['guardarCliente', function(){ return (window.editIds && window.editIds.cliente) ? 'Actualizando cliente...' : 'Guardando cliente...'; }],
@@ -6181,13 +6183,22 @@ document.addEventListener('DOMContentLoaded', () => {
       ['guardarTarifaArtesano', function(){ return (window.editIds && window.editIds.tarifa_artesano) ? 'Actualizando tarifa...' : 'Guardando tarifa de artesano...'; }],
       ['guardarProveedor', function(){ return (window.editIds && window.editIds.prov) ? 'Actualizando proveedor...' : 'Guardando proveedor...'; }],
       ['guardarCompra', function(){ return (window.editIds && window.editIds.compra) ? 'Actualizando compra...' : 'Registrando compra...'; }],
+      ['editarCompra', 'Cargando compra...'],
+      ['abrirCompra', 'Cargando compra...'],
+      ['abonarCompra', 'Registrando abono de compra...'],
       ['eliminarCompra', 'Eliminando compra...'],
       ['guardarGasto', 'Guardando gasto...'],
+      ['abrirGasto', 'Cargando gasto...'],
       ['eliminarGasto', 'Eliminando gasto...'],
       ['guardarRep', function(){ return (window.editIds && window.editIds.rep) ? 'Actualizando reparación...' : 'Registrando reparación...'; }],
+      ['editarRep', 'Cargando reparación...'],
+      ['abrirRep', 'Cargando reparación...'],
       ['eliminarRep', 'Eliminando reparación...'],
       ['guardarAbono', 'Registrando abono...'],
+      ['generarCotizacion', 'Generando cotización...'],
+      ['convertirCotizacion', 'Convirtiendo cotización a pedido...'],
       ['confirmarInicioProduccion', 'Iniciando producción...'],
+      ['abrirAsignacionProduccion', 'Preparando asignación de producción...'],
       ['moverOrden', function(id, nuevoEst){
         if(String(nuevoEst||'').toLowerCase()==='pendiente') return 'Regresando orden a pendiente...';
         if(String(nuevoEst||'').toLowerCase()==='listo') return 'Marcando orden como lista...';
@@ -6199,7 +6210,9 @@ document.addEventListener('DOMContentLoaded', () => {
       ['guardarProduccionStock', 'Creando producción para stock...'],
       ['ajustarStockManual', 'Aplicando ajuste de inventario...'],
       ['rebuildPedidoReservas', 'Reconstruyendo reservas...'],
-      ['pagarArtesano', 'Registrando pago a artesano...']
+      ['pagarArtesano', 'Registrando pago a artesano...'],
+      ['guardarConfig', 'Guardando configuración...'],
+      ['exportarTodo', 'Exportando datos...']
     ].forEach(([n,m])=>wrapLoader(n,m));
   }
 
