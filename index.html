@@ -1698,11 +1698,7 @@ window.confirmarInicioProduccion = async function(){
     cerrar('modal-asignacion-prod');
     cerrar('det-pedido');
     toast('✓ Producción iniciada');
-    if(typeof renderProduccion==='function') renderProduccion();
-    if(typeof renderInventario==='function') renderInventario();
-    if(typeof renderMovimientos==='function' && $('sub-movimientos')?.classList.contains('open')) renderMovimientos();
-    if(typeof renderPedidos==='function') renderPedidos();
-    if(typeof renderLabels==='function') renderLabels();
+    refreshUIAfter('produccion');
   }catch(err){
     console.error('confirmarInicioProduccion', err);
     toast('Error al iniciar producción: '+(err.message||err));
@@ -3410,7 +3406,9 @@ async function guardarProducto() {
   // guarda receta base del producto como plantilla en receta_pedido usando pedido_id=PROD:<id>
   const tplId = recetaTemplateId(id);
   const prevTpl = recetasPlantillaProducto(id);
-  for(const r of prevTpl){ if(r.id) await eliminar('recetas', r.id); }
+  if(prevTpl.length){
+    await Promise.all(prevTpl.filter(r=>r.id).map(r=>eliminar('recetas', r.id).catch(err=>console.warn('No se pudo eliminar plantilla previa', r.id, err))));
+  }
   removeRowsByPedidoIdLike(tplId);
   if(cat==='fabricacion'){
     const recetaRows = (recetaProdItems||[]).map(i=>({
@@ -3425,14 +3423,13 @@ async function guardarProducto() {
       p.tubos_hilo = Number(recetaRows[0].cantidad||0);
       const idxProd=D.productos.findIndex(x=>x.id===id); if(idxProd>=0) Object.assign(D.productos[idxProd], {material_hilo_id:p.material_hilo_id,tubos_hilo:p.tubos_hilo});
       await actualizar('productos',{id,material_hilo_id:p.material_hilo_id,tubos_hilo:p.tubos_hilo});
-      for(const rec of recetaRows){
-        const rr={id:genId('REC', arr(D.recetas)), pedido_id:tplId, material_id:rec.material_id, cantidad:rec.cantidad, componente:rec.componente||'cuerpo', color:rec.color};
-        D.recetas.push(rr); await crear('recetas', rr);
-      }
+      const nuevasRecetas = recetaRows.map(rec=>({id:genId('REC', arr(D.recetas)), pedido_id:tplId, material_id:rec.material_id, cantidad:rec.cantidad, componente:rec.componente||'cuerpo', color:rec.color}));
+      D.recetas.push(...nuevasRecetas);
+      await Promise.all(nuevasRecetas.map(rr=>crear('recetas', rr).catch(err=>console.warn('No se pudo crear receta base', rr, err))));
     }
   }
   toast('✓ Producto guardado');$('btn-guardar-prod').disabled=false;editIds.prod=null;
-  recetaProdItems=[]; cerrar('modal-producto');renderProductos();
+  recetaProdItems=[]; cerrar('modal-producto');refreshUIAfter('producto');
 }
 function renderProductos() {
   const el=$('prod-list'); if(!el) return;
@@ -3984,9 +3981,7 @@ async function guardarProduccionStock(){
     try{ await rebuildPedidoReservas(pedidoId, detalleId, prod); }catch(errRes){ console.warn('No se pudieron crear reservas internas', errRes); }
     cerrar('modal-produccion-stock');
     toast('✓ Producción interna creada');
-    if(typeof renderPedidos==='function') renderPedidos();
-    if(typeof renderProduccion==='function') renderProduccion();
-    if(typeof renderInventario==='function') renderInventario();
+    refreshUIAfter('pedido');
     setTimeout(()=>{ try{ abrirAsignacionProduccion(pedidoId); }catch(err){ console.warn(err); } }, 120);
   }catch(err){
     console.error('guardarProduccionStock', err);
@@ -5369,14 +5364,16 @@ window.eliminarPedido = async function(id) {
     let resp = await api('delete_pedido','pedidos',{id});
     if(!(resp && resp.ok)){
       console.warn('delete_pedido no disponible, usando fallback', resp);
-      for(const row of ordArts){ if(row.id) await eliminar('ord_art', row.id); }
-      for(const row of cons){ if(row.id) await eliminar('consumos', row.id); }
-      for(const row of recs){ if(row.id) await eliminar('recetas', row.id); }
-      for(const row of reservas){ if(row.id) await eliminar('reservas', row.id); }
-      for(const row of movs){ if(row.id) await eliminar('movimientos', row.id); }
-      for(const row of ords){ if(row.id) await eliminar('ordenes', row.id); }
-      for(const det of dets){ if(det.id) await eliminar('ped_det', det.id); }
-      await eliminar('pedidos', id);
+      const jobs = [];
+      ordArts.forEach(row=>{ if(row.id) jobs.push(eliminar('ord_art', row.id)); });
+      cons.forEach(row=>{ if(row.id) jobs.push(eliminar('consumos', row.id)); });
+      recs.forEach(row=>{ if(row.id) jobs.push(eliminar('recetas', row.id)); });
+      reservas.forEach(row=>{ if(row.id) jobs.push(eliminar('reservas', row.id)); });
+      movs.forEach(row=>{ if(row.id) jobs.push(eliminar('movimientos', row.id)); });
+      ords.forEach(row=>{ if(row.id) jobs.push(eliminar('ordenes', row.id)); });
+      dets.forEach(det=>{ if(det.id) jobs.push(eliminar('ped_det', det.id)); });
+      jobs.push(eliminar('pedidos', id));
+      await Promise.all(jobs.map(p=>Promise.resolve(p).catch(err=>console.warn('No se pudo eliminar registro relacionado del pedido', err))));
     }
 
     D.ord_art = arr(D.ord_art).filter(a=>!ordIds.includes(String(a.orden_id)));
@@ -5390,13 +5387,7 @@ window.eliminarPedido = async function(id) {
 
     toast('✓ Pedido eliminado');
     cerrar('det-pedido');
-    if(typeof renderPedidos==='function') renderPedidos();
-    if(typeof renderProduccion==='function') renderProduccion();
-    if(typeof renderInventario==='function') renderInventario();
-    if(typeof renderMovimientos==='function' && $('sub-movimientos')?.classList.contains('open')) renderMovimientos();
-    if(typeof renderTrabajosActivos==='function') renderTrabajosActivos();
-    if(typeof renderKPIs==='function') renderKPIs();
-    if(typeof renderLabels==='function') renderLabels();
+    refreshUIAfter('pedido');
   }catch(err){
     console.error('eliminarPedido', err);
     toast('Error al eliminar pedido: '+(err.message||err));
@@ -5613,28 +5604,31 @@ document.addEventListener('DOMContentLoaded', () => {
   async function rebuildPedidoReservas(pedidoId, detalleId, prod){
     // borra reservas activas del pedido y recrea según flujo actual
     const actuales=arr(D.reservas).filter(r=>String(r.pedido_id)===String(pedidoId) && !['consumida','cancelada','liberada'].includes(String(r.estado||'').toLowerCase()));
-    for(const r of actuales){
-      if(r.id) await eliminar('reservas', r.id);
+    if(actuales.length){
+      await Promise.all(actuales.filter(r=>r.id).map(r=>eliminar('reservas', r.id).catch(err=>console.warn('No se pudo eliminar reserva previa', r.id, err))));
     }
     D.reservas = arr(D.reservas).filter(r=>String(r.pedido_id)!==String(pedidoId) || ['consumida','cancelada','liberada'].includes(String(r.estado||'').toLowerCase()));
     const det=detallePedido(pedidoId);
     if(!det || !prod) return;
     const cat=(typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion'));
+    const nuevasReservas = [];
     if(cat==='reventa'){
       const qty=Number(det.cantidad||0);
       if(qty>0){
-        const res={id:genId('RES',arr(D.reservas)),pedido_id:pedidoId,pedido_detalle_id:detalleId,ref_tipo:'producto',tipo:'producto',ref_id:prod.id,cantidad:qty,estado:'activa',fecha:hoy(),activa:'si'};
-        D.reservas.push(res); await crear('reservas',res);
+        nuevasReservas.push({id:genId('RES',arr(D.reservas)),pedido_id:pedidoId,pedido_detalle_id:detalleId,ref_tipo:'producto',tipo:'producto',ref_id:prod.id,cantidad:qty,estado:'activa',fecha:hoy(),activa:'si'});
       }
     } else {
       const grupos=agruparRecetaMaterialesPorInventario(recetaPedidoMaterialesAplicada(detalleId));
       for(const rr of grupos){
         const qty=Number(rr.cantidad || 0);
         if(qty>0){
-          const res={id:genId('RES',arr(D.reservas)),pedido_id:pedidoId,pedido_detalle_id:detalleId,ref_tipo:'material',tipo:'material',ref_id:rr.material_id,cantidad:qty,estado:'activa',fecha:hoy(),activa:'si'};
-          D.reservas.push(res); await crear('reservas',res);
+          nuevasReservas.push({id:genId('RES',arr(D.reservas)),pedido_id:pedidoId,pedido_detalle_id:detalleId,ref_tipo:'material',tipo:'material',ref_id:rr.material_id,cantidad:qty,estado:'activa',fecha:hoy(),activa:'si'});
         }
       }
+    }
+    if(nuevasReservas.length){
+      D.reservas.push(...nuevasReservas);
+      await Promise.all(nuevasReservas.map(res=>crear('reservas',res).catch(err=>console.warn('No se pudo crear reserva', res, err))));
     }
   }
 
@@ -5763,7 +5757,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // recetas
       const recetasPrev=arr(D.recetas).filter(r=>String(r.pedido_id)===String(detalleId));
-      for(const r of recetasPrev){ if(r.id) await eliminar('recetas', r.id); }
+      if(recetasPrev.length){
+        await Promise.all(recetasPrev.filter(r=>r.id).map(r=>eliminar('recetas', r.id).catch(err=>console.warn('No se pudo eliminar receta previa', r.id, err))));
+      }
       D.recetas=arr(D.recetas).filter(r=>String(r.pedido_id)!==String(detalleId));
       if(cat==='fabricacion'){
         const nuevos = (window.matPedItems||[]).map(i=>({
@@ -5772,9 +5768,10 @@ document.addEventListener('DOMContentLoaded', () => {
           componente:getV('pm-comp-'+i)||'cuerpo',
           color:getV('pm-color-'+i)||''
         })).filter(x=>x.material_id && x.cantidad>0);
-        for(const rec of nuevos){
-          const rr={id:genId('REC', arr(D.recetas)), pedido_id:detalleId, material_id:rec.material_id, cantidad:rec.cantidad, componente:rec.componente||'cuerpo', color:rec.color};
-          D.recetas.push(rr); await crear('recetas', rr);
+        const nuevasRecetas = nuevos.map(rec=>({id:genId('REC', arr(D.recetas)), pedido_id:detalleId, material_id:rec.material_id, cantidad:rec.cantidad, componente:rec.componente||'cuerpo', color:rec.color}));
+        if(nuevasRecetas.length){
+          D.recetas.push(...nuevasRecetas);
+          await Promise.all(nuevasRecetas.map(rr=>crear('recetas', rr).catch(err=>console.warn('No se pudo crear receta de pedido', rr, err))));
         }
       }
 
@@ -5809,10 +5806,7 @@ document.addEventListener('DOMContentLoaded', () => {
       toast(wasEdit ? '✓ Pedido actualizado' : '✓ Pedido guardado');
       editIds.pedido=null;
       cerrar('modal-pedido');
-      if(typeof renderPedidos==='function') renderPedidos();
-      if(typeof renderTrabajosActivos==='function') renderTrabajosActivos();
-      if(typeof renderKPIs==='function') renderKPIs();
-      if(typeof renderLabels==='function') renderLabels();
+      refreshUIAfter('pedido');
     } catch(err){
       console.error(err);
       toast('Error al guardar pedido: '+(err.message||err));
@@ -6242,6 +6236,58 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     wrapped.__loaderWrapped = true;
     root[fnName] = wrapped;
+  }
+
+
+  function refreshUIAfter(scope){
+    try{
+      const onPedidos = SC==='pedidos' || !!$('det-pedido')?.classList.contains('open');
+      const onProduccion = SC==='produccion' || !!$('modal-orden')?.classList.contains('open') || !!$('modal-asignacion-prod')?.classList.contains('open');
+      const onCompras = SC==='compras' || !!$('modal-compra')?.classList.contains('open');
+      const onMas = SC==='mas';
+      if(scope==='producto'){
+        if(typeof renderProductos==='function') renderProductos();
+        if(onPedidos && typeof renderPedidos==='function') renderPedidos();
+        if(onMas && typeof renderLabels==='function') renderLabels();
+        return;
+      }
+      if(scope==='pedido'){
+        if(typeof renderPedidos==='function') renderPedidos();
+        if(typeof renderTrabajosActivos==='function') renderTrabajosActivos();
+        if(typeof renderKPIs==='function') renderKPIs();
+        if(typeof renderLabels==='function') renderLabels();
+        if(onProduccion && typeof renderProduccion==='function') renderProduccion();
+        return;
+      }
+      if(scope==='produccion'){
+        if(typeof renderProduccion==='function') renderProduccion();
+        if(typeof renderInventario==='function') renderInventario();
+        if(typeof renderMovimientos==='function' && $('sub-movimientos')?.classList.contains('open')) renderMovimientos();
+        if(typeof renderPedidos==='function') renderPedidos();
+        if(typeof renderTrabajosActivos==='function') renderTrabajosActivos();
+        if(typeof renderKPIs==='function') renderKPIs();
+        if(typeof renderLabels==='function') renderLabels();
+        return;
+      }
+      if(scope==='inventario'){
+        if(typeof renderInventario==='function') renderInventario();
+        if(typeof renderMovimientos==='function' && $('sub-movimientos')?.classList.contains('open')) renderMovimientos();
+        if(typeof renderKPIs==='function') renderKPIs();
+        if(typeof renderLabels==='function') renderLabels();
+        return;
+      }
+      if(scope==='compra'){
+        if(typeof renderCompras==='function') renderCompras();
+        if(typeof renderInventario==='function') renderInventario();
+        if(typeof renderProductos==='function') renderProductos();
+        if(typeof renderLabels==='function') renderLabels();
+        return;
+      }
+      if(typeof renderScreen==='function') renderScreen(SC);
+      if(typeof renderLabels==='function') renderLabels();
+    }catch(err){
+      console.warn('refreshUIAfter', err);
+    }
   }
 
   function applyLoaderWrappers(){
