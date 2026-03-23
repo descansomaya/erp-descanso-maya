@@ -3490,8 +3490,15 @@ function cantidadRecetaAplicada(detalle, rec){
   const prod = arr(D.productos).find(p=>String(p.id)===String(detalle.producto_id));
   const plantilla = prod && typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(prod.id) : [];
   if(!plantilla.length) return qtyRec;
-  const base = plantilla.find(b=>String(b.material_id)===String(rec.material_id) && String(b.color||'')===String(rec.color||'')) ||
-               plantilla.find(b=>String(b.material_id)===String(rec.material_id));
+  const compRec = normalizarComponenteTrabajo(rec?.componente || 'cuerpo');
+  const base = plantilla.find(b =>
+    String(b.material_id)===String(rec.material_id) &&
+    String(b.color||'')===String(rec.color||'') &&
+    normalizarComponenteTrabajo(b.componente||'cuerpo')===compRec
+  ) || plantilla.find(b =>
+    String(b.material_id)===String(rec.material_id) &&
+    normalizarComponenteTrabajo(b.componente||'cuerpo')===compRec
+  );
   const qtyBase = Number(base?.cantidad||0);
   if(!(qtyBase>0)) return qtyRec;
   const scaled = qtyBase*mult;
@@ -6021,7 +6028,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setV('pr-precio', p.precio_venta||0);
       setV('pr-stock', p.stock_disponible||0);
       const matRows = (typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(id) : []).filter(r=>!String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:'));
-      if(matRows.length) matRows.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||''));
+      if(matRows.length) matRows.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'));
       else addMatProducto();
       const labRows = laborRowsProducto(id);
       if(labRows.length) labRows.forEach(r=>addArtProducto(tipoTrabajoFromRow(r), r.tarifa_artesano_id||'', r.cantidad||1, r.color||'', r.artesano_sugerido_id||String(r.material_id||'').replace(/^ART:/,''), r.componente||tipoTrabajoFromRow(r)||'cuerpo'));
