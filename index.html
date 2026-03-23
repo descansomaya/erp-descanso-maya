@@ -1321,8 +1321,9 @@ window.addMatProducto = window.addMatProducto || function(materialId='', cantida
       </select>
       <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('prm-${idn}').remove(); recetaProdItems=recetaProdItems.filter(x=>x!==${idn}); return false;">×</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
       <div><label class="form-label" style="margin-bottom:4px">Cantidad</label><input type="number" min="0" step="any" class="form-input" id="prm-qty-${idn}" value="${Number(cantidad||0)}" oninput="calcCostoEstimadoProducto()"></div>
+      <div><label class="form-label" style="margin-bottom:4px">Componente</label><select class="form-input" id="prm-comp-${idn}" onchange="calcCostoEstimadoProducto()"><option value="cuerpo" ${normalizarComponenteTrabajo(componente)==='cuerpo'?'selected':''}>Cuerpo</option><option value="brazos" ${normalizarComponenteTrabajo(componente)==='brazos'?'selected':''}>Brazos</option></select></div>
       <div><label class="form-label" style="margin-bottom:4px">Color / nota</label><input type="text" class="form-input" id="prm-color-${idn}" value="${color||''}" placeholder="Opcional" oninput="calcCostoEstimadoProducto()"></div>
     </div>`;
   host.appendChild(row);
@@ -1336,7 +1337,7 @@ function recetasPlantillaProducto(prodId){
 function removeRowsByPedidoIdLike(pid){
   D.recetas = arr(D.recetas).filter(r=>String(r.pedido_id)!==String(pid));
 }
-window.addMatProducto = function(materialId='', cantidad=1, color=''){
+window.addMatProducto = function(materialId='', cantidad=1, color='', componente='cuerpo'){
   const host=$('pr-receta-list'); if(!host) return;
   recetaProdItems = Array.isArray(recetaProdItems) ? recetaProdItems : [];
   const idn = recetaProdItems.length ? Math.max(...recetaProdItems)+1 : 0;
@@ -1367,7 +1368,7 @@ function cargaRecetaProductoEnPedido(prod, force=false){
   host.innerHTML=''; window.matPedItems=[];
   const recs = recetasPlantillaProducto(prod.id);
   if(recs.length){
-    recs.forEach(r=>addMatPedido(r.material_id, r.cantidad, r.color||''));
+    recs.forEach(r=>addMatPedido(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'));
     return;
   }
   if(prod.material_hilo_id){
@@ -1387,6 +1388,20 @@ function tarifaArtesanoById(id){
 function etiquetaEsquemaTarifa(esq){
   return esq==='por_tubo' ? 'Por tubo' : (esq==='fijo' ? 'Fijo' : 'Por pieza');
 }
+function normalizarComponenteTrabajo(v){
+  const raw=String(v||'').toLowerCase().trim();
+  if(!raw) return 'cuerpo';
+  if(['brazos','brazo','arm','arms'].includes(raw) || raw.includes('brazo')) return 'brazos';
+  if(['cuerpo','tejido','tubos','tubo','body'].includes(raw) || raw.includes('cuerpo') || raw.includes('tejid')) return 'cuerpo';
+  return 'cuerpo';
+}
+function labelComponenteTrabajo(v){
+  return normalizarComponenteTrabajo(v)==='brazos' ? 'Brazos' : 'Cuerpo';
+}
+function componenteTrabajoDesdeTexto(tipoTrabajo='', tarifa){
+  const directo = normalizarComponenteTrabajo(tipoTrabajo || tarifa?.componente || tarifa?.tipo_trabajo || '');
+  return directo || 'cuerpo';
+}
 function tarifaPredeterminadaArtesano(artId){
   const lista = tarifasArtesano(artId);
   return lista.find(t=>String(t.predeterminada)==='true') || lista[0] || null;
@@ -1401,12 +1416,14 @@ function esMaterialTuboHilo(mat){
   const nombre = String(mat.nombre||'').toLowerCase();
   return tipo.includes('hilo') || tipo.includes('tubo') || unidad.includes('tubo') || nombre.includes('hilo');
 }
-function totalTubosRecetaDetalle(detalleId, prod){
+function totalTubosRecetaDetalle(detalleId, prod, componente='cuerpo'){
+  const comp = normalizarComponenteTrabajo(componente);
   let recs = detalleId ? recetaPedidoMaterialesAplicada(detalleId) : [];
   if(recs && recs.length){
     return round2(recs.reduce((s,r)=>{
       const mat = arr(D.materiales).find(m=>String(m.id)===String(r.material_id));
       if(!esMaterialTuboHilo(mat)) return s;
+      if(normalizarComponenteTrabajo(r.componente||'cuerpo')!==comp) return s;
       return s + Number((r.cantidad_aplicada ?? r.cantidad) || 0);
     },0));
   }
@@ -1415,17 +1432,19 @@ function totalTubosRecetaDetalle(detalleId, prod){
     return round2(plant.reduce((s,r)=>{
       const mat = arr(D.materiales).find(m=>String(m.id)===String(r.material_id));
       if(!esMaterialTuboHilo(mat)) return s;
+      if(normalizarComponenteTrabajo(r.componente||'cuerpo')!==comp) return s;
       return s + Number(r.cantidad||0);
     },0));
   }
-  return round2(Number(prod?.tubos_hilo||0));
+  return comp==='cuerpo' ? round2(Number(prod?.tubos_hilo||0)) : 0;
 }
-function pagoEstimadoAsignacion(tarifa, det, prod, factor=1){
+function pagoEstimadoAsignacion(tarifa, det, prod, factor=1, tipoTrabajo='', componente=''){
   const t = tarifa || {};
   const esquema=String(t.esquema_pago||'por_pieza');
   const monto=Number(t.monto||0);
   const qty=Number(det?.cantidad||1);
-  const baseTubos = totalTubosRecetaDetalle(det?.id, prod);
+  const comp = normalizarComponenteTrabajo(componente || tipoTrabajo || t.componente || t.tipo_trabajo || 'cuerpo');
+  const baseTubos = totalTubosRecetaDetalle(det?.id, prod, comp);
   const f = Number(factor||1);
   if(esquema==='por_tubo') return round2(baseTubos * monto * f);
   if(esquema==='fijo') return round2(monto * f);
@@ -1472,7 +1491,8 @@ window.addAsignacionProduccionRow = function(data={}){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div><label class="form-label">Artesano *</label><select class="form-input" id="ap-artesano-${idx}" onchange="onCambioArtesanoAsignacionRow('${idx}')">${artOpts}</select></div>
         <div><label class="form-label">Tarifa *</label><select class="form-input" id="ap-tarifa-${idx}" onchange="recalcularPagoAsignacion()"></select></div>
-        <div><label class="form-label">Tipo de trabajo</label><input class="form-input" id="ap-tipo-${idx}" value="${data.tipo_trabajo||''}" placeholder="Ej. tejido, brazos"></div>
+        <div><label class="form-label">Tipo de trabajo</label><input class="form-input" id="ap-tipo-${idx}" value="${data.tipo_trabajo||''}" placeholder="Ej. tejido, brazos" oninput="if(!getV('ap-comp-'+idx)){ setV('ap-comp-'+idx, componenteTrabajoDesdeTexto(getV('ap-tipo-'+idx)||'')); } recalcularPagoAsignacion()"></div>
+        <div><label class="form-label">Componente</label><select class="form-input" id="ap-comp-${idx}" onchange="recalcularPagoAsignacion()"><option value="cuerpo" ${normalizarComponenteTrabajo(data.componente||data.tipo_trabajo||'cuerpo')==='cuerpo'?'selected':''}>Cuerpo</option><option value="brazos" ${normalizarComponenteTrabajo(data.componente||data.tipo_trabajo||'cuerpo')==='brazos'?'selected':''}>Brazos</option></select></div>
         <div><label class="form-label">Factor</label><input type="number" min="0" step="0.1" class="form-input" id="ap-factor-${idx}" value="${Number(data.factor_participacion||data.factor||1)}" oninput="recalcularPagoAsignacion()"></div>
         <div style="grid-column:1 / span 2"><label class="form-label">Pago estimado ($)</label><input type="number" class="form-input" id="ap-pago-${idx}" readonly></div>
       </div>
@@ -1492,6 +1512,7 @@ function recolectarAsignacionesProduccion(){
       tarifa_artesano_id:getV('ap-tarifa-'+idx),
       tipo_trabajo:getV('ap-tipo-'+idx),
       factor_participacion:Number(getV('ap-factor-'+idx)||1),
+      componente:getV('ap-comp-'+idx)||'cuerpo',
       pago_estimado:Number(getV('ap-pago-'+idx)||0)
     };
   }).filter(x=>x.artesano_id && x.tarifa_artesano_id && x.factor_participacion>0);
@@ -1519,8 +1540,9 @@ window.recalcularPagoAsignacion = function(){
     const idx = String(row.id||'').replace('ap-row-','');
     const tarifa=tarifaArtesanoById(getV('ap-tarifa-'+idx));
     const factor=Number(getV('ap-factor-'+idx)||1);
-    setV('ap-pago-'+idx, pagoEstimadoAsignacion(tarifa, det, prod, factor));
+    setV('ap-pago-'+idx, pagoEstimadoAsignacion(tarifa, det, prod, factor, getV('ap-tipo-'+idx)||'', getV('ap-comp-'+idx)||''));
     if(!getV('ap-tipo-'+idx) && tarifa?.tipo_trabajo) setV('ap-tipo-'+idx, tarifa.tipo_trabajo);
+    if(!getV('ap-comp-'+idx)) setV('ap-comp-'+idx, componenteTrabajoDesdeTexto(getV('ap-tipo-'+idx)||'', tarifa));
   });
 };
 
@@ -1639,6 +1661,7 @@ window.confirmarInicioProduccion = async function(){
           tarifa_artesano_id: a.tarifa_artesano_id,
           tarifa_nombre: tarifa.nombre_tarifa||tarifa.nombre||'',
           tipo_trabajo: a.tipo_trabajo || tarifa.tipo_trabajo || '',
+          componente: a.componente || componenteTrabajoDesdeTexto(a.tipo_trabajo || tarifa.tipo_trabajo || '', tarifa),
           esquema_pago_aplicado: tarifa.esquema_pago||'por_pieza',
           monto_tarifa_aplicado: Number(tarifa.monto||0),
           factor_participacion: Number(a.factor_participacion||1),
@@ -3334,8 +3357,8 @@ function abrirModalProducto(id) {
     setV('pr-dias',p.dias_produccion||7);setV('pr-precio',p.precio_venta);
     setV('pr-costo',p.costo_produccion||0);setV('pr-stock',p.stock_disponible||0);
     const recs = recetasPlantillaProducto(id);
-    if(recs.length) recs.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||''));
-    else addMatProducto(p.material_hilo_id||'', Number(p.tubos_hilo||0)||1, '');
+    if(recs.length) recs.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'));
+    else addMatProducto(p.material_hilo_id||'', Number(p.tubos_hilo||0)||1, '', 'cuerpo');
     onProdCatChange();
   } else {
     clr('pr-nombre','pr-material','pr-precio','pr-costo');setV('pr-cat','fabricacion');
@@ -3374,6 +3397,7 @@ async function guardarProducto() {
     const recetaRows = (recetaProdItems||[]).map(i=>({
       material_id:getV('prm-mat-'+i),
       cantidad:Number(getV('prm-qty-'+i)||0),
+      componente:getV('prm-comp-'+i)||'cuerpo',
       color:getV('prm-color-'+i)||''
     })).filter(x=>x.material_id && x.cantidad>0);
     if(recetaRows.length){
@@ -3383,7 +3407,7 @@ async function guardarProducto() {
       const idxProd=D.productos.findIndex(x=>x.id===id); if(idxProd>=0) Object.assign(D.productos[idxProd], {material_hilo_id:p.material_hilo_id,tubos_hilo:p.tubos_hilo});
       await actualizar('productos',{id,material_hilo_id:p.material_hilo_id,tubos_hilo:p.tubos_hilo});
       for(const rec of recetaRows){
-        const rr={id:genId('REC', arr(D.recetas)), pedido_id:tplId, material_id:rec.material_id, cantidad:rec.cantidad, color:rec.color};
+        const rr={id:genId('REC', arr(D.recetas)), pedido_id:tplId, material_id:rec.material_id, cantidad:rec.cantidad, componente:rec.componente||'cuerpo', color:rec.color};
         D.recetas.push(rr); await crear('recetas', rr);
       }
     }
@@ -3455,7 +3479,7 @@ function resumenConsumoOrden(ordenId){
 }
 
 function recetaPedidoMateriales(detalleId){
-  return arr(D.recetas).filter(r=>String(r.pedido_id)===String(detalleId) && !String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:'));
+  return arr(D.recetas).filter(r=>String(r.pedido_id)===String(detalleId) && !String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:')).map(r=>({ ...r, componente:r.componente||'cuerpo' }));
 }
 
 function cantidadRecetaAplicada(detalle, rec){
@@ -3494,6 +3518,7 @@ async function asegurarRecetaDetalleDesdeProducto(detalleId){
       material_id:base.material_id,
       cantidad:Number(base.cantidad||0)*mult,
       color:base.color||'',
+      componente:base.componente||'cuerpo',
       notas:base.notas||base.color||''
     };
     D.recetas.push(rr);
@@ -5293,36 +5318,55 @@ window.eliminarPedido = async function(id) {
   if(!confirm('¿Eliminar pedido '+id+'? Esta acción no se puede deshacer.')) return;
   showLoading('Eliminando pedido...');
   try{
-    await liberarReservasPedido(id,'Pedido eliminado');
+    const pedido = arr(D.pedidos).find(x=>String(x.id)===String(id));
     const dets = arr(D.ped_det).filter(x=>String(x.pedido_id)===String(id));
     const detIds = dets.map(x=>String(x.id));
-    const ordIds = arr(D.ordenes).filter(o=>detIds.includes(String(o.pedido_detalle_id))).map(o=>String(o.id));
+    const ords = arr(D.ordenes).filter(o=>detIds.includes(String(o.pedido_detalle_id)));
+    const ordIds = ords.map(o=>String(o.id));
+    const recs = arr(D.recetas).filter(x=>detIds.includes(String(x.pedido_id)));
+    const cons = arr(D.consumos).filter(c=>ordIds.includes(String(c.orden_id)));
+    const ordArts = arr(D.ord_art).filter(a=>ordIds.includes(String(a.orden_id)));
+    const reservas = arr(D.reservas).filter(x=>String(x.pedido_id)===String(id));
+    const movs = arr(D.movimientos).filter(m=>String(m.origen||'')==='pedido' && String(m.origen_id||'')===String(id));
 
-    // limpia caché local
+    if(pedido){
+      const flujo = typeof flujoPedido==='function' ? flujoPedido(pedido) : 'fabricacion';
+      if(flujo==='fabricacion'){
+        await devolverStockPedido(id);
+      }else{
+        await ajustarSalidaProductoPedido(id, false, 'Reversión por eliminación de pedido');
+      }
+      await liberarReservasPedido(id,'Pedido eliminado');
+    }
+
+    let resp = await api('delete_pedido','pedidos',{id});
+    if(!(resp && resp.ok)){
+      console.warn('delete_pedido no disponible, usando fallback', resp);
+      for(const row of ordArts){ if(row.id) await eliminar('ord_art', row.id); }
+      for(const row of cons){ if(row.id) await eliminar('consumos', row.id); }
+      for(const row of recs){ if(row.id) await eliminar('recetas', row.id); }
+      for(const row of reservas){ if(row.id) await eliminar('reservas', row.id); }
+      for(const row of movs){ if(row.id) await eliminar('movimientos', row.id); }
+      for(const row of ords){ if(row.id) await eliminar('ordenes', row.id); }
+      for(const det of dets){ if(det.id) await eliminar('ped_det', det.id); }
+      await eliminar('pedidos', id);
+    }
+
+    D.ord_art = arr(D.ord_art).filter(a=>!ordIds.includes(String(a.orden_id)));
     D.recetas = arr(D.recetas).filter(x=>!detIds.includes(String(x.pedido_id)));
     D.consumos = arr(D.consumos).filter(c=>!ordIds.includes(String(c.orden_id)));
     D.ordenes = arr(D.ordenes).filter(o=>!detIds.includes(String(o.pedido_detalle_id)));
     D.ped_det = arr(D.ped_det).filter(x=>String(x.pedido_id)!==String(id));
     D.reservas = arr(D.reservas).filter(x=>String(x.pedido_id)!==String(id));
+    D.movimientos = arr(D.movimientos).filter(m=>!(String(m.origen||'')==='pedido' && String(m.origen_id||'')===String(id)));
     D.pedidos = arr(D.pedidos).filter(x=>String(x.id)!==String(id));
-
-    // intenta borrado en cascada en Apps Script; si no existe, usa fallback
-    let resp = await api('delete_pedido','pedidos',{id});
-    if(!(resp && resp.ok)){
-      console.warn('delete_pedido no disponible, usando fallback', resp);
-      for(const det of dets){
-        const recs = arr(D.recetas).filter(r=>String(r.pedido_id)===String(det.id));
-        for(const r of recs){ if(r.id) await eliminar('recetas', r.id); }
-        const ords = arr(D.ordenes).filter(o=>String(o.pedido_detalle_id)===String(det.id));
-        for(const o of ords){ if(o.id) await eliminar('ordenes', o.id); }
-        await eliminar('ped_det', det.id);
-      }
-      await eliminar('pedidos', id);
-    }
 
     toast('✓ Pedido eliminado');
     cerrar('det-pedido');
     if(typeof renderPedidos==='function') renderPedidos();
+    if(typeof renderProduccion==='function') renderProduccion();
+    if(typeof renderInventario==='function') renderInventario();
+    if(typeof renderMovimientos==='function' && $('sub-movimientos')?.classList.contains('open')) renderMovimientos();
     if(typeof renderTrabajosActivos==='function') renderTrabajosActivos();
     if(typeof renderKPIs==='function') renderKPIs();
     if(typeof renderLabels==='function') renderLabels();
@@ -5481,7 +5525,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }, true);
 
   // -------- PEDIDOS --------
-  window.addMatPedido = function(materialId='', cantidad=1, color=''){
+  window.addMatPedido = function(materialId='', cantidad=1, color='', componente='cuerpo'){
     const host=$('p-mat-list');
     if(!host){ console.warn('No existe p-mat-list'); return; }
     const idx=(window.matPedItems=window.matPedItems||[]);
@@ -5498,8 +5542,9 @@ document.addEventListener('DOMContentLoaded', () => {
         </select>
         <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('pm-${idn}').remove(); matPedItems=matPedItems.filter(x=>x!==${idn}); return false;">×</button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
         <div><label class="form-label" style="margin-bottom:4px">Cantidad</label><input type="number" min="0" step="any" class="form-input" id="pm-qty-${idn}" value="${Number(cantidad||0)}"></div>
+        <div><label class="form-label" style="margin-bottom:4px">Componente</label><select class="form-input" id="pm-comp-${idn}"><option value="cuerpo" ${normalizarComponenteTrabajo(componente)==='cuerpo'?'selected':''}>Cuerpo</option><option value="brazos" ${normalizarComponenteTrabajo(componente)==='brazos'?'selected':''}>Brazos</option></select></div>
         <div><label class="form-label" style="margin-bottom:4px">Color / nota</label><input type="text" class="form-input" id="pm-color-${idn}" value="${color||''}" placeholder="Opcional"></div>
       </div>`;
     host.appendChild(row);
@@ -5626,7 +5671,7 @@ document.addEventListener('DOMContentLoaded', () => {
       $('p-mat-list').innerHTML=''; window.matPedItems=[];
       if(cat==='fabricacion'){
         const recs=arr(D.recetas).filter(r=>String(r.pedido_id)===String(det?.id));
-        if(recs.length) recs.forEach(r=>addMatPedido(r.material_id, r.cantidad, r.color||''));
+        if(recs.length) recs.forEach(r=>addMatPedido(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'));
         else cargaRecetaProductoEnPedido(prod, true);
       }
     }, 50);
@@ -5697,10 +5742,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const nuevos = (window.matPedItems||[]).map(i=>({
           material_id:getV('pm-mat-'+i),
           cantidad:Number(getV('pm-qty-'+i)||0),
+          componente:getV('pm-comp-'+i)||'cuerpo',
           color:getV('pm-color-'+i)||''
         })).filter(x=>x.material_id && x.cantidad>0);
         for(const rec of nuevos){
-          const rr={id:genId('REC', arr(D.recetas)), pedido_id:detalleId, material_id:rec.material_id, cantidad:rec.cantidad, color:rec.color};
+          const rr={id:genId('REC', arr(D.recetas)), pedido_id:detalleId, material_id:rec.material_id, cantidad:rec.cantidad, componente:rec.componente||'cuerpo', color:rec.color};
           D.recetas.push(rr); await crear('recetas', rr);
         }
       }
@@ -5884,15 +5930,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const recetaRowsDom = Array.from(document.querySelectorAll('#pr-receta-list > div[id^="prm-"]'));
     let totalMat = 0;
-    let totalTubos = 0;
+    const totalTubos = {cuerpo:0,brazos:0};
     recetaRowsDom.forEach(row=>{
       const i = String(row.id||'').replace('prm-','');
       const matId = document.getElementById('prm-mat-'+i)?.value || '';
       const qty = Number(document.getElementById('prm-qty-'+i)?.value || 0);
+      const comp = normalizarComponenteTrabajo(document.getElementById('prm-comp-'+i)?.value || 'cuerpo');
       if(!matId || qty<=0) return;
       const mat = (D.materiales||[]).find(m=>String(m.id)===String(matId));
       totalMat += qty * costoMat(mat);
-      if(esMaterialTuboHilo(mat)) totalTubos += qty;
+      if(esMaterialTuboHilo(mat)) totalTubos[comp] = Number(totalTubos[comp]||0) + qty;
     });
     const laborRowsDom = Array.from(document.querySelectorAll('#pr-art-list > div[id^="pra-"]'));
     let totalLabor = 0;
@@ -5900,11 +5947,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const i = String(row.id||'').replace('pra-','');
       const tarifaId = document.getElementById('pra-tarifa-'+i)?.value || '';
       const factor = Number(document.getElementById('pra-factor-'+i)?.value || 0);
+      const comp = normalizarComponenteTrabajo(document.getElementById('pra-comp-'+i)?.value || document.getElementById('pra-tipo-'+i)?.value || 'cuerpo');
       if(!tarifaId || factor<=0) return;
       const tarifaObj = tarifaArtesanoById(tarifaId) || {};
       const tarifa = Number(tarifaObj.monto||0);
       const esquema = String(tarifaObj.esquema_pago||'por_pieza');
-      if(esquema==='por_tubo') totalLabor += tarifa * totalTubos * factor;
+      if(esquema==='por_tubo') totalLabor += tarifa * Number(totalTubos[comp]||0) * factor;
       else if(esquema==='fijo') totalLabor += tarifa * factor;
       else totalLabor += tarifa * factor;
     });
@@ -5912,11 +5960,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const inp = document.getElementById('pr-costo');
     if(inp) inp.value = total;
     const box = document.getElementById('pr-cost-breakdown');
-    if(box) box.innerHTML = `<div class="card-note">Materiales: $${typeof fmx==='function'?fmx(totalMat):totalMat} · Mano de obra estimada: $${typeof fmx==='function'?fmx(totalLabor):totalLabor}</div>`;
+    if(box) box.innerHTML = `<div class="card-note">Materiales: $${typeof fmx==='function'?fmx(totalMat):totalMat} · Mano de obra estimada: $${typeof fmx==='function'?fmx(totalLabor):totalLabor}</div><div class="card-note">Tubos cuerpo: ${typeof fmx==='function'?fmx(totalTubos.cuerpo||0):totalTubos.cuerpo||0} · Tubos brazos: ${typeof fmx==='function'?fmx(totalTubos.brazos||0):totalTubos.brazos||0}</div>`;
     return total;
   };
 
-  window.addArtProducto = function(tipoTrabajo='', tarifaId='', factor=1, nota='', artesanoSugeridoId=''){
+  window.addArtProducto = function(tipoTrabajo='', tarifaId='', factor=1, nota='', artesanoSugeridoId='', componente=''){
     const host = document.getElementById('pr-art-list');
     if(!host) return;
     window.laborProdItems = Array.isArray(window.laborProdItems) ? window.laborProdItems : [];
@@ -5930,11 +5978,12 @@ document.addEventListener('DOMContentLoaded', () => {
         <input type="text" class="form-input" id="pra-tipo-${idn}" value="${tipoTrabajo||''}" placeholder="Tipo de trabajo. Ej: tejido, brazos, remate" oninput="calcCostoEstimadoProducto()">
         <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('pra-${idn}').remove(); laborProdItems=laborProdItems.filter(x=>x!==${idn}); calcCostoEstimadoProducto(); return false;">×</button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
         <div>
           <label class="form-label" style="margin-bottom:4px">Tarifa referencial</label>
           <select class="form-input" id="pra-tarifa-${idn}" onchange="calcCostoEstimadoProducto()"></select>
         </div>
+        <div><label class="form-label" style="margin-bottom:4px">Componente</label><select class="form-input" id="pra-comp-${idn}" onchange="calcCostoEstimadoProducto()"><option value="cuerpo" ${normalizarComponenteTrabajo(componente||tipoTrabajo)==='cuerpo'?'selected':''}>Cuerpo</option><option value="brazos" ${normalizarComponenteTrabajo(componente||tipoTrabajo)==='brazos'?'selected':''}>Brazos</option></select></div>
         <div><label class="form-label" style="margin-bottom:4px">Factor de participación</label><input type="number" min="0" step="0.1" class="form-input" id="pra-factor-${idn}" value="${Number(factor||0)}" oninput="calcCostoEstimadoProducto()"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -5975,7 +6024,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if(matRows.length) matRows.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||''));
       else addMatProducto();
       const labRows = laborRowsProducto(id);
-      if(labRows.length) labRows.forEach(r=>addArtProducto(tipoTrabajoFromRow(r), r.tarifa_artesano_id||'', r.cantidad||1, r.color||'', r.artesano_sugerido_id||String(r.material_id||'').replace(/^ART:/,'')));
+      if(labRows.length) labRows.forEach(r=>addArtProducto(tipoTrabajoFromRow(r), r.tarifa_artesano_id||'', r.cantidad||1, r.color||'', r.artesano_sugerido_id||String(r.material_id||'').replace(/^ART:/,''), r.componente||tipoTrabajoFromRow(r)||'cuerpo'));
       else addArtProducto();
       setTimeout(()=>calcCostoEstimadoProducto(), 30);
     } else {
@@ -6027,6 +6076,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return {
           material_id:document.getElementById('prm-mat-'+i)?.value || '',
           cantidad:Number(document.getElementById('prm-qty-'+i)?.value || 0),
+          componente:document.getElementById('prm-comp-'+i)?.value || 'cuerpo',
           color:document.getElementById('prm-color-'+i)?.value || ''
         };
       }).filter(x=>x.material_id && x.cantidad>0);
@@ -6049,7 +6099,7 @@ document.addEventListener('DOMContentLoaded', () => {
       D.recetas = (D.recetas||[]).filter(r=>String(r.pedido_id)!==tplId);
 
       for(const rec of recetaRows){
-        const rr={id:genId('REC', D.recetas||[]), pedido_id:tplId, material_id:rec.material_id, cantidad:rec.cantidad, color:rec.color};
+        const rr={id:genId('REC', D.recetas||[]), pedido_id:tplId, material_id:rec.material_id, cantidad:rec.cantidad, componente:rec.componente||'cuerpo', color:rec.color};
         D.recetas.push(rr); await crear('recetas', rr);
       }
 
@@ -6062,6 +6112,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tipo_trabajo:document.getElementById('pra-tipo-'+i)?.value || '',
         tarifa_artesano_id:document.getElementById('pra-tarifa-'+i)?.value || '',
         factor:Number(document.getElementById('pra-factor-'+i)?.value || 0),
+        componente:document.getElementById('pra-comp-'+i)?.value || 'cuerpo',
         nota:document.getElementById('pra-nota-'+i)?.value || '',
         artesano_sugerido_id:document.getElementById('pra-art-'+i)?.value || ''
       })).filter(x=>x.tipo_trabajo && x.tarifa_artesano_id && x.factor>0);
@@ -6075,6 +6126,7 @@ document.addEventListener('DOMContentLoaded', () => {
           cantidad:row.factor,
           color:row.nota,
           tipo_trabajo:row.tipo_trabajo,
+          componente:row.componente||componenteTrabajoDesdeTexto(row.tipo_trabajo||'', tarifa),
           artesano_sugerido_id:row.artesano_sugerido_id,
           tarifa_artesano_id:row.tarifa_artesano_id,
           tarifa_nombre:tarifa.nombre_tarifa||tarifa.nombre||'',
