@@ -1073,6 +1073,18 @@ body.modal-open{overflow:hidden}
       <div id="diag-resumen" class="alert alert-info" style="margin-bottom:8px;font-size:12px">Aún no se ha ejecutado una prueba en esta sesión.</div>
       <div id="diag-detalle" style="max-height:220px;overflow:auto"></div>
     </div>
+    <div class="card" style="padding:12px;margin-top:10px">
+      <div class="card-row" style="align-items:center;margin-bottom:8px">
+        <div>
+          <div class="card-title">Errores y alertas</div>
+          <div class="card-sub">Últimos errores registrados por el sistema</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="cargarLogsErrores()">Actualizar</button>
+      </div>
+      <div id="err-alerta" class="alert alert-info" style="margin-bottom:8px;font-size:12px">Aún no se han cargado errores.</div>
+      <div id="err-stats" class="stats" style="margin-bottom:8px;display:none"></div>
+      <div id="err-list" style="max-height:260px;overflow:auto"></div>
+    </div>
     <button class="btn btn-primary" onclick="guardarConfig()">Guardar y conectar</button>
     <button class="btn btn-secondary" onclick="probarConexionDiagnostica()">Probar conexión</button>
     <button class="btn btn-secondary" onclick="cerrar('sub-config')">Cancelar</button>
@@ -1949,10 +1961,15 @@ function prepModal(id) {
 // ═══════════════════════════════════════════════
 async function api(action, sheet, data) {
   if(!CFG.url) { console.warn('Sin URL'); return null; }
-  // Usar GET con datos en URL — evita pérdida de body en redirección 302 de Apps Script
-  const params = {action, sheet, key: CFG.key};
-  if(data) params.data = JSON.stringify(data);
-  const qs = Object.keys(params).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(params[k])).join('&');
+  const params = (action && typeof action==='object' && !Array.isArray(action))
+    ? Object.assign({}, action)
+    : {action, sheet};
+  params.key = CFG.key;
+  if(params.data && typeof params.data !== 'string') params.data = JSON.stringify(params.data);
+  else if(data !== undefined && !params.data) params.data = JSON.stringify(data);
+  const qs = Object.keys(params)
+    .filter(k => params[k] !== undefined && params[k] !== null && params[k] !== '')
+    .map(k=>encodeURIComponent(k)+'='+encodeURIComponent(params[k])).join('&');
   const url = CFG.url + '?' + qs;
   return new Promise(resolve => {
     const xhr = new XMLHttpRequest();
@@ -1960,9 +1977,9 @@ async function api(action, sheet, data) {
     xhr.timeout = 20000;
     xhr.onload = () => {
       try { resolve(JSON.parse(xhr.responseText)); }
-      catch(e) { console.error('Parse:', xhr.responseText.slice(0,100)); resolve(null); }
+      catch(e) { console.error('Parse:', xhr.responseText.slice(0,160)); resolve(null); }
     };
-    xhr.onerror = xhr.ontimeout = () => { console.error('XHR fail',action,sheet); resolve(null); };
+    xhr.onerror = xhr.ontimeout = () => { console.error('XHR fail',params.action,params.sheet); resolve(null); };
     xhr.send();
   });
 }
@@ -2024,7 +2041,7 @@ async function probarConexionDiagnostica(){
     ['artesanos','artesanos'],['tarifas_artesano','tarifas_artesano'],['ordenes','ordenes_produccion'],['gastos','gastos'],['ped_det','pedido_detalle'],
     ['proveedores','proveedores'],['compras','compras'],['comp_det','compra_detalle'],['pago_art','pago_artesanos'],
     ['abonos','abonos_clientes'],['recetas','receta_pedido'],['reparaciones','reparaciones'],
-    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion'],['ord_art','ordenes_produccion_artesanos']
+    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion'],['ord_art','ordenes_produccion_artesanos'],['logs_errores','logs_errores']
   ];
   const details = await Promise.all(pairs.map(([k,s]) => leerDiagnostico(s,k)));
   LAST_LOAD_REPORT = {
@@ -2052,26 +2069,63 @@ const SHEET_MAP = {
   ped_det:'pedido_detalle', proveedores:'proveedores', compras:'compras',
   comp_det:'compra_detalle', pago_art:'pago_artesanos', abonos:'abonos_clientes',
   recetas:'receta_pedido', reparaciones:'reparaciones', movimientos:'movimientos_inventario',
-  reservas:'reservas_inventario', consumos:'consumos_produccion', ord_art:'ordenes_produccion_artesanos'
+  reservas:'reservas_inventario', consumos:'consumos_produccion', ord_art:'ordenes_produccion_artesanos',
+  logs_errores:'logs_errores'
 };
 function sheetName(s){ return SHEET_MAP[s]||s; }
 
+async function logErrorFront(origen, accion, error, extra){
+  try{
+    if(!CFG.url) return null;
+    const payload = {
+      fecha: hoy(),
+      origen: origen || 'frontend',
+      accion: accion || '',
+      mensaje: (error && error.message) ? String(error.message) : String(error || ''),
+      detalle: JSON.stringify({
+        message: (error && error.message) ? String(error.message) : String(error || ''),
+        stack: error && error.stack ? String(error.stack) : '',
+        extra: extra || null,
+        pantalla: SC || ''
+      }),
+      severidad: 'error',
+      pantalla: SC || ''
+    };
+    return await api({action:'write', sheet:'logs_errores', data: payload});
+  }catch(e){
+    console.warn('No se pudo registrar log frontend', e);
+    return null;
+  }
+}
+function errorTextFromResponse(r, fallback){
+  if(!r) return fallback || 'Sin respuesta del servidor';
+  return String(r.error || r.message || r.detail || fallback || 'Error desconocido');
+}
+async function ensureOkResponse(r, accion, sheet, payload){
+  if(r && r.ok) return r;
+  const msg = errorTextFromResponse(r, 'Error al guardar en Sheets');
+  await logErrorFront('frontend', accion + ':' + (sheet||''), new Error(msg), {respuesta:r||null, payload:payload||null});
+  throw new Error(msg);
+}
+
 async function crear(s,d) {
   const r = await api('write', sheetName(s), d);
-  if(!r || !r.ok) {
-    console.error('Error al crear en', s, ':', r);
-    toast('⚠️ Error al guardar en Sheets — revisa la conexión');
-  }
+  await ensureOkResponse(r, 'write', s, d);
   setStatus(r?.ok);
   return r;
 }
 async function actualizar(s,d) {
   const r = await api('update', sheetName(s), d);
-  if(!r || !r.ok) console.error('Error al actualizar en', s, ':', r);
+  await ensureOkResponse(r, 'update', s, d);
   setStatus(r?.ok);
   return r;
 }
-async function eliminar(s,id) { return await api('delete',sheetName(s),{id}); }
+async function eliminar(s,id) {
+  const r = await api('delete',sheetName(s),{id});
+  await ensureOkResponse(r, 'delete', s, {id});
+  setStatus(r?.ok);
+  return r;
+}
 
 function setStatus(ok) {
   const dot=$('status-dot'), txt=$('status-txt');
@@ -2149,7 +2203,7 @@ async function cargarTodo() {
     ['artesanos','artesanos'],['tarifas_artesano','tarifas_artesano'],['ordenes','ordenes_produccion'],['gastos','gastos'],['ped_det','pedido_detalle'],
     ['proveedores','proveedores'],['compras','compras'],['comp_det','compra_detalle'],['pago_art','pago_artesanos'],
     ['abonos','abonos_clientes'],['recetas','receta_pedido'],['reparaciones','reparaciones'],
-    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion'],['ord_art','ordenes_produccion_artesanos']
+    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion'],['ord_art','ordenes_produccion_artesanos'],['logs_errores','logs_errores']
   ];
 
   try {
@@ -3985,7 +4039,11 @@ async function guardarProduccionStock(){
     setTimeout(()=>{ try{ abrirAsignacionProduccion(pedidoId); }catch(err){ console.warn(err); } }, 120);
   }catch(err){
     console.error('guardarProduccionStock', err);
-    toast('Error al crear producción interna: '+(err.message||err));
+    await logErrorFront('frontend','guardarProduccionStock', err, {productoId, cantidad, nota});
+    hideLoading(true);
+    setTimeout(()=>alert('Error al crear producción interna:
+
+'+(err.message||err)),60);
   } finally {
     hideLoading();
     if(btn){ btn.disabled=false; btn.textContent='Crear orden interna'; }
@@ -5303,11 +5361,67 @@ function buscar(q) {
 // ═══════════════════════════════════════════════
 // CONFIGURACIÓN
 // ═══════════════════════════════════════════════
+async function cargarLogsErrores(){
+  const alerta=$('err-alerta'), stats=$('err-stats'), list=$('err-list');
+  if(!alerta || !stats || !list) return;
+  if(!CFG.url){
+    alerta.className='alert alert-warning';
+    alerta.textContent='Configura primero la URL del Web App para ver errores.';
+    stats.style.display='none';
+    list.innerHTML='';
+    return;
+  }
+  alerta.className='alert alert-info';
+  alerta.textContent='Cargando errores...';
+  try{
+    const rows = await leer('logs_errores');
+    const logs = arr(rows).sort((a,b)=>new Date(b.fecha||0)-new Date(a.fecha||0)).slice(0,50);
+    const now = Date.now();
+    const ult24 = logs.filter(x=>{ const t=new Date(x.fecha||0).getTime(); return t && (now-t)<=86400000; }).length;
+    const ult1h = logs.filter(x=>{ const t=new Date(x.fecha||0).getTime(); return t && (now-t)<=3600000; }).length;
+    const crit = logs.filter(x=>String(x.severidad||'').toLowerCase()==='critico').length;
+    stats.style.display='grid';
+    stats.innerHTML = `
+      <div class="stat danger"><div class="stat-val">${logs.length}</div><div class="stat-lbl">Últimos logs</div></div>
+      <div class="stat warning"><div class="stat-val">${ult24}</div><div class="stat-lbl">Últimas 24h</div></div>
+      <div class="stat accent"><div class="stat-val">${ult1h}</div><div class="stat-lbl">Última hora</div></div>
+      <div class="stat ${crit?'danger':'success'}"><div class="stat-val">${crit}</div><div class="stat-lbl">Críticos</div></div>`;
+    if(!logs.length){
+      alerta.className='alert alert-success';
+      alerta.textContent='No hay errores registrados recientemente.';
+      list.innerHTML='';
+      return;
+    }
+    alerta.className = ult1h ? 'alert alert-danger' : (ult24 ? 'alert alert-warning' : 'alert alert-info');
+    alerta.innerHTML = ult1h
+      ? `⚠️ Se registraron ${ult1h} error(es) en la última hora.`
+      : (ult24 ? `Hay ${ult24} error(es) en las últimas 24 horas.` : 'Sin alertas recientes.');
+    list.innerHTML = logs.map(l=>`
+      <div class="card" style="padding:10px;margin-bottom:6px;border-color:${String(l.severidad||'').toLowerCase()==='critico'?'rgba(224,90,107,.35)':'var(--border)'}">
+        <div class="card-row" style="align-items:center">
+          <div>
+            <div class="card-title" style="font-size:13px">${l.accion||'Sin acción'} <span class="card-note">· ${l.origen||'frontend'}</span></div>
+            <div class="card-sub">${l.mensaje||'Sin mensaje'}</div>
+            <div class="card-note">${l.fecha?new Date(l.fecha).toLocaleString('es-MX'):''}${l.pantalla?` · Pantalla: ${l.pantalla}`:''}</div>
+            ${l.detalle?`<details style="margin-top:6px"><summary style="font-size:11px;color:var(--text3);cursor:pointer">Ver detalle</summary><div style="font-size:11px;color:var(--text2);white-space:pre-wrap;margin-top:6px">${String(l.detalle).replace(/[<>&]/g, s=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[s]))}</div></details>`:''}
+          </div>
+          <span class="badge ${String(l.severidad||'').toLowerCase()==='critico'?'cancelado':'rep'}">${l.severidad||'error'}</span>
+        </div>
+      </div>`).join('');
+  }catch(err){
+    console.error('cargarLogsErrores', err);
+    alerta.className='alert alert-danger';
+    alerta.textContent='No se pudieron cargar los errores: ' + (err.message||err);
+    list.innerHTML='';
+    stats.style.display='none';
+  }
+}
 function cargarConfig() {
   setV('cfg-url',CFG.url);setV('cfg-key',CFG.key);setV('cfg-emp',CFG.emp);setV('cfg-tel',CFG.tel);
   if(CFG.logo){$('logo-img').src=CFG.logo;$('logo-preview').style.display='block';}
   else {$('logo-preview').style.display='none';}
   renderDiagnosticoConfig();
+  cargarLogsErrores();
 }
 function guardarConfig() {
   const url=getV('cfg-url'),key=getV('cfg-key'),emp=getV('cfg-emp')||'Descanso Maya',tel=getV('cfg-tel');
@@ -5318,6 +5432,7 @@ function guardarConfig() {
   toast('✓ Configuración guardada — conectando...');
   cargarTodo();
   renderDiagnosticoConfig();
+  cargarLogsErrores();
 }
 function cargarLogo(input) {
   const file=input.files[0];if(!file)return;
@@ -5390,7 +5505,11 @@ window.eliminarPedido = async function(id) {
     refreshUIAfter('pedido');
   }catch(err){
     console.error('eliminarPedido', err);
-    toast('Error al eliminar pedido: '+(err.message||err));
+    await logErrorFront('frontend','eliminarPedido', err, {id});
+    hideLoading(true);
+    setTimeout(()=>alert('Error al eliminar pedido:
+
+'+(err.message||err)),60);
   } finally {
     hideLoading(true);
   }
@@ -6238,6 +6357,17 @@ document.addEventListener('DOMContentLoaded', () => {
     root[fnName] = wrapped;
   }
 
+
+
+  window.addEventListener('error', function(ev){
+    try{ logErrorFront('frontend','window.onerror', ev.error || new Error(ev.message||'Error global'), {archivo:ev.filename||'', linea:ev.lineno||'', columna:ev.colno||''}); }catch(_){ }
+  });
+  window.addEventListener('unhandledrejection', function(ev){
+    try{
+      const reason = ev.reason instanceof Error ? ev.reason : new Error(String(ev.reason||'Promesa rechazada'));
+      logErrorFront('frontend','unhandledrejection', reason, {});
+    }catch(_){ }
+  });
 
   window.refreshUIAfter = function refreshUIAfter(scope){
     try{
