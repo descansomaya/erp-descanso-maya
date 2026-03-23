@@ -1351,10 +1351,11 @@ window.addMatProducto = function(materialId='', cantidad=1, color='', componente
         <option value="">— Material —</option>
         ${arr(D.materiales).map(m=>`<option value="${m.id}" ${String(materialId)===String(m.id)?'selected':''}>${m.nombre}${m.unidad?` (${m.unidad})`:''}</option>`).join('')}
       </select>
-      <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('prm-${idn}').remove(); recetaProdItems=recetaProdItems.filter(x=>x!==${idn}); return false;">×</button>
+      <button type="button" style="background:none;border:none;color:var(--danger);font-size:18px;line-height:1;padding:8px" onclick="document.getElementById('prm-${idn}').remove(); recetaProdItems=recetaProdItems.filter(x=>x!==${idn}); calcCostoEstimadoProducto(); return false;">×</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
       <div><label class="form-label" style="margin-bottom:4px">Cantidad</label><input type="number" min="0" step="any" class="form-input" id="prm-qty-${idn}" value="${Number(cantidad||0)}" oninput="calcCostoEstimadoProducto()"></div>
+      <div><label class="form-label" style="margin-bottom:4px">Componente</label><select class="form-input" id="prm-comp-${idn}" onchange="calcCostoEstimadoProducto()"><option value="cuerpo" ${normalizarComponenteTrabajo(componente)==='cuerpo'?'selected':''}>Cuerpo</option><option value="brazos" ${normalizarComponenteTrabajo(componente)==='brazos'?'selected':''}>Brazos</option></select></div>
       <div><label class="form-label" style="margin-bottom:4px">Color / nota</label><input type="text" class="form-input" id="prm-color-${idn}" value="${color||''}" placeholder="Opcional" oninput="calcCostoEstimadoProducto()"></div>
     </div>`;
   host.appendChild(row);
