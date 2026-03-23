@@ -1073,17 +1073,17 @@ body.modal-open{overflow:hidden}
       <div id="diag-resumen" class="alert alert-info" style="margin-bottom:8px;font-size:12px">Aún no se ha ejecutado una prueba en esta sesión.</div>
       <div id="diag-detalle" style="max-height:220px;overflow:auto"></div>
     </div>
+
     <div class="card" style="padding:12px;margin-top:10px">
       <div class="card-row" style="align-items:center;margin-bottom:8px">
         <div>
           <div class="card-title">Errores y alertas</div>
-          <div class="card-sub">Últimos errores registrados por el sistema</div>
+          <div class="card-sub">Últimos errores registrados en frontend y backend</div>
         </div>
-        <button class="btn btn-secondary btn-sm" type="button" onclick="cargarLogsErrores()">Actualizar</button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="cargarDashboardErrores()">Actualizar</button>
       </div>
-      <div id="err-alerta" class="alert alert-info" style="margin-bottom:8px;font-size:12px">Aún no se han cargado errores.</div>
-      <div id="err-stats" class="stats" style="margin-bottom:8px;display:none"></div>
-      <div id="err-list" style="max-height:260px;overflow:auto"></div>
+      <div id="logs-alert-summary" class="alert alert-info" style="margin-bottom:8px;font-size:12px">Aún no se han cargado los logs.</div>
+      <div id="logs-alert-list" style="max-height:240px;overflow:auto"></div>
     </div>
     <button class="btn btn-primary" onclick="guardarConfig()">Guardar y conectar</button>
     <button class="btn btn-secondary" onclick="probarConexionDiagnostica()">Probar conexión</button>
@@ -1961,15 +1961,10 @@ function prepModal(id) {
 // ═══════════════════════════════════════════════
 async function api(action, sheet, data) {
   if(!CFG.url) { console.warn('Sin URL'); return null; }
-  const params = (action && typeof action==='object' && !Array.isArray(action))
-    ? Object.assign({}, action)
-    : {action, sheet};
-  params.key = CFG.key;
-  if(params.data && typeof params.data !== 'string') params.data = JSON.stringify(params.data);
-  else if(data !== undefined && !params.data) params.data = JSON.stringify(data);
-  const qs = Object.keys(params)
-    .filter(k => params[k] !== undefined && params[k] !== null && params[k] !== '')
-    .map(k=>encodeURIComponent(k)+'='+encodeURIComponent(params[k])).join('&');
+  // Usar GET con datos en URL — evita pérdida de body en redirección 302 de Apps Script
+  const params = {action, sheet, key: CFG.key};
+  if(data) params.data = JSON.stringify(data);
+  const qs = Object.keys(params).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(params[k])).join('&');
   const url = CFG.url + '?' + qs;
   return new Promise(resolve => {
     const xhr = new XMLHttpRequest();
@@ -1977,9 +1972,9 @@ async function api(action, sheet, data) {
     xhr.timeout = 20000;
     xhr.onload = () => {
       try { resolve(JSON.parse(xhr.responseText)); }
-      catch(e) { console.error('Parse:', xhr.responseText.slice(0,160)); resolve(null); }
+      catch(e) { console.error('Parse:', xhr.responseText.slice(0,100)); resolve(null); }
     };
-    xhr.onerror = xhr.ontimeout = () => { console.error('XHR fail',params.action,params.sheet); resolve(null); };
+    xhr.onerror = xhr.ontimeout = () => { console.error('XHR fail',action,sheet); resolve(null); };
     xhr.send();
   });
 }
@@ -2041,7 +2036,7 @@ async function probarConexionDiagnostica(){
     ['artesanos','artesanos'],['tarifas_artesano','tarifas_artesano'],['ordenes','ordenes_produccion'],['gastos','gastos'],['ped_det','pedido_detalle'],
     ['proveedores','proveedores'],['compras','compras'],['comp_det','compra_detalle'],['pago_art','pago_artesanos'],
     ['abonos','abonos_clientes'],['recetas','receta_pedido'],['reparaciones','reparaciones'],
-    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion'],['ord_art','ordenes_produccion_artesanos'],['logs_errores','logs_errores']
+    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion'],['ord_art','ordenes_produccion_artesanos']
   ];
   const details = await Promise.all(pairs.map(([k,s]) => leerDiagnostico(s,k)));
   LAST_LOAD_REPORT = {
@@ -2069,63 +2064,26 @@ const SHEET_MAP = {
   ped_det:'pedido_detalle', proveedores:'proveedores', compras:'compras',
   comp_det:'compra_detalle', pago_art:'pago_artesanos', abonos:'abonos_clientes',
   recetas:'receta_pedido', reparaciones:'reparaciones', movimientos:'movimientos_inventario',
-  reservas:'reservas_inventario', consumos:'consumos_produccion', ord_art:'ordenes_produccion_artesanos',
-  logs_errores:'logs_errores'
+  reservas:'reservas_inventario', consumos:'consumos_produccion', ord_art:'ordenes_produccion_artesanos'
 };
 function sheetName(s){ return SHEET_MAP[s]||s; }
 
-async function logErrorFront(origen, accion, error, extra){
-  try{
-    if(!CFG.url) return null;
-    const payload = {
-      fecha: hoy(),
-      origen: origen || 'frontend',
-      accion: accion || '',
-      mensaje: (error && error.message) ? String(error.message) : String(error || ''),
-      detalle: JSON.stringify({
-        message: (error && error.message) ? String(error.message) : String(error || ''),
-        stack: error && error.stack ? String(error.stack) : '',
-        extra: extra || null,
-        pantalla: SC || ''
-      }),
-      severidad: 'error',
-      pantalla: SC || ''
-    };
-    return await api({action:'write', sheet:'logs_errores', data: payload});
-  }catch(e){
-    console.warn('No se pudo registrar log frontend', e);
-    return null;
-  }
-}
-function errorTextFromResponse(r, fallback){
-  if(!r) return fallback || 'Sin respuesta del servidor';
-  return String(r.error || r.message || r.detail || fallback || 'Error desconocido');
-}
-async function ensureOkResponse(r, accion, sheet, payload){
-  if(r && r.ok) return r;
-  const msg = errorTextFromResponse(r, 'Error al guardar en Sheets');
-  await logErrorFront('frontend', accion + ':' + (sheet||''), new Error(msg), {respuesta:r||null, payload:payload||null});
-  throw new Error(msg);
-}
-
 async function crear(s,d) {
   const r = await api('write', sheetName(s), d);
-  await ensureOkResponse(r, 'write', s, d);
+  if(!r || !r.ok) {
+    console.error('Error al crear en', s, ':', r);
+    toast('⚠️ Error al guardar en Sheets — revisa la conexión');
+  }
   setStatus(r?.ok);
   return r;
 }
 async function actualizar(s,d) {
   const r = await api('update', sheetName(s), d);
-  await ensureOkResponse(r, 'update', s, d);
+  if(!r || !r.ok) console.error('Error al actualizar en', s, ':', r);
   setStatus(r?.ok);
   return r;
 }
-async function eliminar(s,id) {
-  const r = await api('delete',sheetName(s),{id});
-  await ensureOkResponse(r, 'delete', s, {id});
-  setStatus(r?.ok);
-  return r;
-}
+async function eliminar(s,id) { return await api('delete',sheetName(s),{id}); }
 
 function setStatus(ok) {
   const dot=$('status-dot'), txt=$('status-txt');
@@ -2203,7 +2161,7 @@ async function cargarTodo() {
     ['artesanos','artesanos'],['tarifas_artesano','tarifas_artesano'],['ordenes','ordenes_produccion'],['gastos','gastos'],['ped_det','pedido_detalle'],
     ['proveedores','proveedores'],['compras','compras'],['comp_det','compra_detalle'],['pago_art','pago_artesanos'],
     ['abonos','abonos_clientes'],['recetas','receta_pedido'],['reparaciones','reparaciones'],
-    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion'],['ord_art','ordenes_produccion_artesanos'],['logs_errores','logs_errores']
+    ['movimientos','movimientos_inventario'],['reservas','reservas_inventario'],['consumos','consumos_produccion'],['ord_art','ordenes_produccion_artesanos']
   ];
 
   try {
@@ -4039,11 +3997,7 @@ async function guardarProduccionStock(){
     setTimeout(()=>{ try{ abrirAsignacionProduccion(pedidoId); }catch(err){ console.warn(err); } }, 120);
   }catch(err){
     console.error('guardarProduccionStock', err);
-    await logErrorFront('frontend','guardarProduccionStock', err, {productoId, cantidad, nota});
-    hideLoading(true);
-    setTimeout(()=>alert('Error al crear producción interna:
-
-'+(err.message||err)),60);
+    toast('Error al crear producción interna: '+(err.message||err));
   } finally {
     hideLoading();
     if(btn){ btn.disabled=false; btn.textContent='Crear orden interna'; }
@@ -5361,67 +5315,11 @@ function buscar(q) {
 // ═══════════════════════════════════════════════
 // CONFIGURACIÓN
 // ═══════════════════════════════════════════════
-async function cargarLogsErrores(){
-  const alerta=$('err-alerta'), stats=$('err-stats'), list=$('err-list');
-  if(!alerta || !stats || !list) return;
-  if(!CFG.url){
-    alerta.className='alert alert-warning';
-    alerta.textContent='Configura primero la URL del Web App para ver errores.';
-    stats.style.display='none';
-    list.innerHTML='';
-    return;
-  }
-  alerta.className='alert alert-info';
-  alerta.textContent='Cargando errores...';
-  try{
-    const rows = await leer('logs_errores');
-    const logs = arr(rows).sort((a,b)=>new Date(b.fecha||0)-new Date(a.fecha||0)).slice(0,50);
-    const now = Date.now();
-    const ult24 = logs.filter(x=>{ const t=new Date(x.fecha||0).getTime(); return t && (now-t)<=86400000; }).length;
-    const ult1h = logs.filter(x=>{ const t=new Date(x.fecha||0).getTime(); return t && (now-t)<=3600000; }).length;
-    const crit = logs.filter(x=>String(x.severidad||'').toLowerCase()==='critico').length;
-    stats.style.display='grid';
-    stats.innerHTML = `
-      <div class="stat danger"><div class="stat-val">${logs.length}</div><div class="stat-lbl">Últimos logs</div></div>
-      <div class="stat warning"><div class="stat-val">${ult24}</div><div class="stat-lbl">Últimas 24h</div></div>
-      <div class="stat accent"><div class="stat-val">${ult1h}</div><div class="stat-lbl">Última hora</div></div>
-      <div class="stat ${crit?'danger':'success'}"><div class="stat-val">${crit}</div><div class="stat-lbl">Críticos</div></div>`;
-    if(!logs.length){
-      alerta.className='alert alert-success';
-      alerta.textContent='No hay errores registrados recientemente.';
-      list.innerHTML='';
-      return;
-    }
-    alerta.className = ult1h ? 'alert alert-danger' : (ult24 ? 'alert alert-warning' : 'alert alert-info');
-    alerta.innerHTML = ult1h
-      ? `⚠️ Se registraron ${ult1h} error(es) en la última hora.`
-      : (ult24 ? `Hay ${ult24} error(es) en las últimas 24 horas.` : 'Sin alertas recientes.');
-    list.innerHTML = logs.map(l=>`
-      <div class="card" style="padding:10px;margin-bottom:6px;border-color:${String(l.severidad||'').toLowerCase()==='critico'?'rgba(224,90,107,.35)':'var(--border)'}">
-        <div class="card-row" style="align-items:center">
-          <div>
-            <div class="card-title" style="font-size:13px">${l.accion||'Sin acción'} <span class="card-note">· ${l.origen||'frontend'}</span></div>
-            <div class="card-sub">${l.mensaje||'Sin mensaje'}</div>
-            <div class="card-note">${l.fecha?new Date(l.fecha).toLocaleString('es-MX'):''}${l.pantalla?` · Pantalla: ${l.pantalla}`:''}</div>
-            ${l.detalle?`<details style="margin-top:6px"><summary style="font-size:11px;color:var(--text3);cursor:pointer">Ver detalle</summary><div style="font-size:11px;color:var(--text2);white-space:pre-wrap;margin-top:6px">${String(l.detalle).replace(/[<>&]/g, s=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[s]))}</div></details>`:''}
-          </div>
-          <span class="badge ${String(l.severidad||'').toLowerCase()==='critico'?'cancelado':'rep'}">${l.severidad||'error'}</span>
-        </div>
-      </div>`).join('');
-  }catch(err){
-    console.error('cargarLogsErrores', err);
-    alerta.className='alert alert-danger';
-    alerta.textContent='No se pudieron cargar los errores: ' + (err.message||err);
-    list.innerHTML='';
-    stats.style.display='none';
-  }
-}
 function cargarConfig() {
   setV('cfg-url',CFG.url);setV('cfg-key',CFG.key);setV('cfg-emp',CFG.emp);setV('cfg-tel',CFG.tel);
   if(CFG.logo){$('logo-img').src=CFG.logo;$('logo-preview').style.display='block';}
   else {$('logo-preview').style.display='none';}
   renderDiagnosticoConfig();
-  cargarLogsErrores();
 }
 function guardarConfig() {
   const url=getV('cfg-url'),key=getV('cfg-key'),emp=getV('cfg-emp')||'Descanso Maya',tel=getV('cfg-tel');
@@ -5432,7 +5330,6 @@ function guardarConfig() {
   toast('✓ Configuración guardada — conectando...');
   cargarTodo();
   renderDiagnosticoConfig();
-  cargarLogsErrores();
 }
 function cargarLogo(input) {
   const file=input.files[0];if(!file)return;
@@ -5505,11 +5402,7 @@ window.eliminarPedido = async function(id) {
     refreshUIAfter('pedido');
   }catch(err){
     console.error('eliminarPedido', err);
-    await logErrorFront('frontend','eliminarPedido', err, {id});
-    hideLoading(true);
-    setTimeout(()=>alert('Error al eliminar pedido:
-
-'+(err.message||err)),60);
+    toast('Error al eliminar pedido: '+(err.message||err));
   } finally {
     hideLoading(true);
   }
@@ -6037,6 +5930,142 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 })();
 
+
+
+// ═══════════════════════════════════════════════
+// LOGGING / DASHBOARD DE ERRORES
+// ═══════════════════════════════════════════════
+window.LOG_MEMORY = window.LOG_MEMORY || [];
+
+function pushLocalLog(entry){
+  try{
+    const row = Object.assign({
+      id: 'LOG-' + Date.now() + '-' + Math.random().toString(36).slice(2,7),
+      fecha: new Date().toISOString(),
+      origen: 'frontend',
+      accion: '',
+      mensaje: '',
+      detalle: '',
+      severidad: 'error'
+    }, entry || {});
+    window.LOG_MEMORY.unshift(row);
+    if(window.LOG_MEMORY.length > 200) window.LOG_MEMORY = window.LOG_MEMORY.slice(0,200);
+    localStorage.setItem('dm_logs_local', JSON.stringify(window.LOG_MEMORY.slice(0,100)));
+    return row;
+  }catch(err){
+    console.warn('pushLocalLog', err);
+    return null;
+  }
+}
+
+function loadLocalLogs(){
+  try{
+    const saved = JSON.parse(localStorage.getItem('dm_logs_local') || '[]');
+    if(Array.isArray(saved) && saved.length){
+      window.LOG_MEMORY = saved.concat(window.LOG_MEMORY || []).slice(0,200);
+    }
+  }catch(err){
+    console.warn('loadLocalLogs', err);
+  }
+}
+
+async function logErrorFront(origen, accion, error, detalleExtra){
+  const mensaje = (error && error.message) ? error.message : String(error || 'Error desconocido');
+  const detalle = typeof detalleExtra === 'string' ? detalleExtra : JSON.stringify(detalleExtra || (error && error.stack ? {stack:error.stack} : {}));
+  pushLocalLog({origen: origen || 'frontend', accion: accion || '', mensaje, detalle, severidad:'error'});
+  try{
+    if(!CFG.url) return;
+    const payload = {
+      action:'log_error',
+      key: CFG.key,
+      origen: origen || 'frontend',
+      accion: accion || '',
+      mensaje: mensaje,
+      detalle: detalle
+    };
+    const qs = Object.keys(payload).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(payload[k] == null ? '' : payload[k])).join('&');
+    const url = CFG.url + '?' + qs;
+    await new Promise(resolve=>{
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', url, true);
+      xhr.timeout = 10000;
+      xhr.onload = xhr.onerror = xhr.ontimeout = ()=>resolve();
+      xhr.send();
+    });
+  }catch(_err){
+    console.warn('No se pudo registrar log remoto', _err);
+  }
+}
+
+async function cargarDashboardErrores(){
+  const sum = $('logs-alert-summary');
+  const list = $('logs-alert-list');
+  if(sum) sum.className='alert alert-info';
+  if(sum) sum.textContent='Cargando logs...';
+  let remote = [];
+  try{
+    if(CFG.url){
+      const r = await api('read','logs_errores');
+      if(r && r.ok) remote = Array.isArray(r.data) ? r.data : [];
+    }
+  }catch(err){
+    console.warn('cargarDashboardErrores remoto', err);
+  }
+  const local = Array.isArray(window.LOG_MEMORY) ? window.LOG_MEMORY : [];
+  const all = remote.concat(local).sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))).slice(0,40);
+  const now = Date.now();
+  const last24 = all.filter(x=>{ const t = new Date(x.fecha || '').getTime(); return t && (now - t) <= 86400000; }).length;
+  const last1 = all.filter(x=>{ const t = new Date(x.fecha || '').getTime(); return t && (now - t) <= 3600000; }).length;
+  if(sum){
+    const cls = all.length ? (last1 ? 'alert alert-danger' : (last24 ? 'alert alert-warning' : 'alert alert-success')) : 'alert alert-success';
+    sum.className = cls;
+    sum.innerHTML = all.length
+      ? `Total: <strong>${all.length}</strong> · Últimas 24h: <strong>${last24}</strong> · Última hora: <strong>${last1}</strong>`
+      : 'Sin errores registrados recientemente.';
+  }
+  if(list){
+    list.innerHTML = all.length ? all.map(log=>`
+      <div class="card" style="padding:10px;margin-bottom:6px">
+        <div class="card-row" style="align-items:center">
+          <div>
+            <div class="card-title" style="font-size:13px">${escapeHtml(log.mensaje || 'Sin mensaje')}</div>
+            <div class="card-note">${escapeHtml(log.fecha || '')} · ${escapeHtml(log.origen || '')} · ${escapeHtml(log.accion || '')}</div>
+          </div>
+          <span class="badge cancelado">${escapeHtml(log.severidad || 'error')}</span>
+        </div>
+        ${log.detalle ? `<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--text2);font-size:12px">Ver detalle</summary><div style="white-space:pre-wrap;font-size:11px;color:var(--text3);margin-top:6px">${escapeHtml(String(log.detalle||''))}</div></details>` : ''}
+      </div>`).join('') : '<div style="font-size:12px;color:var(--text3)">No hay logs para mostrar.</div>';
+  }
+}
+
+function escapeHtml(v){
+  return String(v == null ? '' : v)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+window.addEventListener('error', function(ev){
+  try{ logErrorFront('frontend','window.error', ev.error || ev.message || 'window error', {source:ev.filename, line:ev.lineno, col:ev.colno}); }catch(_){}
+});
+window.addEventListener('unhandledrejection', function(ev){
+  try{ logErrorFront('frontend','unhandledrejection', ev.reason || 'Promise rejection'); }catch(_){}
+});
+
+(function(){
+  loadLocalLogs();
+  const oldAbrirSub = window.abrirSub;
+  if(typeof oldAbrirSub === 'function'){
+    window.abrirSub = function(id){
+      const res = oldAbrirSub.apply(this, arguments);
+      if(id === 'sub-config') setTimeout(cargarDashboardErrores, 120);
+      return res;
+    };
+  }
+})();
+
 </script>
 
 <script>
@@ -6357,17 +6386,6 @@ document.addEventListener('DOMContentLoaded', () => {
     root[fnName] = wrapped;
   }
 
-
-
-  window.addEventListener('error', function(ev){
-    try{ logErrorFront('frontend','window.onerror', ev.error || new Error(ev.message||'Error global'), {archivo:ev.filename||'', linea:ev.lineno||'', columna:ev.colno||''}); }catch(_){ }
-  });
-  window.addEventListener('unhandledrejection', function(ev){
-    try{
-      const reason = ev.reason instanceof Error ? ev.reason : new Error(String(ev.reason||'Promesa rechazada'));
-      logErrorFront('frontend','unhandledrejection', reason, {});
-    }catch(_){ }
-  });
 
   window.refreshUIAfter = function refreshUIAfter(scope){
     try{
