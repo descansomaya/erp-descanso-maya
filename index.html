@@ -6239,7 +6239,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
 
-  function refreshUIAfter(scope){
+  window.refreshUIAfter = function refreshUIAfter(scope){
     try{
       const onPedidos = SC==='pedidos' || !!$('det-pedido')?.classList.contains('open');
       const onProduccion = SC==='produccion' || !!$('modal-orden')?.classList.contains('open') || !!$('modal-asignacion-prod')?.classList.contains('open');
@@ -6289,6 +6289,8 @@ document.addEventListener('DOMContentLoaded', () => {
       console.warn('refreshUIAfter', err);
     }
   }
+
+  window.refreshUlAfter = window.refreshUIAfter;
 
   function applyLoaderWrappers(){
     [
