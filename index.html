@@ -1221,6 +1221,22 @@ function netoMovPedido(pedidoId, refTipo, refId){
     .reduce((s,m)=>s+Number(m.cantidad||0),0);
 }
 
+function agruparRecetaMaterialesPorInventario(recs){
+  const mapa = {};
+  for(const r of arr(recs)){
+    const matId = String(r.material_id||'').trim();
+    if(!matId) continue;
+    const qty = Number((r.cantidad_aplicada ?? r.cantidad) || 0);
+    if(!(qty>0)) continue;
+    if(!mapa[matId]){
+      mapa[matId] = { material_id: matId, cantidad: 0, lineas: [] };
+    }
+    mapa[matId].cantidad = Number((mapa[matId].cantidad + qty).toFixed(6));
+    mapa[matId].lineas.push(r);
+  }
+  return Object.values(mapa);
+}
+
 window.ajustarStockPedidoProduccion = window.ajustarStockPedidoProduccion || async function(pedidoId, targetEnProduccion=true, motivo='Ajuste de materiales por producción'){
   const det = detallePedido(pedidoId); if(!det) return [];
   const prod = productoPedido(pedidoId);
@@ -1231,11 +1247,12 @@ window.ajustarStockPedidoProduccion = window.ajustarStockPedidoProduccion || asy
     await asegurarRecetaDetalleDesdeProducto(det.id);
     recs = recetaPedidoMaterialesAplicada(det.id);
   }
+  const grupos = agruparRecetaMaterialesPorInventario(recs);
   const movimientos=[];
-  for(const r of recs){
-    const mat = arr(D.materiales).find(m=>String(m.id)===String(r.material_id));
+  for(const g of grupos){
+    const mat = arr(D.materiales).find(m=>String(m.id)===String(g.material_id));
     if(!mat) continue;
-    const qty = Number((r.cantidad_aplicada ?? r.cantidad) || 0);
+    const qty = Number(g.cantidad || 0);
     if(!(qty>0)) continue;
     const actualNet = netoMovPedido(pedidoId,'material',mat.id);
     const targetNet = targetEnProduccion ? (-qty) : 0;
@@ -2481,12 +2498,13 @@ function validarStockPedido(pedId,usarReservas=true) {
     const disp=usarReservas ? disponibleDe('producto',prod.id,pedId)+reservasActivasPedido(pedId).filter(r=>r.ref_tipo==='producto').reduce((s,r)=>s+Number(r.cantidad||0),0) : Number(prod.stock_disponible||0);
     return disp<qty ? [prod.nombre] : [];
   }
-  const recetas=D.recetas.filter(r=>r.pedido_id===det.id);
+  const recetas = agruparRecetaMaterialesPorInventario(recetaPedidoMaterialesAplicada(det.id));
   return recetas.filter(r=>{
-    const m=D.materiales.find(x=>x.id===r.material_id);
-    const disp=usarReservas ? disponibleDe('material',r.material_id,pedId)+reservasActivasPedido(pedId).filter(x=>x.ref_tipo==='material'&&String(x.ref_id)===String(r.material_id)).reduce((s,x)=>s+Number(x.cantidad||0),0) : Number(m?.stock_actual||0);
+    const m=D.materiales.find(x=>String(x.id)===String(r.material_id));
+    const reservadoPropio = reservasActivasPedido(pedId).filter(x=>x.ref_tipo==='material'&&String(x.ref_id)===String(r.material_id)).reduce((s,x)=>s+Number(x.cantidad||0),0);
+    const disp=usarReservas ? disponibleDe('material',r.material_id,pedId)+reservadoPropio : Number(m?.stock_actual||0);
     return m&&disp<Number(r.cantidad||0);
-  }).map(r=>D.materiales.find(x=>x.id===r.material_id)?.nombre||r.material_id);
+  }).map(r=>D.materiales.find(x=>String(x.id)===String(r.material_id))?.nombre||r.material_id);
 }
 // ═══════════════════════════════════════════════
 // REPARACIONES
@@ -3955,6 +3973,7 @@ async function guardarProduccionStock(){
         material_id:base.material_id,
         cantidad:Number(base.cantidad||0)*cantidad,
         color:base.color||'',
+        componente:base.componente||'cuerpo',
         notas:base.notas||base.color||''
       };
       D.recetas.push(rr);
@@ -5608,9 +5627,9 @@ document.addEventListener('DOMContentLoaded', () => {
         D.reservas.push(res); await crear('reservas',res);
       }
     } else {
-      const recs=recetaPedidoMaterialesAplicada(detalleId);
-      for(const rr of recs){
-        const qty=Number((rr.cantidad_aplicada ?? rr.cantidad) || 0);
+      const grupos=agruparRecetaMaterialesPorInventario(recetaPedidoMaterialesAplicada(detalleId));
+      for(const rr of grupos){
+        const qty=Number(rr.cantidad || 0);
         if(qty>0){
           const res={id:genId('RES',arr(D.reservas)),pedido_id:pedidoId,pedido_detalle_id:detalleId,ref_tipo:'material',tipo:'material',ref_id:rr.material_id,cantidad:qty,estado:'activa',fecha:hoy(),activa:'si'};
           D.reservas.push(res); await crear('reservas',res);
