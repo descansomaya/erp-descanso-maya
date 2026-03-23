@@ -1394,12 +1394,38 @@ function tarifaPredeterminadaArtesano(artId){
 function asignacionesOrden(ordenId){
   return arr(D.ord_art).filter(a=>String(a.orden_id)===String(ordenId));
 }
+function esMaterialTuboHilo(mat){
+  if(!mat) return false;
+  const tipo = String(mat.tipo||'').toLowerCase();
+  const unidad = String(mat.unidad||'').toLowerCase();
+  const nombre = String(mat.nombre||'').toLowerCase();
+  return tipo.includes('hilo') || tipo.includes('tubo') || unidad.includes('tubo') || nombre.includes('hilo');
+}
+function totalTubosRecetaDetalle(detalleId, prod){
+  let recs = detalleId ? recetaPedidoMaterialesAplicada(detalleId) : [];
+  if(recs && recs.length){
+    return round2(recs.reduce((s,r)=>{
+      const mat = arr(D.materiales).find(m=>String(m.id)===String(r.material_id));
+      if(!esMaterialTuboHilo(mat)) return s;
+      return s + Number((r.cantidad_aplicada ?? r.cantidad) || 0);
+    },0));
+  }
+  if(prod && typeof recetasPlantillaProducto==='function'){
+    const plant = recetasPlantillaProducto(prod.id) || [];
+    return round2(plant.reduce((s,r)=>{
+      const mat = arr(D.materiales).find(m=>String(m.id)===String(r.material_id));
+      if(!esMaterialTuboHilo(mat)) return s;
+      return s + Number(r.cantidad||0);
+    },0));
+  }
+  return round2(Number(prod?.tubos_hilo||0));
+}
 function pagoEstimadoAsignacion(tarifa, det, prod, factor=1){
   const t = tarifa || {};
   const esquema=String(t.esquema_pago||'por_pieza');
   const monto=Number(t.monto||0);
   const qty=Number(det?.cantidad||1);
-  const baseTubos = Number(prod?.tubos_hilo||0) * qty;
+  const baseTubos = totalTubosRecetaDetalle(det?.id, prod);
   const f = Number(factor||1);
   if(esquema==='por_tubo') return round2(baseTubos * monto * f);
   if(esquema==='fijo') return round2(monto * f);
@@ -5853,7 +5879,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const recetaRowsDom = Array.from(document.querySelectorAll('#pr-receta-list > div[id^="prm-"]'));
     let totalMat = 0;
-    let baseQty = 0;
+    let totalTubos = 0;
     recetaRowsDom.forEach(row=>{
       const i = String(row.id||'').replace('prm-','');
       const matId = document.getElementById('prm-mat-'+i)?.value || '';
@@ -5861,7 +5887,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if(!matId || qty<=0) return;
       const mat = (D.materiales||[]).find(m=>String(m.id)===String(matId));
       totalMat += qty * costoMat(mat);
-      baseQty += qty;
+      if(esMaterialTuboHilo(mat)) totalTubos += qty;
     });
     const laborRowsDom = Array.from(document.querySelectorAll('#pr-art-list > div[id^="pra-"]'));
     let totalLabor = 0;
@@ -5873,7 +5899,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const tarifaObj = tarifaArtesanoById(tarifaId) || {};
       const tarifa = Number(tarifaObj.monto||0);
       const esquema = String(tarifaObj.esquema_pago||'por_pieza');
-      if(esquema==='por_tubo') totalLabor += tarifa * baseQty * factor;
+      if(esquema==='por_tubo') totalLabor += tarifa * totalTubos * factor;
       else if(esquema==='fijo') totalLabor += tarifa * factor;
       else totalLabor += tarifa * factor;
     });
