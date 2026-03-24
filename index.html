@@ -2235,7 +2235,7 @@ async function crear(s,d) {
   return r;
 }
 async function actualizar(s,d) {
-  const r = await api('update', sheetName(s), d);
+  const r = await api('write', sheetName(s), d);
   if(!r || !r.ok) console.error('Error al actualizar en', s, ':', r);
   setStatus(r?.ok);
   return r;
