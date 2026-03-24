@@ -463,8 +463,10 @@ body.modal-open{overflow:hidden}
     </div>
     <div id="p-badge" style="display:none;margin-bottom:10px"></div>
     <div class="form-group"><label class="form-label">Cantidad</label><input type="number" class="form-input" id="p-cant" value="1" min="1" oninput="calcTotal()"></div>
-    <div class="form-group"><label class="form-label">Color / especificaciones</label><input type="text" class="form-input" id="p-color" placeholder="Ej: Azul marino"></div>
-    <div class="form-group"><label class="form-label">Medidas especiales</label><input type="text" class="form-input" id="p-medidas" placeholder="Ej: 1.5m × 2m"></div>
+    <div class="form-group"><label class="form-label">Color principal</label><input type="text" class="form-input" id="p-color" placeholder="Ej: Azul cielo"></div>
+    <div class="form-group"><label class="form-label">Color secundario</label><input type="text" class="form-input" id="p-color2" placeholder="Ej: Azul rey"></div>
+    <div class="form-group"><label class="form-label">Tamaño / medidas</label><input type="text" class="form-input" id="p-medidas" placeholder="Ej: Matrimonial o 1.5m × 2m"></div>
+    <div class="form-group"><label class="form-label">Diseño especial</label><input type="text" class="form-input" id="p-diseno" placeholder="Ej: Sandía, Pitahaya"></div>
     <div class="form-group"><label class="form-label">Precio total ($) *</label><input type="number" class="form-input" id="p-total" placeholder="0.00"></div>
     <div class="form-group"><label class="form-label" id="lbl-p-pago">Anticipo ($)</label><input type="number" class="form-input" id="p-anticipo" value="0"></div>
     <div class="form-group"><label class="form-label">Fecha de entrega</label><input type="date" class="form-input" id="p-fecha"></div>
@@ -752,6 +754,23 @@ body.modal-open{overflow:hidden}
         <option value="accesorio">Accesorio</option>
       </select>
     </div>
+    <div class="sec-title">Clasificación comercial</div>
+    <div class="desktop-grid-2">
+      <div class="form-group"><label class="form-label">Línea para PDF</label>
+        <select class="form-input" id="pr-linea">
+          <option value="">— Sin clasificar —</option>
+          <option value="unicolor">Hamaca Unicolor</option>
+          <option value="combinada">Hamaca Combinada</option>
+          <option value="especial">Hamaca Especial</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Tamaño por defecto</label><input type="text" class="form-input" id="pr-tamano-ref" placeholder="Ej: Individual / Matrimonial"></div>
+    </div>
+    <div class="desktop-grid-2">
+      <div class="form-group"><label class="form-label">Color principal por defecto</label><input type="text" class="form-input" id="pr-color-ref" placeholder="Ej: Azul cielo"></div>
+      <div class="form-group"><label class="form-label">Color secundario por defecto</label><input type="text" class="form-input" id="pr-color-ref2" placeholder="Ej: Azul rey"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Diseño / especialidad</label><input type="text" class="form-input" id="pr-diseno-ref" placeholder="Ej: Sandía, Pitahaya"></div>
     <div id="pr-fab-section">
       <input type="hidden" id="pr-material">
       <input type="hidden" id="pr-tubos" value="0">
@@ -1178,6 +1197,61 @@ const diasHasta = f => {
 };
 const empty = msg => `<div style="text-align:center;padding:30px 0;color:var(--text3);font-size:13px">${msg}</div>`;
 const arr = v => Array.isArray(v) ? v : [];
+const CATALOGO_LINEAS = [
+  {id:'unicolor', label:'Hamaca Unicolor'},
+  {id:'combinada', label:'Hamaca Combinada'},
+  {id:'especial', label:'Hamaca Especial'}
+];
+function lineaCatalogoLabel(v){
+  const key=String(v||'').toLowerCase();
+  return (CATALOGO_LINEAS.find(x=>x.id===key)||{}).label || '';
+}
+function nombreCatalogoProducto(prod){
+  if(!prod) return 'Producto';
+  return lineaCatalogoLabel(prod.linea_catalogo) || prod.nombre || 'Producto';
+}
+function detallesPresentacion(prod, det){
+  const out=[];
+  const color1 = String(det?.color_hilo || det?.color || prod?.color_ref || '').trim();
+  const color2 = String(det?.color_hilo2 || prod?.color_ref2 || '').trim();
+  const tam = String(det?.tamano_comercial || det?.medidas || prod?.tamano_ref || '').trim();
+  const dis = String(det?.diseno_comercial || prod?.diseno_ref || '').trim();
+  const linea=String(prod?.linea_catalogo||'').toLowerCase();
+  if(linea==='especial'){
+    if(dis) out.push('Diseño: '+dis);
+    if(color1 && color2) out.push('Colores: '+color1+' + '+color2);
+    else if(color1) out.push('Color: '+color1);
+  } else if(color1 && color2){
+    out.push('Colores: '+color1+' + '+color2);
+  } else if(color1){
+    out.push('Color: '+color1);
+  }
+  if(tam) out.push('Tamaño: '+tam);
+  return out.filter(Boolean);
+}
+function detalleCatalogoProducto(prod){
+  const parts=detallesPresentacion(prod, null);
+  if(parts.length) return parts.join(' · ');
+  if(prod?.nombre && nombreCatalogoProducto(prod)!==prod.nombre) return prod.nombre;
+  return '';
+}
+function optionsProductosAgrupados(selected=''){
+  const grupos={sin:[]};
+  arr(D.productos).forEach(p=>{
+    const key=String(p.linea_catalogo||'sin').toLowerCase();
+    if(!grupos[key]) grupos[key]=[];
+    grupos[key].push(p);
+  });
+  const orden=['unicolor','combinada','especial','sin'];
+  let html='<option value="">— Selecciona producto —</option>';
+  orden.forEach(key=>{
+    const items=grupos[key]||[];
+    if(!items.length) return;
+    const label=key==='sin'?'Sin clasificar':(lineaCatalogoLabel(key)||key);
+    html += `<optgroup label="${label}">` + items.map(p=>`<option value="${p.id}" ${String(selected)===String(p.id)?'selected':''}>${p.nombre}</option>`).join('') + '</optgroup>';
+  });
+  return html;
+}
 
 window.cerrarOverlayBtn = function cerrarOverlayBtn(btn){
   try{
@@ -3449,12 +3523,13 @@ function abrirModalProducto(id) {
     setV('pr-material',p.material_hilo_id||'');setV('pr-tubos',p.tubos_hilo||0);
     setV('pr-dias',p.dias_produccion||7);setV('pr-precio',p.precio_venta);
     setV('pr-costo',p.costo_produccion||0);setV('pr-stock',p.stock_disponible||0);
+    setV('pr-linea',p.linea_catalogo||'');setV('pr-tamano-ref',p.tamano_ref||'');setV('pr-color-ref',p.color_ref||'');setV('pr-color-ref2',p.color_ref2||'');setV('pr-diseno-ref',p.diseno_ref||'');
     const recs = recetasPlantillaProducto(id);
     if(recs.length) recs.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'));
     else addMatProducto(p.material_hilo_id||'', Number(p.tubos_hilo||0)||1, '', 'cuerpo');
     onProdCatChange();
   } else {
-    clr('pr-nombre','pr-material','pr-precio','pr-costo');setV('pr-cat','fabricacion');
+    clr('pr-nombre','pr-material','pr-precio','pr-costo','pr-linea','pr-tamano-ref','pr-color-ref','pr-color-ref2','pr-diseno-ref');setV('pr-cat','fabricacion');
     setV('pr-tubos','0');setV('pr-dias','7');setV('pr-stock','0');
     addMatProducto();
     onProdCatChange();
@@ -3475,7 +3550,8 @@ async function guardarProducto() {
   const id=editIds.prod||genId('PRO',D.productos);
   const cat=getV('pr-cat');
   const p={id,nombre,categoria:cat,precio_venta:Number(precio),
-    costo_produccion:Number(getV('pr-costo')||0),stock_disponible:Number(getV('pr-stock')||0)};
+    costo_produccion:Number(getV('pr-costo')||0),stock_disponible:Number(getV('pr-stock')||0),
+    linea_catalogo:getV('pr-linea')||'',tamano_ref:getV('pr-tamano-ref')||'',color_ref:getV('pr-color-ref')||'',color_ref2:getV('pr-color-ref2')||'',diseno_ref:getV('pr-diseno-ref')||''};
   if(cat==='fabricacion'){
     p.material_hilo_id=getV('pr-material');p.tubos_hilo=Number(getV('pr-tubos')||0);p.dias_produccion=Number(getV('pr-dias')||7);
   }
@@ -3511,38 +3587,48 @@ async function guardarProducto() {
 }
 function renderProductos() {
   const el=$('prod-list'); if(!el) return;
-  let lista=D.productos;
+  let lista=arr(D.productos);
   if(filtroProd!=='todos') lista=lista.filter(p=>categoriaProducto(p)===filtroProd);
   if(!lista.length){el.innerHTML=empty('Sin productos — crea uno con + Nuevo');return;}
+  const grupos={unicolor:[], combinada:[], especial:[], sin:[]};
+  lista.forEach(p=>{ const key=String(p.linea_catalogo||'sin').toLowerCase(); if(!grupos[key]) grupos[key]=[]; grupos[key].push(p); });
+  const orden=['unicolor','combinada','especial','sin'];
   el.innerHTML='';
-  lista.forEach(p=>{
-    const mat=D.materiales.find(x=>x.id===p.material_hilo_id);
-    const div=document.createElement('div');
-    div.className='card';div.style.marginBottom='8px';
-    // Construir contenido
-    let inner='<div style="display:flex;flex-direction:column;gap:8px">';
-    inner+='<div class="card-row">';
-    inner+='<div style="flex:1;min-width:0">';
-    inner+='<div class="card-title">'+p.nombre+'</div>';
-    const recCount=recetasPlantillaProducto(p.id).length;
-    if(mat) inner+='<div class="card-sub">'+mat.nombre+' · '+(p.tubos_hilo||0)+' base'+(recCount>1?' · '+recCount+' materiales':'')+'</div>';
-    if(categoriaProducto(p)==='reventa') inner+='<div class="card-note">Stock: '+(p.stock_disponible||0)+'</div>';
-    inner+='</div>';
-    inner+='<div style="text-align:right;flex-shrink:0;margin-left:8px">';
-    const cat=categoriaProducto(p);
-    inner+='<span class="badge '+(cat==='reventa'?'rev':cat==='accesorio'?'':'fab')+'">'+(cat==='reventa'?'Reventa':cat==='accesorio'?'Accesorio':'Fab.')+'</span>';
-    inner+='<div style="font-size:15px;font-weight:700;color:var(--accent);margin-top:4px">$'+fmx(p.precio_venta)+'</div>';
-    inner+='</div></div>';
-    inner+='<div style="display:flex;gap:6px">';
-    inner+='<button class="btn btn-secondary btn-sm" style="flex:1" data-pid="'+p.id+'">✏️ Editar</button>';
-    inner+='<button class="btn btn-secondary btn-sm" style="color:var(--danger)" data-del="'+p.id+'">🗑</button>';
-    inner+='</div></div>';
-    div.innerHTML=inner;
-    // Usar addEventListener con closure del ID correcto
-    const pid=p.id;
-    div.querySelector('[data-pid]').addEventListener('click',()=>abrirModalProducto(pid));
-    div.querySelector('[data-del]').addEventListener('click',()=>eliminarProducto(pid));
-    el.appendChild(div);
+  orden.forEach(key=>{
+    const items=grupos[key]||[];
+    if(!items.length) return;
+    const sec=document.createElement('div');
+    sec.innerHTML=`<div class="sec-title" style="margin-top:6px">${key==='sin'?'Sin clasificar':(lineaCatalogoLabel(key)||key)}</div>`;
+    el.appendChild(sec);
+    items.forEach(p=>{
+      const mat=D.materiales.find(x=>x.id===p.material_hilo_id);
+      const div=document.createElement('div');
+      div.className='card';div.style.marginBottom='8px';
+      let inner='<div style="display:flex;flex-direction:column;gap:8px">';
+      inner+='<div class="card-row">';
+      inner+='<div style="flex:1;min-width:0">';
+      inner+='<div class="card-title">'+p.nombre+'</div>';
+      const detalleCatalogo=detalleCatalogoProducto(p);
+      if(detalleCatalogo) inner+='<div class="card-sub">'+detalleCatalogo+'</div>';
+      const recCount=recetasPlantillaProducto(p.id).length;
+      if(mat && categoriaProducto(p)==='fabricacion') inner+='<div class="card-note">'+mat.nombre+' · '+(p.tubos_hilo||0)+' base'+(recCount>1?' · '+recCount+' materiales':'')+'</div>';
+      if(categoriaProducto(p)==='reventa') inner+='<div class="card-note">Stock: '+(p.stock_disponible||0)+'</div>';
+      inner+='</div>';
+      inner+='<div style="text-align:right;flex-shrink:0;margin-left:8px">';
+      const cat=categoriaProducto(p);
+      inner+='<span class="badge '+(cat==='reventa'?'rev':cat==='accesorio'?'':'fab')+'">'+(cat==='reventa'?'Reventa':cat==='accesorio'?'Accesorio':'Fab.')+'</span>';
+      inner+='<div style="font-size:15px;font-weight:700;color:var(--accent);margin-top:4px">$'+fmx(p.precio_venta)+'</div>';
+      inner+='</div></div>';
+      inner+='<div style="display:flex;gap:6px">';
+      inner+='<button class="btn btn-secondary btn-sm" style="flex:1" data-pid="'+p.id+'">✏️ Editar</button>';
+      inner+='<button class="btn btn-secondary btn-sm" style="color:var(--danger)" data-del="'+p.id+'">🗑</button>';
+      inner+='</div></div>';
+      div.innerHTML=inner;
+      const pid=p.id;
+      div.querySelector('[data-pid]').addEventListener('click',()=>abrirModalProducto(pid));
+      div.querySelector('[data-del]').addEventListener('click',()=>eliminarProducto(pid));
+      el.appendChild(div);
+    });
   });
 }
 
@@ -4459,7 +4545,7 @@ async function guardarAbono() {
 // ═══════════════════════════════════════════════
 function abrirCotizador() {
   $('cot-cliente-sel').innerHTML='<option value="">— O selecciona cliente existente —</option>'+D.clientes.map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
-  $('cot-producto').innerHTML='<option value="">— Selecciona —</option>'+D.productos.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
+  $('cot-producto').innerHTML=optionsProductosAgrupados(getV('cot-producto'));
   clr('cot-nombre','cot-precio','cot-notas');setV('cot-cant','1');setV('cot-vigencia','7');setV('cot-tipo','producto');
   onCotTipoChange();
   abrirModal('modal-cot');
@@ -4493,7 +4579,14 @@ function generarCotizacion() {
   const vence=new Date(Date.now()+vigencia*86400000).toLocaleDateString('es-MX');
   const cotNum='COT-'+Date.now().toString().slice(-6);
   let prodNom='';
-  if(tipo==='producto'){const p=D.productos.find(x=>x.id===getV('cot-producto'));prodNom=p?p.nombre:'Producto';}
+  let prodDetalleHtml='';
+  if(tipo==='producto'){
+    const p=D.productos.find(x=>x.id===getV('cot-producto'));
+    prodNom=p?nombreCatalogoProducto(p):'Producto';
+    const detalles=detallesPresentacion(p, null);
+    if(detalles.length) prodDetalleHtml='<br><span style="font-size:11px;color:#666">'+detalles.join(' · ')+'</span>';
+    else if(p?.nombre && prodNom!==p.nombre) prodDetalleHtml='<br><span style="font-size:11px;color:#666">'+p.nombre+'</span>';
+  }
   else{prodNom='Servicio de reparación — '+(getV('cot-rep-tipo')||'');}
   const logoSrc=CFG.logo||localStorage.getItem('cfg_logo')||'';
   const logoHTML=logoSrc?`<img src="${logoSrc}" style="max-height:70px;max-width:180px;object-fit:contain;display:block">`:
@@ -4520,7 +4613,7 @@ td{padding:9px 12px;border-bottom:1px solid #eee;font-size:13px}tfoot td{padding
 <div class="cbox"><strong>${nombre}</strong>${tel?`<br>📞 ${tel}`:''}</div>
 <div class="sec">Detalle</div>
 <table><thead><tr><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">Precio unit.</th><th style="text-align:right">Total</th></tr></thead>
-<tbody><tr><td>${prodNom}</td><td style="text-align:center">${cant}</td><td style="text-align:right">$${fmx(precio/cant)}</td><td style="text-align:right">$${fmx(precio)}</td></tr></tbody>
+<tbody><tr><td>${prodNom}${prodDetalleHtml}</td><td style="text-align:center">${cant}</td><td style="text-align:right">$${fmx(precio/cant)}</td><td style="text-align:right">$${fmx(precio)}</td></tr></tbody>
 <tfoot><tr><td colspan="3" style="text-align:right;font-size:13px;color:#555">Total MXN</td><td style="text-align:right">$${fmx(precio)}</td></tr></tfoot></table>
 ${notas?`<div class="notas">${notas}</div>`:''}
 <div class="val">✓ Válida hasta ${vence}. Precios en pesos mexicanos incluyen mano de obra.</div>
@@ -5300,6 +5393,9 @@ function imprimirPedido(id) {
   const c=D.clientes.find(x=>x.id===p.cliente_id)||{nombre:'Cliente'};
   const det=D.ped_det.find(x=>x.pedido_id===id);
   const prod=det?D.productos.find(x=>x.id===det.producto_id):null;
+  const prodTitulo = prod ? nombreCatalogoProducto(prod) : 'Producto';
+  const prodDetalles = detallesPresentacion(prod, det);
+  const prodDetalleHtml = prodDetalles.length ? '<div class="card-note">'+prodDetalles.join(' · ')+'</div>' : (prod?.nombre && prodTitulo!==prod.nombre ? '<div class="card-note">'+prod.nombre+'</div>' : '');
   const abonado=abonadoPor(id);
   const saldo=Math.max(0,Number(p.total||0)-Number(p.anticipo||0)-abonado);
   const logoSrc=CFG.logo||localStorage.getItem('cfg_logo')||'';
@@ -5327,10 +5423,9 @@ function imprimirPedido(id) {
 <div class="sec">Cliente</div>
 <div class="cbox"><strong>${c.nombre}</strong>${c.telefono?`<span style="color:#555;font-size:11px"> · 📞 ${c.telefono}</span>`:''}${c.email?`<br><span style="color:#555;font-size:11px">${c.email}</span>`:''}</div>
 <div class="sec">Pedido</div>
-${prod?`<div class="row"><span class="lbl">Producto</span><strong>${prod.nombre}</strong></div>`:''}
+${prod?`<div class="row"><span class="lbl">Línea</span><strong>${prodTitulo}</strong></div>`:''}
+${prodDetalleHtml?`<div class="row"><span class="lbl">Detalle</span><span>${prodDetalles.join(' · ') || prod.nombre || ''}</span></div>`:''}
 ${det?.cantidad?`<div class="row"><span class="lbl">Cantidad</span><span>${det.cantidad}</span></div>`:''}
-${det?.color_hilo?`<div class="row"><span class="lbl">Color</span><span>${det.color_hilo}</span></div>`:''}
-${det?.medidas?`<div class="row"><span class="lbl">Medidas</span><span>${det.medidas}</span></div>`:''}
 ${p.fecha_entrega?`<div class="row"><span class="lbl">Fecha de entrega</span><strong>${p.fecha_entrega}</strong></div>`:''}
 ${p.notas?`<div class="row"><span class="lbl">Notas</span><span style="font-size:11px">${p.notas}</span></div>`:''}
 <div class="sec">Cuenta</div>
@@ -5719,6 +5814,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if(matSec) matSec.style.display = cat==='fabricacion' ? 'block' : 'none';
     const lblPago=$('lbl-p-pago');
     if(lblPago) lblPago.textContent = cat==='reventa' ? 'Pago recibido ($)' : 'Anticipo ($)';
+    if(!getV('p-color') && prod?.color_ref) setV('p-color', prod.color_ref);
+    if(!getV('p-color2') && prod?.color_ref2) setV('p-color2', prod.color_ref2);
+    if(!getV('p-medidas') && prod?.tamano_ref) setV('p-medidas', prod.tamano_ref);
+    if(!getV('p-diseno') && prod?.diseno_ref) setV('p-diseno', prod.diseno_ref);
     calcTotal();
     if(cat==='fabricacion'){ cargaRecetaProductoEnPedido(prod, true); }
   };
@@ -5788,7 +5887,7 @@ document.addEventListener('DOMContentLoaded', () => {
       editIds.pedido=null;
       $('tit-pedido').textContent='Nuevo pedido';
       $('btn-guardar-pedido').textContent='Guardar pedido';
-      ['p-cliente','p-producto','p-color','p-medidas','p-notas'].forEach(id=>setV(id,''));
+      ['p-cliente','p-producto','p-color','p-color2','p-medidas','p-diseno','p-notas'].forEach(id=>setV(id,''));
       setV('p-cant',1); setV('p-total',0); setV('p-anticipo',0);
       const f=new Date(); f.setDate(f.getDate()+7); setV('p-fecha', f.toISOString().split('T')[0]);
       $('p-total').dataset.auto='1';
@@ -5797,7 +5896,7 @@ document.addEventListener('DOMContentLoaded', () => {
       $('p-badge').style.display='none'; $('p-badge').innerHTML=''; const lblPago=$('lbl-p-pago'); if(lblPago) lblPago.textContent='Anticipo ($)';
     }
     $('p-cliente').innerHTML='<option value="">— Selecciona cliente —</option>'+arr(D.clientes).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
-    $('p-producto').innerHTML='<option value="">— Selecciona producto —</option>'+arr(D.productos).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
+    $('p-producto').innerHTML=optionsProductosAgrupados(getV('p-producto'));
     abrirModal('modal-pedido');
   };
 
@@ -5815,7 +5914,9 @@ document.addEventListener('DOMContentLoaded', () => {
       onProdChange();
       setV('p-cant', det?.cantidad||1);
       setV('p-color', det?.color_hilo||det?.color||'');
-      setV('p-medidas', det?.medidas||'');
+      setV('p-color2', det?.color_hilo2||'');
+      setV('p-medidas', det?.tamano_comercial||det?.medidas||'');
+      setV('p-diseno', det?.diseno_comercial||'');
       setV('p-total', p.total||0); $('p-total').dataset.auto='0';
       setV('p-anticipo', p.anticipo||0);
       setV('p-fecha', normDate(p.fecha_entrega)||'');
@@ -5875,7 +5976,10 @@ document.addEventListener('DOMContentLoaded', () => {
         producto_id:productoId,
         cantidad:qty,
         color_hilo:getV('p-color')||'',
+        color_hilo2:getV('p-color2')||'',
         medidas:getV('p-medidas')||'',
+        tamano_comercial:getV('p-medidas')||'',
+        diseno_comercial:getV('p-diseno')||'',
         precio_unitario: qty ? (total/qty) : total,
         subtotal: total
       };
