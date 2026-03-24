@@ -1238,9 +1238,11 @@ function lineaCatalogoLabel(v){
 function inferLineaCatalogo(prod, det){
   const explicit = String(det?.linea_catalogo || prod?.linea_catalogo || '').toLowerCase().trim();
   if(explicit) return explicit;
-  const multi = String(det?.colores_comerciales || prod?.colores_ref || '').trim();
-  const color2 = String(det?.color_hilo2 || prod?.color_ref2 || '').trim();
-  const dis = String(det?.diseno_comercial || prod?.diseno_ref || '').trim();
+  // Solo inferir desde el detalle/pedido cuando no haya clasificación explícita.
+  // En productos, si no existe linea_catalogo guardada, asumimos unicolor para no contaminar otros registros.
+  const multi = String(det?.colores_comerciales || '').trim();
+  const color2 = String(det?.color_hilo2 || '').trim();
+  const dis = String(det?.diseno_comercial || '').trim();
   if(dis) return 'especial';
   if(multi || color2) return 'combinada';
   return 'unicolor';
@@ -1283,7 +1285,7 @@ function detalleCatalogoProducto(prod){
 function optionsProductosAgrupados(selected=''){
   const grupos={sin:[]};
   arr(D.productos).forEach(p=>{
-    const key=String(inferLineaCatalogo(p, null)||'sin').toLowerCase();
+    const key=String(p.linea_catalogo || 'unicolor').toLowerCase();
     if(!grupos[key]) grupos[key]=[];
     grupos[key].push(p);
   });
@@ -3602,18 +3604,19 @@ function abrirModalProducto(id) {
     setV('pr-material',p.material_hilo_id||'');setV('pr-tubos',p.tubos_hilo||0);
     setV('pr-dias',p.dias_produccion||7);setV('pr-precio',p.precio_venta);
     setV('pr-costo',p.costo_produccion||0);setV('pr-stock',p.stock_disponible||0);
-    setV('pr-linea',p.linea_catalogo||inferLineaCatalogo(p,null)||'');setV('pr-tamano-ref',p.tamano_ref||'');setV('pr-color-ref',p.color_ref||'');setV('pr-color-ref2',p.color_ref2||'');setV('pr-colores-ref',p.colores_ref||'');setV('pr-diseno-ref',p.diseno_ref||'');
+    setV('pr-linea',String(p.linea_catalogo||'unicolor').toLowerCase());setV('pr-tamano-ref',p.tamano_ref||'');setV('pr-color-ref',p.color_ref||'');setV('pr-color-ref2',p.color_ref2||'');setV('pr-colores-ref',p.colores_ref||'');setV('pr-diseno-ref',p.diseno_ref||'');
     const recs = recetasPlantillaProducto(id);
     if(recs.length) recs.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'));
     else addMatProducto(p.material_hilo_id||'', Number(p.tubos_hilo||0)||1, '', 'cuerpo');
     onProdCatChange();
-    applyLineaCatalogoRules('producto', p.linea_catalogo||inferLineaCatalogo(p,null)||'');
+    applyLineaCatalogoRules('producto', String(p.linea_catalogo||'unicolor').toLowerCase());
   } else {
     clr('pr-nombre','pr-material','pr-precio','pr-costo','pr-linea','pr-tamano-ref','pr-color-ref','pr-color-ref2','pr-colores-ref','pr-diseno-ref');setV('pr-cat','fabricacion');
     setV('pr-tubos','0');setV('pr-dias','7');setV('pr-stock','0');
     addMatProducto();
     onProdCatChange();
-    applyLineaCatalogoRules('producto', getV('pr-linea'));
+    setV('pr-linea','unicolor');
+    applyLineaCatalogoRules('producto', 'unicolor');
   }
   abrirModal('modal-producto');
 }
@@ -3631,17 +3634,20 @@ async function guardarProducto() {
   $('btn-guardar-prod').disabled=true;
   const id=editIds.prod||genId('PRO',D.productos);
   const cat=getV('pr-cat');
-  const lineaSel = String(getV('pr-linea')||'').toLowerCase().trim();
-  const linea = lineaSel || inferLineaCatalogo({
-    linea_catalogo:'',
-    color_ref:getV('pr-color-ref')||'',
-    color_ref2:getV('pr-color-ref2')||'',
-    colores_ref:getV('pr-colores-ref')||'',
-    diseno_ref:getV('pr-diseno-ref')||''
-  }, null);
+  const lineaSel = String(getV('pr-linea')||'unicolor').toLowerCase().trim() || 'unicolor';
+  const linea = lineaSel;
+  let colorRef=getV('pr-color-ref')||'';
+  let colorRef2=getV('pr-color-ref2')||'';
+  let coloresRef=getV('pr-colores-ref')||'';
+  let disenoRef=getV('pr-diseno-ref')||'';
+  if(linea==='unicolor'){
+    colorRef2=''; coloresRef=''; disenoRef='';
+  } else if(linea==='combinada'){
+    coloresRef=''; disenoRef='';
+  }
   const p={id,nombre,categoria:cat,precio_venta:Number(precio),
     costo_produccion:Number(getV('pr-costo')||0),stock_disponible:Number(getV('pr-stock')||0),
-    linea_catalogo:linea,tamano_ref:getV('pr-tamano-ref')||'',color_ref:getV('pr-color-ref')||'',color_ref2:getV('pr-color-ref2')||'',colores_ref:getV('pr-colores-ref')||'',diseno_ref:getV('pr-diseno-ref')||''};
+    linea_catalogo:linea,tamano_ref:getV('pr-tamano-ref')||'',color_ref:colorRef,color_ref2:colorRef2,colores_ref:coloresRef,diseno_ref:disenoRef};
   if(cat==='fabricacion'){
     p.material_hilo_id=getV('pr-material');p.tubos_hilo=Number(getV('pr-tubos')||0);p.dias_produccion=Number(getV('pr-dias')||7);
   }
