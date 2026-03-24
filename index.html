@@ -3607,11 +3607,13 @@ function abrirModalProducto(id) {
     if(recs.length) recs.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'));
     else addMatProducto(p.material_hilo_id||'', Number(p.tubos_hilo||0)||1, '', 'cuerpo');
     onProdCatChange();
+    applyLineaCatalogoRules('producto', p.linea_catalogo||inferLineaCatalogo(p,null)||'');
   } else {
     clr('pr-nombre','pr-material','pr-precio','pr-costo','pr-linea','pr-tamano-ref','pr-color-ref','pr-color-ref2','pr-colores-ref','pr-diseno-ref');setV('pr-cat','fabricacion');
     setV('pr-tubos','0');setV('pr-dias','7');setV('pr-stock','0');
     addMatProducto();
     onProdCatChange();
+    applyLineaCatalogoRules('producto', getV('pr-linea'));
   }
   abrirModal('modal-producto');
 }
@@ -3621,6 +3623,7 @@ function onProdCatChange(){
   if(cat==='fabricacion' && $('pr-receta-list') && !$('pr-receta-list').children.length){
     addMatProducto();
   }
+  applyLineaCatalogoRules('producto');
 }
 async function guardarProducto() {
   const nombre=getV('pr-nombre'),precio=getV('pr-precio');
@@ -3628,9 +3631,17 @@ async function guardarProducto() {
   $('btn-guardar-prod').disabled=true;
   const id=editIds.prod||genId('PRO',D.productos);
   const cat=getV('pr-cat');
+  const lineaSel = String(getV('pr-linea')||'').toLowerCase().trim();
+  const linea = lineaSel || inferLineaCatalogo({
+    linea_catalogo:'',
+    color_ref:getV('pr-color-ref')||'',
+    color_ref2:getV('pr-color-ref2')||'',
+    colores_ref:getV('pr-colores-ref')||'',
+    diseno_ref:getV('pr-diseno-ref')||''
+  }, null);
   const p={id,nombre,categoria:cat,precio_venta:Number(precio),
     costo_produccion:Number(getV('pr-costo')||0),stock_disponible:Number(getV('pr-stock')||0),
-    linea_catalogo:getV('pr-linea')||'',tamano_ref:getV('pr-tamano-ref')||'',color_ref:getV('pr-color-ref')||'',color_ref2:getV('pr-color-ref2')||'',colores_ref:getV('pr-colores-ref')||'',diseno_ref:getV('pr-diseno-ref')||''};
+    linea_catalogo:linea,tamano_ref:getV('pr-tamano-ref')||'',color_ref:getV('pr-color-ref')||'',color_ref2:getV('pr-color-ref2')||'',colores_ref:getV('pr-colores-ref')||'',diseno_ref:getV('pr-diseno-ref')||''};
   if(cat==='fabricacion'){
     p.material_hilo_id=getV('pr-material');p.tubos_hilo=Number(getV('pr-tubos')||0);p.dias_produccion=Number(getV('pr-dias')||7);
   }
@@ -6131,11 +6142,19 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const detalleId = det?.id || genId('DET', arr(D.ped_det));
+      const detLinea = inferLineaCatalogo(prod||{}, {
+        linea_catalogo: prod?.linea_catalogo || '',
+        color_hilo:getV('p-color')||'',
+        color_hilo2:getV('p-color2')||'',
+        colores_comerciales:getV('p-colores')||'',
+        diseno_comercial:getV('p-diseno')||''
+      });
       const detPayload={
         id:detalleId,
         pedido_id:pedidoId,
         producto_id:productoId,
         cantidad:qty,
+        linea_catalogo:detLinea,
         color_hilo:getV('p-color')||'',
         color_hilo2:getV('p-color2')||'',
         colores_comerciales:getV('p-colores')||'',
