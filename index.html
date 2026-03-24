@@ -1073,6 +1073,10 @@ body.modal-open{overflow:hidden}
     <div class="form-group"><label class="form-label">Clave secreta</label><input type="text" class="form-input" id="cfg-key" placeholder="descanso-maya-2024"></div>
     <div class="form-group"><label class="form-label">Nombre de la empresa</label><input type="text" class="form-input" id="cfg-emp" placeholder="Descanso Maya"></div>
     <div class="form-group"><label class="form-label">Teléfono (aparece en PDFs)</label><input type="text" class="form-input" id="cfg-tel" placeholder="999 000 0000"></div>
+    <div class="form-group"><label class="form-label">Firma / pie de PDF</label><textarea class="form-input" id="cfg-firma" placeholder="Descanso Maya
+Hamacas artesanales hechas en Yucatán
+WhatsApp: 999 000 0000
+Gracias por apoyar lo hecho a mano" style="min-height:110px"></textarea><div style="font-size:11px;color:var(--text3);margin-top:6px">Se usa por defecto en pedidos y cotizaciones. Puedes escribir varias líneas.</div></div>
     <div class="form-group">
       <label class="form-label">Logo (aparece en PDFs)</label>
       <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Selecciona desde tu dispositivo — se guarda en el navegador sin depender de internet</div>
@@ -1162,7 +1166,8 @@ const CFG = {
   key: localStorage.getItem('cfg_key') || 'descanso-maya-2024',
   emp: localStorage.getItem('cfg_emp') || 'Descanso Maya',
   tel: localStorage.getItem('cfg_tel') || '',
-  logo: localStorage.getItem('cfg_logo') || ''
+  logo: localStorage.getItem('cfg_logo') || '',
+  firma_pdf: localStorage.getItem('cfg_firma_pdf') || ''
 };
 const D = {
   pedidos:[], clientes:[], productos:[], materiales:[], artesanos:[], tarifas_artesano:[],
@@ -4642,6 +4647,7 @@ function generarCotizacion() {
   const logoSrc=CFG.logo||localStorage.getItem('cfg_logo')||'';
   const logoHTML=logoSrc?`<img src="${logoSrc}" style="max-height:70px;max-width:180px;object-fit:contain;display:block">`:
     `<div style="font-size:22px;font-weight:900;color:#7c6af7">${CFG.emp}</div>`;
+  const firmaHtml=firmaPdfHtml();
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Cotización ${cotNum}</title>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;max-width:720px;margin:0 auto;padding:36px 32px;color:#222;font-size:14px}
 .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:18px;border-bottom:3px solid #7c6af7;margin-bottom:24px}
@@ -4667,7 +4673,7 @@ td{padding:9px 12px;border-bottom:1px solid #eee;font-size:13px}tfoot td{padding
 <tfoot><tr><td colspan="3" style="text-align:right;font-size:13px;color:#555">Total MXN</td><td style="text-align:right">$${fmx(precio)}</td></tr></tfoot></table>
 ${notas?`<div class="notas">${notas}</div>`:''}
 <div class="val">✓ Vigencia estimada hasta ${vence}. Precios en pesos mexicanos.</div>
-<div class="ftr">${CFG.emp} — Elaboración y Reparación de Hamacas Artesanales${CFG.tel?'<br>📞 '+CFG.tel:''}<br>Mérida, Yucatán, México</div>
+<div class="ftr">${firmaHtml}</div>
 <button class="btn" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
 
 </body></html>`;
@@ -5451,6 +5457,7 @@ function imprimirPedido(id) {
   const logoSrc=CFG.logo||localStorage.getItem('cfg_logo')||'';
   const logoHTML=logoSrc?`<img src="${logoSrc}" style="max-height:60px;max-width:150px;object-fit:contain;display:block">`:
     `<div style="font-size:20px;font-weight:900;color:#7c6af7">${CFG.emp}</div>`;
+  const firmaHtml=firmaPdfHtml();
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Pedido ${id}</title>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;max-width:680px;margin:0 auto;padding:28px;color:#222;font-size:13px}
 .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #7c6af7;padding-bottom:14px;margin-bottom:18px}
@@ -5488,7 +5495,7 @@ ${p.notas?`<div class="row"><span class="lbl">Notas</span><span style="font-size
   <div class="fline">Firma del cliente<br>${c.nombre}</div>
   <div class="fline">Recibió<br>${CFG.emp}</div>
 </div>
-<div class="ftr">${CFG.emp} · ${new Date().toLocaleDateString('es-MX')}${CFG.tel?' · 📞 '+CFG.tel:''}</div>
+<div class="ftr">${firmaPdfHtml()}</div>
 <button class="btn" onclick="window.print()">🖨 Imprimir</button>
 
 </body></html>`;
@@ -5580,18 +5587,54 @@ function buscar(q) {
 // ═══════════════════════════════════════════════
 // CONFIGURACIÓN
 // ═══════════════════════════════════════════════
-function cargarConfig() {
+function defaultFirmaPdf(){
+  return [CFG.emp||'Descanso Maya','Hamacas artesanales hechas en Yucatán',CFG.tel?('WhatsApp: '+CFG.tel):'','Gracias por apoyar lo hecho a mano 🙌'].filter(Boolean).join('\\n');
+}
+function escapeHtml(s){
+  return String(s==null?'':s).replace(/[&<>\"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]));
+}
+function firmaPdfActual(){
+  const txt = (CFG.firma_pdf||'').trim() || defaultFirmaPdf();
+  return txt;
+}
+function firmaPdfHtml(){
+  return escapeHtml(firmaPdfActual()).replace(/\\n/g,'<br>');
+}
+async function cargarConfig() {
   setV('cfg-url',CFG.url);setV('cfg-key',CFG.key);setV('cfg-emp',CFG.emp);setV('cfg-tel',CFG.tel);
+  setV('cfg-firma', (CFG.firma_pdf||'').trim() || defaultFirmaPdf());
   if(CFG.logo){$('logo-img').src=CFG.logo;$('logo-preview').style.display='block';}
   else {$('logo-preview').style.display='none';}
+  if(CFG.url){
+    try{
+      const rows = await leer('configuracion');
+      const firmaRow = arr(rows).find(r=>String(r.clave||'')==='firma_pdf');
+      if(firmaRow && String(firmaRow.valor||'').trim()){
+        CFG.firma_pdf = String(firmaRow.valor||'');
+        localStorage.setItem('cfg_firma_pdf', CFG.firma_pdf);
+        setV('cfg-firma', CFG.firma_pdf);
+      }
+    }catch(err){
+      console.warn('No se pudo leer configuración remota', err);
+    }
+  }
   renderDiagnosticoConfig();
 }
-function guardarConfig() {
+async function guardarConfig() {
   const url=getV('cfg-url'),key=getV('cfg-key'),emp=getV('cfg-emp')||'Descanso Maya',tel=getV('cfg-tel');
+  const firma=(getV('cfg-firma')||'').trim() || [emp,'Hamacas artesanales hechas en Yucatán',tel?('WhatsApp: '+tel):'','Gracias por apoyar lo hecho a mano 🙌'].filter(Boolean).join('\n');
   if(!url){toast('La URL del Web App es requerida');return;}
-  CFG.url=url;CFG.key=key;CFG.emp=emp;CFG.tel=tel;
+  CFG.url=url;CFG.key=key;CFG.emp=emp;CFG.tel=tel;CFG.firma_pdf=firma;
   localStorage.setItem('cfg_url',url);localStorage.setItem('cfg_key',key);
-  localStorage.setItem('cfg_emp',emp);localStorage.setItem('cfg_tel',tel);
+  localStorage.setItem('cfg_emp',emp);localStorage.setItem('cfg_tel',tel);localStorage.setItem('cfg_firma_pdf',firma);
+  try{
+    const rows = await leer('configuracion');
+    const firmaRow = arr(rows).find(r=>String(r.clave||'')==='firma_pdf');
+    if(firmaRow && firmaRow.id) await actualizar('configuracion',{id:firmaRow.id, clave:'firma_pdf', valor:firma, updated_at:new Date().toISOString()});
+    else await crear('configuracion',{id:'CFG-FIRMA-PDF', clave:'firma_pdf', valor:firma, updated_at:new Date().toISOString()});
+  }catch(err){
+    console.warn('No se pudo sincronizar firma_pdf con Sheets', err);
+  }
   toast('✓ Configuración guardada — conectando...');
   cargarTodo();
   renderDiagnosticoConfig();
