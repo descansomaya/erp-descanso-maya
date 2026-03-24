@@ -757,7 +757,7 @@ body.modal-open{overflow:hidden}
     <div class="sec-title">Clasificación comercial</div>
     <div class="desktop-grid-2">
       <div class="form-group"><label class="form-label">Línea para PDF</label>
-        <select class="form-input" id="pr-linea">
+        <select class="form-input" id="pr-linea" onchange="applyLineaCatalogoRules('producto')">
           <option value="">— Sin clasificar —</option>
           <option value="unicolor">Hamaca Unicolor</option>
           <option value="combinada">Hamaca Combinada</option>
@@ -768,9 +768,10 @@ body.modal-open{overflow:hidden}
     </div>
     <div class="desktop-grid-2">
       <div class="form-group"><label class="form-label">Color principal por defecto</label><input type="text" class="form-input" id="pr-color-ref" placeholder="Ej: Azul cielo"></div>
-      <div class="form-group"><label class="form-label">Color secundario por defecto</label><input type="text" class="form-input" id="pr-color-ref2" placeholder="Ej: Azul rey"></div>
+      <div class="form-group" id="pr-color-ref2-wrap"><label class="form-label">Color secundario por defecto</label><input type="text" class="form-input" id="pr-color-ref2" placeholder="Ej: Azul rey"></div>
     </div>
-    <div class="form-group"><label class="form-label">Diseño / especialidad</label><input type="text" class="form-input" id="pr-diseno-ref" placeholder="Ej: Sandía, Pitahaya"></div>
+    <div class="form-group" id="pr-colores-ref-wrap"><label class="form-label">Colores comerciales (3 o más)</label><textarea class="form-input" id="pr-colores-ref" placeholder="Ej: Azul cielo, azul rey, blanco"></textarea></div>
+    <div class="form-group" id="pr-diseno-ref-wrap"><label class="form-label">Diseño / especialidad</label><input type="text" class="form-input" id="pr-diseno-ref" placeholder="Ej: Sandía, Pitahaya"></div>
     <div id="pr-fab-section">
       <input type="hidden" id="pr-material">
       <input type="hidden" id="pr-tubos" value="0">
@@ -1206,25 +1207,41 @@ function lineaCatalogoLabel(v){
   const key=String(v||'').toLowerCase();
   return (CATALOGO_LINEAS.find(x=>x.id===key)||{}).label || '';
 }
-function nombreCatalogoProducto(prod){
+function inferLineaCatalogo(prod, det){
+  const explicit = String(det?.linea_catalogo || prod?.linea_catalogo || '').toLowerCase().trim();
+  if(explicit) return explicit;
+  const multi = String(det?.colores_comerciales || prod?.colores_ref || '').trim();
+  const color2 = String(det?.color_hilo2 || prod?.color_ref2 || '').trim();
+  const dis = String(det?.diseno_comercial || prod?.diseno_ref || '').trim();
+  if(dis) return 'especial';
+  if(multi || color2) return 'combinada';
+  return 'unicolor';
+}
+function nombreCatalogoProducto(prod, det){
   if(!prod) return 'Producto';
-  return lineaCatalogoLabel(prod.linea_catalogo) || prod.nombre || 'Producto';
+  return lineaCatalogoLabel(inferLineaCatalogo(prod, det)) || prod.nombre || 'Producto';
+}
+function coloresPresentacion(prod, det){
+  const multi = String(det?.colores_comerciales || prod?.colores_ref || '').trim();
+  if(multi) return multi;
+  const color1 = String(det?.color_hilo || det?.color || prod?.color_ref || '').trim();
+  const color2 = String(det?.color_hilo2 || prod?.color_ref2 || '').trim();
+  if(color1 && color2) return color1 + ', ' + color2;
+  return color1;
 }
 function detallesPresentacion(prod, det){
   const out=[];
-  const color1 = String(det?.color_hilo || det?.color || prod?.color_ref || '').trim();
-  const color2 = String(det?.color_hilo2 || prod?.color_ref2 || '').trim();
+  const linea=inferLineaCatalogo(prod, det);
+  const colores = coloresPresentacion(prod, det);
   const tam = String(det?.tamano_comercial || det?.medidas || prod?.tamano_ref || '').trim();
   const dis = String(det?.diseno_comercial || prod?.diseno_ref || '').trim();
-  const linea=String(prod?.linea_catalogo||'').toLowerCase();
   if(linea==='especial'){
     if(dis) out.push('Diseño: '+dis);
-    if(color1 && color2) out.push('Colores: '+color1+' + '+color2);
-    else if(color1) out.push('Color: '+color1);
-  } else if(color1 && color2){
-    out.push('Colores: '+color1+' + '+color2);
-  } else if(color1){
-    out.push('Color: '+color1);
+    if(colores) out.push('Colores: '+colores);
+  } else if(linea==='combinada'){
+    if(colores) out.push('Colores: '+colores);
+  } else {
+    if(colores) out.push('Color: '+colores.split(',')[0].trim());
   }
   if(tam) out.push('Tamaño: '+tam);
   return out.filter(Boolean);
@@ -1238,7 +1255,7 @@ function detalleCatalogoProducto(prod){
 function optionsProductosAgrupados(selected=''){
   const grupos={sin:[]};
   arr(D.productos).forEach(p=>{
-    const key=String(p.linea_catalogo||'sin').toLowerCase();
+    const key=String(inferLineaCatalogo(p, null)||'sin').toLowerCase();
     if(!grupos[key]) grupos[key]=[];
     grupos[key].push(p);
   });
@@ -1251,6 +1268,40 @@ function optionsProductosAgrupados(selected=''){
     html += `<optgroup label="${label}">` + items.map(p=>`<option value="${p.id}" ${String(selected)===String(p.id)?'selected':''}>${p.nombre}</option>`).join('') + '</optgroup>';
   });
   return html;
+}
+function applyLineaCatalogoRules(context, linea){
+  const cfg = {
+    producto: {
+      lineSel:'pr-linea',
+      color2Wrap:'pr-color-ref2-wrap', color2:'pr-color-ref2',
+      coloresWrap:'pr-colores-ref-wrap', colores:'pr-colores-ref',
+      disenoWrap:'pr-diseno-ref-wrap', diseno:'pr-diseno-ref'
+    },
+    pedido: {
+      color2Wrap:'p-color2-wrap', color2:'p-color2',
+      coloresWrap:'p-colores-wrap', colores:'p-colores',
+      disenoWrap:'p-diseno-wrap', diseno:'p-diseno'
+    }
+  }[context];
+  if(!cfg) return;
+  const key = String(linea || (cfg.lineSel ? getV(cfg.lineSel) : '') || '').toLowerCase() || 'unicolor';
+  const show = id => { const el=$(id); if(el) el.style.display='block'; };
+  const hide = id => { const el=$(id); if(el) el.style.display='none'; };
+  const disable = (id, clear=false) => { const el=$(id); if(el){ el.disabled=true; if(clear) el.value=''; } };
+  const enable = id => { const el=$(id); if(el) el.disabled=false; };
+  if(key==='unicolor'){
+    hide(cfg.color2Wrap); hide(cfg.coloresWrap); hide(cfg.disenoWrap);
+    disable(cfg.color2, true); disable(cfg.colores, true); disable(cfg.diseno, true);
+  } else if(key==='combinada'){
+    show(cfg.color2Wrap); show(cfg.coloresWrap); hide(cfg.disenoWrap);
+    enable(cfg.color2); enable(cfg.colores); disable(cfg.diseno, true);
+  } else if(key==='especial'){
+    show(cfg.color2Wrap); show(cfg.coloresWrap); show(cfg.disenoWrap);
+    enable(cfg.color2); enable(cfg.colores); enable(cfg.diseno);
+  } else {
+    show(cfg.color2Wrap); show(cfg.coloresWrap); show(cfg.disenoWrap);
+    enable(cfg.color2); enable(cfg.colores); enable(cfg.diseno);
+  }
 }
 
 window.cerrarOverlayBtn = function cerrarOverlayBtn(btn){
@@ -3523,13 +3574,13 @@ function abrirModalProducto(id) {
     setV('pr-material',p.material_hilo_id||'');setV('pr-tubos',p.tubos_hilo||0);
     setV('pr-dias',p.dias_produccion||7);setV('pr-precio',p.precio_venta);
     setV('pr-costo',p.costo_produccion||0);setV('pr-stock',p.stock_disponible||0);
-    setV('pr-linea',p.linea_catalogo||'');setV('pr-tamano-ref',p.tamano_ref||'');setV('pr-color-ref',p.color_ref||'');setV('pr-color-ref2',p.color_ref2||'');setV('pr-diseno-ref',p.diseno_ref||'');
+    setV('pr-linea',p.linea_catalogo||inferLineaCatalogo(p,null)||'');setV('pr-tamano-ref',p.tamano_ref||'');setV('pr-color-ref',p.color_ref||'');setV('pr-color-ref2',p.color_ref2||'');setV('pr-colores-ref',p.colores_ref||'');setV('pr-diseno-ref',p.diseno_ref||'');
     const recs = recetasPlantillaProducto(id);
     if(recs.length) recs.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'));
     else addMatProducto(p.material_hilo_id||'', Number(p.tubos_hilo||0)||1, '', 'cuerpo');
     onProdCatChange();
   } else {
-    clr('pr-nombre','pr-material','pr-precio','pr-costo','pr-linea','pr-tamano-ref','pr-color-ref','pr-color-ref2','pr-diseno-ref');setV('pr-cat','fabricacion');
+    clr('pr-nombre','pr-material','pr-precio','pr-costo','pr-linea','pr-tamano-ref','pr-color-ref','pr-color-ref2','pr-colores-ref','pr-diseno-ref');setV('pr-cat','fabricacion');
     setV('pr-tubos','0');setV('pr-dias','7');setV('pr-stock','0');
     addMatProducto();
     onProdCatChange();
@@ -3551,7 +3602,7 @@ async function guardarProducto() {
   const cat=getV('pr-cat');
   const p={id,nombre,categoria:cat,precio_venta:Number(precio),
     costo_produccion:Number(getV('pr-costo')||0),stock_disponible:Number(getV('pr-stock')||0),
-    linea_catalogo:getV('pr-linea')||'',tamano_ref:getV('pr-tamano-ref')||'',color_ref:getV('pr-color-ref')||'',color_ref2:getV('pr-color-ref2')||'',diseno_ref:getV('pr-diseno-ref')||''};
+    linea_catalogo:getV('pr-linea')||'',tamano_ref:getV('pr-tamano-ref')||'',color_ref:getV('pr-color-ref')||'',color_ref2:getV('pr-color-ref2')||'',colores_ref:getV('pr-colores-ref')||'',diseno_ref:getV('pr-diseno-ref')||''};
   if(cat==='fabricacion'){
     p.material_hilo_id=getV('pr-material');p.tubos_hilo=Number(getV('pr-tubos')||0);p.dias_produccion=Number(getV('pr-dias')||7);
   }
@@ -3591,7 +3642,7 @@ function renderProductos() {
   if(filtroProd!=='todos') lista=lista.filter(p=>categoriaProducto(p)===filtroProd);
   if(!lista.length){el.innerHTML=empty('Sin productos — crea uno con + Nuevo');return;}
   const grupos={unicolor:[], combinada:[], especial:[], sin:[]};
-  lista.forEach(p=>{ const key=String(p.linea_catalogo||'sin').toLowerCase(); if(!grupos[key]) grupos[key]=[]; grupos[key].push(p); });
+  lista.forEach(p=>{ const key=String(inferLineaCatalogo(p,null)||'sin').toLowerCase(); if(!grupos[key]) grupos[key]=[]; grupos[key].push(p); });
   const orden=['unicolor','combinada','especial','sin'];
   el.innerHTML='';
   orden.forEach(key=>{
@@ -4582,7 +4633,7 @@ function generarCotizacion() {
   let prodDetalleHtml='';
   if(tipo==='producto'){
     const p=D.productos.find(x=>x.id===getV('cot-producto'));
-    prodNom=p?nombreCatalogoProducto(p):'Producto';
+    prodNom=p?nombreCatalogoProducto(p, null):'Producto';
     const detalles=detallesPresentacion(p, null);
     if(detalles.length) prodDetalleHtml='<br><span style="font-size:11px;color:#666">'+detalles.join(' · ')+'</span>';
     else if(p?.nombre && prodNom!==p.nombre) prodDetalleHtml='<br><span style="font-size:11px;color:#666">'+p.nombre+'</span>';
@@ -4626,10 +4677,10 @@ ${notas?`<div class="notas">${notas}</div>`:''}
   const cots=JSON.parse(localStorage.getItem('cotizaciones')||'[]');
   if(editId) {
     const idx=cots.findIndex(x=>x.id===editId);
-    if(idx>=0) cots[idx]={...cots[idx],nombre,prodNom,precio,cant,vigencia,notas,editada:new Date().toISOString()};
+    if(idx>=0) cots[idx]={...cots[idx],nombre,prodNom,prodId:getV('cot-producto')||cots[idx].prodId||'',precio,cant,vigencia,notas,editada:new Date().toISOString()};
     delete $('modal-cot').dataset.editId;
   } else {
-    cots.unshift({id:cotNum,nombre,prodNom,precio,cant,vigencia,notas,fecha:new Date().toISOString(),convertida:false});
+    cots.unshift({id:cotNum,nombre,prodNom,prodId:getV('cot-producto')||'',precio,cant,vigencia,notas,fecha:new Date().toISOString(),convertida:false});
     if(cots.length>50)cots.pop();
   }
   localStorage.setItem('cotizaciones',JSON.stringify(cots));
@@ -4673,7 +4724,7 @@ function editarCotizacion(id) {
     setV('cot-vigencia',c.vigencia||7);
     setV('cot-notas',c.notas||'');
     // Buscar el producto por nombre
-    const prod=D.productos.find(p=>p.nombre===c.prodNom);
+    const prod=(c.prodId?D.productos.find(p=>String(p.id)===String(c.prodId)):null) || D.productos.find(p=>p.nombre===c.prodNom);
     if(prod) setV('cot-producto',prod.id);
     // Marcar que estamos editando para sobrescribir
     $('modal-cot').dataset.editId=id;
@@ -4697,7 +4748,7 @@ function convertirCotizacion(cotId) {
     setV('p-cant',cot.cant||1);setV('p-total',cot.precio||'');setV('p-notas',cot.notas||'');
     const cli=D.clientes.find(x=>x.nombre===cot.nombre);
     if(cli)setV('p-cliente',cli.id);
-    const prod=D.productos.find(x=>x.nombre===cot.prodNom);
+    const prod=(cot.prodId?D.productos.find(x=>String(x.id)===String(cot.prodId)):null) || D.productos.find(x=>x.nombre===cot.prodNom);
     if(prod){setV('p-producto',prod.id);onProdChange();}
     toast('Datos de cotización precargados — revisa y guarda');
   },100);
@@ -5393,7 +5444,7 @@ function imprimirPedido(id) {
   const c=D.clientes.find(x=>x.id===p.cliente_id)||{nombre:'Cliente'};
   const det=D.ped_det.find(x=>x.pedido_id===id);
   const prod=det?D.productos.find(x=>x.id===det.producto_id):null;
-  const prodTitulo = prod ? nombreCatalogoProducto(prod) : 'Producto';
+  const prodTitulo = prod ? nombreCatalogoProducto(prod, det) : 'Producto';
   const prodDetalles = detallesPresentacion(prod, det);
   const prodDetalleHtml = prodDetalles.length ? '<div class="card-note">'+prodDetalles.join(' · ')+'</div>' : (prod?.nombre && prodTitulo!==prod.nombre ? '<div class="card-note">'+prod.nombre+'</div>' : '');
   const abonado=abonadoPor(id);
@@ -5816,8 +5867,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if(lblPago) lblPago.textContent = cat==='reventa' ? 'Pago recibido ($)' : 'Anticipo ($)';
     if(!getV('p-color') && prod?.color_ref) setV('p-color', prod.color_ref);
     if(!getV('p-color2') && prod?.color_ref2) setV('p-color2', prod.color_ref2);
+    if(!getV('p-colores') && prod?.colores_ref) setV('p-colores', prod.colores_ref);
     if(!getV('p-medidas') && prod?.tamano_ref) setV('p-medidas', prod.tamano_ref);
     if(!getV('p-diseno') && prod?.diseno_ref) setV('p-diseno', prod.diseno_ref);
+    applyLineaCatalogoRules('pedido', inferLineaCatalogo(prod, null));
     calcTotal();
     if(cat==='fabricacion'){ cargaRecetaProductoEnPedido(prod, true); }
   };
@@ -5887,13 +5940,13 @@ document.addEventListener('DOMContentLoaded', () => {
       editIds.pedido=null;
       $('tit-pedido').textContent='Nuevo pedido';
       $('btn-guardar-pedido').textContent='Guardar pedido';
-      ['p-cliente','p-producto','p-color','p-color2','p-medidas','p-diseno','p-notas'].forEach(id=>setV(id,''));
+      ['p-cliente','p-producto','p-color','p-color2','p-colores','p-medidas','p-diseno','p-notas'].forEach(id=>setV(id,''));
       setV('p-cant',1); setV('p-total',0); setV('p-anticipo',0);
       const f=new Date(); f.setDate(f.getDate()+7); setV('p-fecha', f.toISOString().split('T')[0]);
       $('p-total').dataset.auto='1';
       $('p-mat-list').innerHTML=''; window.matPedItems=[];
       $('p-mat-section').style.display='none';
-      $('p-badge').style.display='none'; $('p-badge').innerHTML=''; const lblPago=$('lbl-p-pago'); if(lblPago) lblPago.textContent='Anticipo ($)';
+      $('p-badge').style.display='none'; $('p-badge').innerHTML=''; const lblPago=$('lbl-p-pago'); if(lblPago) lblPago.textContent='Anticipo ($)'; applyLineaCatalogoRules('pedido','unicolor');
     }
     $('p-cliente').innerHTML='<option value="">— Selecciona cliente —</option>'+arr(D.clientes).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
     $('p-producto').innerHTML=optionsProductosAgrupados(getV('p-producto'));
@@ -5915,6 +5968,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setV('p-cant', det?.cantidad||1);
       setV('p-color', det?.color_hilo||det?.color||'');
       setV('p-color2', det?.color_hilo2||'');
+      setV('p-colores', det?.colores_comerciales||'');
       setV('p-medidas', det?.tamano_comercial||det?.medidas||'');
       setV('p-diseno', det?.diseno_comercial||'');
       setV('p-total', p.total||0); $('p-total').dataset.auto='0';
@@ -5923,6 +5977,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setV('p-notas', p.notas||'');
       const prod=det ? arr(D.productos).find(pr=>String(pr.id)===String(det.producto_id)) : null;
       const cat=prod ? (typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion')) : 'fabricacion';
+      applyLineaCatalogoRules('pedido', inferLineaCatalogo(prod, det));
       $('p-mat-list').innerHTML=''; window.matPedItems=[];
       if(cat==='fabricacion'){
         const recs=arr(D.recetas).filter(r=>String(r.pedido_id)===String(det?.id));
@@ -5977,6 +6032,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cantidad:qty,
         color_hilo:getV('p-color')||'',
         color_hilo2:getV('p-color2')||'',
+        colores_comerciales:getV('p-colores')||'',
         medidas:getV('p-medidas')||'',
         tamano_comercial:getV('p-medidas')||'',
         diseno_comercial:getV('p-diseno')||'',
@@ -6431,6 +6487,7 @@ window.addEventListener('unhandledrejection', function(ev){
       setTimeout(()=>calcCostoEstimadoProducto(), 30);
     }
     onProdCatChange();
+    applyLineaCatalogoRules('producto');
     abrirModal('modal-producto');
   };
 
@@ -6445,6 +6502,7 @@ window.addEventListener('unhandledrejection', function(ev){
       if(document.getElementById('pr-art-list') && !document.getElementById('pr-art-list').children.length) addArtProducto();
       calcCostoEstimadoProducto();
     }
+    applyLineaCatalogoRules('producto');
   };
 
   window.guardarProducto = async function(){
