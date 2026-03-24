@@ -1119,9 +1119,16 @@ Gracias por apoyar lo hecho a mano" style="min-height:110px"></textarea><div sty
         </div>
         <button class="btn btn-secondary btn-sm" type="button" onclick="cargarDashboardErrores()">Actualizar</button>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px;align-items:center">
         <button class="btn btn-secondary btn-sm" type="button" onclick="copiarLogsErrores()">📋 Copiar logs</button>
         <button class="btn btn-secondary btn-sm" type="button" onclick="descargarLogsErroresTXT()">⬇️ Exportar TXT</button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="limpiarLogsErrores()">🧹 Limpiar logs</button>
+        <select class="form-input" id="logs-filter-window" style="width:auto;min-width:150px;padding:7px 10px" onchange="renderLogsErroresCache()">
+          <option value="24h" selected>Últimas 24h</option>
+          <option value="1h">Última hora</option>
+          <option value="7d">Últimos 7 días</option>
+          <option value="all">Todos</option>
+        </select>
       </div>
       <div id="logs-alert-summary" class="alert alert-info" style="margin-bottom:8px;font-size:12px">Aún no se han cargado los logs.</div>
       <div id="logs-alert-list" style="max-height:240px;overflow:auto"></div>
@@ -1182,7 +1189,8 @@ const CFG = {
   emp: localStorage.getItem('cfg_emp') || 'Descanso Maya',
   tel: localStorage.getItem('cfg_tel') || '',
   logo: localStorage.getItem('cfg_logo') || '',
-  firma_pdf: localStorage.getItem('cfg_firma_pdf') || ''
+  firma_pdf: localStorage.getItem('cfg_firma_pdf') || '',
+  firma_img: localStorage.getItem('cfg_firma_img') || ''
 };
 const D = {
   pedidos:[], clientes:[], productos:[], materiales:[], artesanos:[], tarifas_artesano:[],
@@ -6376,9 +6384,48 @@ async function logErrorFront(origen, accion, error, detalleExtra){
   }
 }
 
-async function cargarDashboardErrores(){
+function filtrarLogsPorVentana(logs){
+  const mode = getV('logs-filter-window') || '24h';
+  const now = Date.now();
+  const limits = { '1h': 3600000, '24h': 86400000, '7d': 7*86400000 };
+  if(mode==='all') return logs.slice(0,120);
+  const maxAge = limits[mode] || limits['24h'];
+  return logs.filter(x=>{ const t = new Date(x.fecha || '').getTime(); return t && (now - t) <= maxAge; }).slice(0,120);
+}
+
+function renderLogsErroresCache(){
   const sum = $('logs-alert-summary');
   const list = $('logs-alert-list');
+  const all = Array.isArray(window._logsErroresAllCache) ? window._logsErroresAllCache : [];
+  const visible = filtrarLogsPorVentana(all);
+  window._logsErroresCache = visible;
+  const now = Date.now();
+  const last24 = all.filter(x=>{ const t = new Date(x.fecha || '').getTime(); return t && (now - t) <= 86400000; }).length;
+  const last1 = all.filter(x=>{ const t = new Date(x.fecha || '').getTime(); return t && (now - t) <= 3600000; }).length;
+  if(sum){
+    const cls = all.length ? (last1 ? 'alert alert-danger' : (last24 ? 'alert alert-warning' : 'alert alert-success')) : 'alert alert-success';
+    sum.className = cls;
+    sum.innerHTML = all.length
+      ? `Mostrando: <strong>${visible.length}</strong> · Total: <strong>${all.length}</strong> · Últimas 24h: <strong>${last24}</strong> · Última hora: <strong>${last1}</strong>`
+      : 'Sin errores registrados recientemente.';
+  }
+  if(list){
+    list.innerHTML = visible.length ? visible.map(log=>`
+      <div class="card" style="padding:10px;margin-bottom:6px">
+        <div class="card-row" style="align-items:center">
+          <div>
+            <div class="card-title" style="font-size:13px">${escapeHtml(log.mensaje || 'Sin mensaje')}</div>
+            <div class="card-note">${escapeHtml(log.fecha || '')} · ${escapeHtml(log.origen || '')} · ${escapeHtml(log.accion || '')}</div>
+          </div>
+          <span class="badge cancelado">${escapeHtml(log.severidad || 'error')}</span>
+        </div>
+        ${log.detalle ? `<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--text2);font-size:12px">Ver detalle</summary><div style="white-space:pre-wrap;font-size:11px;color:var(--text3);margin-top:6px">${escapeHtml(String(log.detalle||''))}</div></details>` : ''}
+      </div>`).join('') : '<div style="font-size:12px;color:var(--text3)">No hay logs para mostrar en ese rango.</div>';
+  }
+}
+
+async function cargarDashboardErrores(){
+  const sum = $('logs-alert-summary');
   if(sum) sum.className='alert alert-info';
   if(sum) sum.textContent='Cargando logs...';
   let remote = [];
@@ -6391,30 +6438,31 @@ async function cargarDashboardErrores(){
     console.warn('cargarDashboardErrores remoto', err);
   }
   const local = Array.isArray(window.LOG_MEMORY) ? window.LOG_MEMORY : [];
-  const all = remote.concat(local).sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))).slice(0,40);
-  window._logsErroresCache = all;
-  const now = Date.now();
-  const last24 = all.filter(x=>{ const t = new Date(x.fecha || '').getTime(); return t && (now - t) <= 86400000; }).length;
-  const last1 = all.filter(x=>{ const t = new Date(x.fecha || '').getTime(); return t && (now - t) <= 3600000; }).length;
-  if(sum){
-    const cls = all.length ? (last1 ? 'alert alert-danger' : (last24 ? 'alert alert-warning' : 'alert alert-success')) : 'alert alert-success';
-    sum.className = cls;
-    sum.innerHTML = all.length
-      ? `Total: <strong>${all.length}</strong> · Últimas 24h: <strong>${last24}</strong> · Última hora: <strong>${last1}</strong>`
-      : 'Sin errores registrados recientemente.';
-  }
-  if(list){
-    list.innerHTML = all.length ? all.map(log=>`
-      <div class="card" style="padding:10px;margin-bottom:6px">
-        <div class="card-row" style="align-items:center">
-          <div>
-            <div class="card-title" style="font-size:13px">${escapeHtml(log.mensaje || 'Sin mensaje')}</div>
-            <div class="card-note">${escapeHtml(log.fecha || '')} · ${escapeHtml(log.origen || '')} · ${escapeHtml(log.accion || '')}</div>
-          </div>
-          <span class="badge cancelado">${escapeHtml(log.severidad || 'error')}</span>
-        </div>
-        ${log.detalle ? `<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--text2);font-size:12px">Ver detalle</summary><div style="white-space:pre-wrap;font-size:11px;color:var(--text3);margin-top:6px">${escapeHtml(String(log.detalle||''))}</div></details>` : ''}
-      </div>`).join('') : '<div style="font-size:12px;color:var(--text3)">No hay logs para mostrar.</div>';
+  const all = remote.concat(local).sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
+  window._logsErroresAllCache = all;
+  renderLogsErroresCache();
+}
+
+async function limpiarLogsErrores(){
+  if(!confirm('¿Eliminar el historial de logs del panel y de la hoja logs_errores?')) return;
+  try{
+    showLoading('Limpiando logs...');
+    window.LOG_MEMORY = [];
+    window._logsErroresCache = [];
+    window._logsErroresAllCache = [];
+    if(CFG.url){
+      const r = await api('clear_logs','logs_errores');
+      if(!r || !r.ok) throw new Error((r && (r.error || r.message)) || 'No se pudo limpiar logs');
+    }
+    renderLogsErroresCache();
+    toast('✓ Logs limpiados');
+  }catch(err){
+    console.error('limpiarLogsErrores', err);
+    alert('No se pudieron limpiar los logs.
+
+' + (err.message || err));
+  }finally{
+    hideLoading(true);
   }
 }
 
