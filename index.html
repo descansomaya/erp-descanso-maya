@@ -1122,6 +1122,16 @@ body.modal-open{overflow:hidden}
   </div>
 </div>
 
+
+<!-- SUB KPI DETALLE -->
+<div class="overlay" id="sub-kpi-detalle">
+  <div class="modal" style="border-radius:20px 20px 0 0;max-height:90vh">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="modal-handle" style="margin:0"></div><button onclick="cerrarOverlayBtn(this)" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 0 4px;line-height:1">×</button></div>
+    <div class="modal-title" id="kpi-det-tit">Detalle</div>
+    <div id="kpi-det-body"></div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════
 // ESTADO GLOBAL
@@ -2228,27 +2238,81 @@ function renderInicio() {
   renderTrabajosActivos();
 }
 
-function renderKPIs() {
-  const activos=D.pedidos.filter(p=>!['entregado','cancelado'].includes(p.estado));
-  const repsA=(D.reparaciones||[]).filter(r=>!['entregada','cancelada'].includes(r.estado));
+function getInicioKpiData(){
   const mes=new Date().getMonth(), anio=new Date().getFullYear();
-  const enMes=f=>{ const d=new Date(f||''); return d.getMonth()===mes&&d.getFullYear()===anio; };
-
-  const ingresos=D.pedidos.filter(p=>enMes(p.fecha_creacion)&&p.estado!=='cancelado')
-    .reduce((s,p)=>s+Number(p.anticipo||0),0)
-    + D.abonos.filter(a=>enMes(a.fecha)).reduce((s,a)=>s+Number(a.monto||0),0);
-
-  const cobrar=cobrosTotal();
-
-  const egresos=D.gastos.filter(g=>enMes(g.fecha)).reduce((s,g)=>s+Number(g.monto||0),0)
-    +D.compras.filter(c=>enMes(c.fecha)).reduce((s,c)=>s+Number(c.monto_pagado||0),0)
-    +D.pago_art.filter(p=>enMes(p.fecha)).reduce((s,p)=>s+Number(p.total||0),0);
-
+  const enMes=f=>{ const d=new Date(f||''); return !isNaN(d) && d.getMonth()===mes&&d.getFullYear()===anio; };
+  const activosPedidos=D.pedidos.filter(p=>!['entregado','cancelado'].includes(p.estado));
+  const activosReps=(D.reparaciones||[]).filter(r=>!['entregada','cancelada'].includes(r.estado));
+  const ingresosPedidos=D.pedidos.filter(p=>enMes(p.fecha_creacion)&&p.estado!=='cancelado').map(p=>({
+    fecha:p.fecha_creacion||'',
+    concepto:`Anticipo pedido ${p.id}`,
+    detalle:(D.clientes.find(c=>String(c.id)===String(p.cliente_id))||{}).nombre||'Cliente',
+    monto:Number(p.anticipo||0)
+  })).filter(x=>x.monto>0);
+  const ingresosAbonos=D.abonos.filter(a=>enMes(a.fecha)).map(a=>({
+    fecha:a.fecha||'',
+    concepto:`Abono ${a.pedido_id||''}`.trim(),
+    detalle:a.nota||'',
+    monto:Number(a.monto||0)
+  })).filter(x=>x.monto>0);
+  const ingresos=[...ingresosPedidos,...ingresosAbonos];
+  const cobrarPedidos=D.pedidos.filter(p=>!['entregado','cancelado'].includes(p.estado)).map(p=>({
+    id:p.id,
+    cliente:(D.clientes.find(c=>String(c.id)===String(p.cliente_id))||{}).nombre||'Cliente',
+    estado:p.estado||'nuevo',
+    saldo:Math.max(0,Number(p.total||0)-Number(p.anticipo||0)-abonadoPor(p.id))
+  })).filter(x=>x.saldo>0);
+  const cobrarReps=(D.reparaciones||[]).filter(r=>!['entregada','cancelada'].includes(r.estado)).map(r=>({
+    id:r.id,
+    cliente:(D.clientes.find(c=>String(c.id)===String(r.cliente_id))||{}).nombre||'Cliente',
+    estado:r.estado||'recibida',
+    saldo:Math.max(0,Number(r.precio||0)-Number(r.anticipo||0))
+  })).filter(x=>x.saldo>0);
+  const egresosGastos=D.gastos.filter(g=>enMes(g.fecha)).map(g=>({fecha:g.fecha||'', tipo:'Gasto', concepto:g.descripcion||g.categoria||'Gasto', monto:Number(g.monto||0)})).filter(x=>x.monto>0);
+  const egresosCompras=D.compras.filter(c=>enMes(c.fecha)).map(c=>({fecha:c.fecha||'', tipo:'Compra', concepto:`Compra ${c.id}`, monto:Number(c.monto_pagado||0)})).filter(x=>x.monto>0);
+  const egresosArtesanos=D.pago_art.filter(p=>enMes(p.fecha)).map(p=>({fecha:p.fecha||'', tipo:'Artesano', concepto:p.tipo_trabajo||p.artesano_id||'Pago artesano', monto:Number(p.total||p.monto||0)})).filter(x=>x.monto>0);
+  return {
+    activosPedidos,activosReps,
+    ingresos,
+    cobrar:[...cobrarPedidos.map(x=>({...x, tipo:'Pedido'})), ...cobrarReps.map(x=>({...x, tipo:'Reparación'}))],
+    egresos:[...egresosGastos,...egresosCompras,...egresosArtesanos]
+  };
+}
+function verInicioKpi(tipo){
+  const data=getInicioKpiData();
+  let titulo='Detalle';
+  let html='';
+  if(tipo==='activos'){
+    titulo='Trabajos activos';
+    const items=[
+      ...data.activosPedidos.map(p=>({tipo:'Pedido', id:p.id, cliente:(D.clientes.find(c=>String(c.id)===String(p.cliente_id))||{}).nombre||'Cliente', estado:p.estado||'nuevo'})),
+      ...data.activosReps.map(r=>({tipo:'Reparación', id:r.id, cliente:(D.clientes.find(c=>String(c.id)===String(r.cliente_id))||{}).nombre||'Cliente', estado:r.estado||'recibida'}))
+    ];
+    html=items.length?items.map(x=>`<div class="card" style="padding:10px;margin-bottom:8px"><div class="card-row"><div><div class="card-title">${x.cliente}</div><div class="card-sub">${x.tipo} ${x.id}</div></div><span class="badge ${String(x.estado).replace(/ /g,'_')}">${String(x.estado).replace('_',' ')}</span></div></div>`).join(''):empty('Sin trabajos activos');
+  } else if(tipo==='ingresos'){
+    titulo='Ingresos del mes';
+    html=data.ingresos.length?data.ingresos.map(x=>`<div class="card" style="padding:10px;margin-bottom:8px"><div class="card-row"><div><div class="card-title">${x.concepto}</div><div class="card-sub">${x.detalle||''}</div><div class="card-note">${x.fecha||''}</div></div><div style="font-weight:700;color:var(--success)">$${fmx(x.monto)}</div></div></div>`).join(''):empty('Sin ingresos registrados este mes');
+  } else if(tipo==='cobrar'){
+    titulo='Saldos por cobrar';
+    html=data.cobrar.length?data.cobrar.map(x=>`<div class="card" style="padding:10px;margin-bottom:8px"><div class="card-row"><div><div class="card-title">${x.cliente}</div><div class="card-sub">${x.tipo} ${x.id}</div><div class="card-note">Estado: ${x.estado}</div></div><div style="font-weight:700;color:var(--warning)">$${fmx(x.saldo)}</div></div></div>`).join(''):empty('No hay saldos pendientes');
+  } else if(tipo==='egresos'){
+    titulo='Egresos del mes';
+    html=data.egresos.length?data.egresos.map(x=>`<div class="card" style="padding:10px;margin-bottom:8px"><div class="card-row"><div><div class="card-title">${x.concepto}</div><div class="card-sub">${x.tipo}</div><div class="card-note">${x.fecha||''}</div></div><div style="font-weight:700;color:var(--danger)">$${fmx(x.monto)}</div></div></div>`).join(''):empty('Sin egresos registrados este mes');
+  }
+  $('kpi-det-tit').textContent=titulo;
+  $('kpi-det-body').innerHTML=html;
+  abrirModal('sub-kpi-detalle');
+}
+function renderKPIs() {
+  const data=getInicioKpiData();
+  const ingresos=data.ingresos.reduce((s,x)=>s+Number(x.monto||0),0);
+  const cobrar=data.cobrar.reduce((s,x)=>s+Number(x.saldo||0),0);
+  const egresos=data.egresos.reduce((s,x)=>s+Number(x.monto||0),0);
   $('kpis').innerHTML=`
-    <div class="stat accent"><div class="stat-val">${activos.length+repsA.length}</div><div class="stat-lbl">Trabajos activos</div></div>
-    <div class="stat success"><div class="stat-val">$${fmx(ingresos)}</div><div class="stat-lbl">Ingresos mes</div></div>
-    <div class="stat warning"><div class="stat-val">$${fmx(cobrar)}</div><div class="stat-lbl">Por cobrar</div></div>
-    <div class="stat danger"><div class="stat-val">$${fmx(egresos)}</div><div class="stat-lbl">Egresos mes</div></div>`;
+    <div class="stat accent" style="cursor:pointer" onclick="verInicioKpi('activos')"><div class="stat-val">${data.activosPedidos.length+data.activosReps.length}</div><div class="stat-lbl">Trabajos activos</div></div>
+    <div class="stat success" style="cursor:pointer" onclick="verInicioKpi('ingresos')"><div class="stat-val">$${fmx(ingresos)}</div><div class="stat-lbl">Ingresos mes</div></div>
+    <div class="stat warning" style="cursor:pointer" onclick="verInicioKpi('cobrar')"><div class="stat-val">$${fmx(cobrar)}</div><div class="stat-lbl">Por cobrar</div></div>
+    <div class="stat danger" style="cursor:pointer" onclick="verInicioKpi('egresos')"><div class="stat-val">$${fmx(egresos)}</div><div class="stat-lbl">Egresos mes</div></div>`;
 }
 
 function renderAlertas() {
@@ -4608,6 +4672,7 @@ function getDetailCost(det,pedido,prod){
   const qty=Math.max(1,numv(det?.cantidad||1));
   const orderIds=(D.ordenes||[]).filter(o=>o.pedido_detalle_id===det.id).map(o=>String(o.id));
   const consumos=(D.consumos||[]).filter(c=>orderIds.includes(String(c.orden_id||'')));
+  const recs=(D.recetas||[]).filter(r=>r.pedido_id===det.id || r.pedido_id===pedido.id || r.pedido_detalle_id===det.id);
   let costoMaterial=0, costoTeorico=0;
   if(consumos.length){
     consumos.forEach(c=>{
@@ -4615,7 +4680,7 @@ function getDetailCost(det,pedido,prod){
       const costoMat=avgCostMaterial(mat);
       const imp=numv(c.impacto_costo);
       const realQty=numv(c.consumo_real||c.consumo_teorico);
-      const teoQty=numv(c.consumo_teorico);
+      const teoQty=numv(c.consumo_teorico||c.cantidad_teorica);
       costoMaterial += imp>0 ? imp : realQty*costoMat;
       costoTeorico += teoQty*costoMat;
     });
@@ -4623,7 +4688,6 @@ function getDetailCost(det,pedido,prod){
     costoMaterial = qty * avgCostProducto(prod);
     costoTeorico = costoMaterial;
   }else{
-    const recs=(D.recetas||[]).filter(r=>r.pedido_id===det.id || r.pedido_id===pedido.id || r.pedido_detalle_id===det.id);
     recs.forEach(r=>{
       const mat=D.materiales.find(m=>m.id===r.material_id)||{};
       const c=avgCostMaterial(mat);
@@ -4633,7 +4697,37 @@ function getDetailCost(det,pedido,prod){
     });
   }
   const pagos=getLinkedPagos(det,pedido,orderIds);
-  const costoMano=pagos.reduce((s,pg)=>s+numv(pg.total||pg.monto),0);
+  let costoMano=pagos.reduce((s,pg)=>s+numv(pg.total||pg.monto),0);
+  if(!costoMano){
+    const asigs=(D.ord_art||[]).filter(a=>orderIds.includes(String(a.orden_id||'')));
+    if(asigs.length){
+      costoMano = asigs.reduce((s,a)=>s+numv(a.pago_estimado||a.total||a.monto||0),0);
+    }
+  }
+  if(!costoMano){
+    const ords=(D.ordenes||[]).filter(o=>orderIds.includes(String(o.id||'')));
+    if(ords.length){
+      costoMano = ords.reduce((s,o)=>s+numv(o.pago_estimado||0),0);
+    }
+  }
+  if(!costoMano && !isReventa(det,pedido,prod) && prod && typeof plantillaLaborProducto==='function'){
+    const labor=plantillaLaborProducto(prod.id)||[];
+    if(labor.length){
+      costoMano = labor.reduce((s,r)=>{
+        const tarifa=(typeof tarifaArtesanoById==='function' ? tarifaArtesanoById(r.tarifa_artesano_id) : null) || {};
+        const esquema=String(tarifa.esquema_pago||r.esquema_pago||'fijo');
+        const monto=numv(tarifa.monto||r.monto_tarifa||r.monto||0);
+        const factor=Math.max(1,numv(r.cantidad||1));
+        if(esquema==='por_pieza') return s + (monto * qty * factor);
+        if(esquema==='por_tubo'){
+          const comp=String(r.componente||'cuerpo');
+          const tubos=recs.filter(x=>String(x.componente||'cuerpo')===comp).reduce((sx,x)=>sx+numv(x.cantidad),0);
+          return s + (tubos * monto * factor);
+        }
+        return s + (monto * factor);
+      },0);
+    }
+  }
   return {material:costoMaterial, teorico:costoTeorico, mano:costoMano, total:costoMaterial+costoMano};
 }
 function renderDashboard() {
@@ -4721,8 +4815,8 @@ function renderDashboard() {
 
   const reservasActivas=(D.reservas||[]).filter(r=>String(r.activa||'').toLowerCase()!=='no' && numv(r.cantidad)>0 && pedidoIds.has(String(r.pedido_id||'')));
   const reservasCrit=reservasActivas.filter(r=>{
-    const stock = r.tipo==='producto'
-      ? numv((D.productos.find(p=>p.id===r.ref_id)||{}).stock)
+    const stock = String(r.ref_tipo||r.tipo||'material')==='producto'
+      ? numv((D.productos.find(p=>p.id===r.ref_id)||{}).stock_disponible)
       : numv((D.materiales.find(m=>m.id===r.ref_id)||{}).stock_actual);
     return stock>0 ? numv(r.cantidad)/stock >= 0.6 : true;
   }).length;
@@ -5180,7 +5274,6 @@ function imprimirPedido(id) {
   const prod=det?D.productos.find(x=>x.id===det.producto_id):null;
   const abonado=abonadoPor(id);
   const saldo=Math.max(0,Number(p.total||0)-Number(p.anticipo||0)-abonado);
-  const recetas=D.recetas.filter(r=>r.pedido_id===det?.id);
   const logoSrc=CFG.logo||localStorage.getItem('cfg_logo')||'';
   const logoHTML=logoSrc?`<img src="${logoSrc}" style="max-height:60px;max-width:150px;object-fit:contain;display:block">`:
     `<div style="font-size:20px;font-weight:900;color:#7c6af7">${CFG.emp}</div>`;
@@ -5212,7 +5305,6 @@ ${det?.color_hilo?`<div class="row"><span class="lbl">Color</span><span>${det.co
 ${det?.medidas?`<div class="row"><span class="lbl">Medidas</span><span>${det.medidas}</span></div>`:''}
 ${p.fecha_entrega?`<div class="row"><span class="lbl">Fecha de entrega</span><strong>${p.fecha_entrega}</strong></div>`:''}
 ${p.notas?`<div class="row"><span class="lbl">Notas</span><span style="font-size:11px">${p.notas}</span></div>`:''}
-${recetas.length?`<div class="sec">Materiales</div>${recetas.map(r=>{const m=D.materiales.find(x=>x.id===r.material_id);return`<div class="row"><span class="lbl">${m?m.nombre:r.material_id}</span><span>${r.cantidad} ${m?.unidad||''}${r.color?' · '+r.color:''}</span></div>`;}).join('')}`:''}
 <div class="sec">Cuenta</div>
 <div class="tbox">
   <div class="trow"><span>Precio total</span><span>$${fmx(p.total)}</span></div>
