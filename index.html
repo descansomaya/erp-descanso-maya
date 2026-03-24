@@ -1119,6 +1119,10 @@ Gracias por apoyar lo hecho a mano" style="min-height:110px"></textarea><div sty
         </div>
         <button class="btn btn-secondary btn-sm" type="button" onclick="cargarDashboardErrores()">Actualizar</button>
       </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px">
+        <button class="btn btn-secondary btn-sm" type="button" onclick="copiarLogsErrores()">📋 Copiar logs</button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="descargarLogsErroresTXT()">⬇️ Exportar TXT</button>
+      </div>
       <div id="logs-alert-summary" class="alert alert-info" style="margin-bottom:8px;font-size:12px">Aún no se han cargado los logs.</div>
       <div id="logs-alert-list" style="max-height:240px;overflow:auto"></div>
     </div>
@@ -6388,6 +6392,7 @@ async function cargarDashboardErrores(){
   }
   const local = Array.isArray(window.LOG_MEMORY) ? window.LOG_MEMORY : [];
   const all = remote.concat(local).sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))).slice(0,40);
+  window._logsErroresCache = all;
   const now = Date.now();
   const last24 = all.filter(x=>{ const t = new Date(x.fecha || '').getTime(); return t && (now - t) <= 86400000; }).length;
   const last1 = all.filter(x=>{ const t = new Date(x.fecha || '').getTime(); return t && (now - t) <= 3600000; }).length;
@@ -6420,6 +6425,76 @@ function escapeHtml(v){
     .replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;')
     .replace(/'/g,'&#39;');
+}
+
+function obtenerLogsErroresVisibles(){
+  const rows = Array.isArray(window._logsErroresCache) ? window._logsErroresCache : [];
+  return rows.map((r,i)=>({
+    n: i + 1,
+    fecha: r.fecha || '',
+    origen: r.origen || '',
+    accion: r.accion || '',
+    mensaje: r.mensaje || '',
+    detalle: r.detalle || '',
+    usuario: r.usuario || '',
+    severidad: r.severidad || ''
+  }));
+}
+
+async function copiarLogsErrores(){
+  try{
+    const logs = obtenerLogsErroresVisibles();
+    if(!logs.length){
+      alert('No hay logs para copiar.');
+      return;
+    }
+    const texto = logs.map(l =>
+      `#${l.n}\nFecha: ${l.fecha}\nOrigen: ${l.origen}\nAcción: ${l.accion}\nSeveridad: ${l.severidad}\nMensaje: ${l.mensaje}\nDetalle: ${l.detalle}\nUsuario: ${l.usuario}`
+    ).join('\n\n------------------------\n\n');
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(texto);
+      alert('Logs copiados al portapapeles.');
+      return;
+    }
+    const ta = document.createElement('textarea');
+    ta.value = texto;
+    ta.setAttribute('readonly','readonly');
+    ta.style.position='fixed';
+    ta.style.opacity='0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    alert('Logs copiados al portapapeles.');
+  }catch(err){
+    console.error(err);
+    alert('No se pudieron copiar los logs.');
+  }
+}
+
+function descargarLogsErroresTXT(){
+  try{
+    const logs = obtenerLogsErroresVisibles();
+    if(!logs.length){
+      alert('No hay logs para exportar.');
+      return;
+    }
+    const texto = logs.map(l =>
+      `#${l.n}\nFecha: ${l.fecha}\nOrigen: ${l.origen}\nAcción: ${l.accion}\nSeveridad: ${l.severidad}\nMensaje: ${l.mensaje}\nDetalle: ${l.detalle}\nUsuario: ${l.usuario}`
+    ).join('\n\n------------------------\n\n');
+    const blob = new Blob([texto], {type:'text/plain;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'logs_errores_descanso_maya.txt';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }catch(err){
+    console.error(err);
+    alert('No se pudieron exportar los logs.');
+  }
 }
 
 window.addEventListener('error', function(ev){
