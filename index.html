@@ -52,6 +52,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 /* FAB */
 .fab{position:fixed;bottom:76px;right:18px;width:52px;height:52px;border-radius:50%;background:var(--accent);border:none;color:#fff;font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(124,106,247,.4);z-index:50;transition:transform .15s}
 .fab:active{transform:scale(.92)}
+body.modal-open .fab{display:none !important}
 
 /* TOAST */
 #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(30,24,60,.92);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;opacity:0;transition:all .25s;z-index:1000;pointer-events:none;white-space:nowrap;max-width:90vw;text-align:center}
@@ -4645,7 +4646,34 @@ function resetDashFilters(){
 }
 function numv(v){return Number(v||0)||0;}
 function avgCostMaterial(m){return numv(m?.costo_promedio||m?.costo_unitario||m?.costo||m?.ultimo_costo||m?.precio_compra);}
-function avgCostProducto(p){return numv(p?.costo_promedio||p?.costo_unitario||p?.costo||p?.precio_compra||p?.costo_reventa);}
+function costoCompraProductoStats(prodId){
+  const items=arr(D.comp_det).filter(i=>{
+    const destino=String(i.destino||((i.producto_id||i.ref_id)&&!i.material_id?'producto':'material')).toLowerCase();
+    const refId=String(i.ref_id||i.producto_id||'');
+    return destino==='producto' && refId===String(prodId);
+  }).map(i=>{
+    const compra=arr(D.compras).find(c=>String(c.id)===String(i.compra_id))||{};
+    return {
+      costo:numv(i.costo_unitario),
+      cantidad:Math.max(0,numv(i.cantidad)),
+      fecha:String(compra.fecha||compra.fecha_creacion||i.fecha||''),
+      compra_id:String(i.compra_id||'')
+    };
+  }).filter(x=>x.costo>0 && x.cantidad>0);
+  if(!items.length) return {ultimo:0,promedio:0};
+  items.sort((a,b)=>{
+    const fa=String(a.fecha||''); const fb=String(b.fecha||'');
+    if(fa!==fb) return fa<fb?-1:1;
+    return String(a.compra_id||'')<String(b.compra_id||'')?-1:1;
+  });
+  const totalQty=items.reduce((s,x)=>s+x.cantidad,0);
+  const totalCost=items.reduce((s,x)=>s+(x.cantidad*x.costo),0);
+  return {ultimo:numv(items[items.length-1]?.costo), promedio: totalQty? totalCost/totalQty : 0};
+}
+function avgCostProducto(p){
+  const stats=costoCompraProductoStats(p?.id);
+  return numv(stats.ultimo||stats.promedio||p?.costo_promedio||p?.costo_unitario||p?.costo||p?.precio_compra||p?.costo_reventa);
+}
 function isReventa(det,ped,prod){
   const flujo=String(ped?.tipo_flujo||'').toLowerCase();
   const cat=String(prod?.categoria||'').toLowerCase();
