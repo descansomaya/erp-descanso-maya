@@ -4642,7 +4642,6 @@ function generarCotizacion() {
   const logoSrc=CFG.logo||localStorage.getItem('cfg_logo')||'';
   const logoHTML=logoSrc?`<img src="${logoSrc}" style="max-height:70px;max-width:180px;object-fit:contain;display:block">`:
     `<div style="font-size:22px;font-weight:900;color:#7c6af7">${CFG.emp}</div>`;
-  const tel=D.clientes.find(x=>x.nombre===nombre)?.telefono||'';
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Cotización ${cotNum}</title>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;max-width:720px;margin:0 auto;padding:36px 32px;color:#222;font-size:14px}
 .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:18px;border-bottom:3px solid #7c6af7;margin-bottom:24px}
@@ -4661,13 +4660,13 @@ td{padding:9px 12px;border-bottom:1px solid #eee;font-size:13px}tfoot td{padding
 <div class="hdr"><div>${logoHTML}<div class="enm">${CFG.emp}</div><div class="esl">Elaboración y Reparación de Hamacas Artesanales</div>${CFG.tel?`<div class="etel">📞 ${CFG.tel}</div>`:''}</div>
 <div style="text-align:right"><div class="ctit">Cotización</div><div class="csub"># ${cotNum}</div><div class="csub">Fecha: ${hoyStr}</div></div></div>
 <div class="sec">Cliente</div>
-<div class="cbox"><strong>${nombre}</strong>${tel?`<br>📞 ${tel}`:''}</div>
+<div class="cbox"><strong>${nombre}</strong></div>
 <div class="sec">Detalle</div>
 <table><thead><tr><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">Precio unit.</th><th style="text-align:right">Total</th></tr></thead>
 <tbody><tr><td>${prodNom}${prodDetalleHtml}</td><td style="text-align:center">${cant}</td><td style="text-align:right">$${fmx(precio/cant)}</td><td style="text-align:right">$${fmx(precio)}</td></tr></tbody>
 <tfoot><tr><td colspan="3" style="text-align:right;font-size:13px;color:#555">Total MXN</td><td style="text-align:right">$${fmx(precio)}</td></tr></tfoot></table>
 ${notas?`<div class="notas">${notas}</div>`:''}
-<div class="val">✓ Válida hasta ${vence}. Precios en pesos mexicanos incluyen mano de obra.</div>
+<div class="val">✓ Vigencia estimada hasta ${vence}. Precios en pesos mexicanos.</div>
 <div class="ftr">${CFG.emp} — Elaboración y Reparación de Hamacas Artesanales${CFG.tel?'<br>📞 '+CFG.tel:''}<br>Mérida, Yucatán, México</div>
 <button class="btn" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
 
@@ -5470,14 +5469,13 @@ function imprimirPedido(id) {
 @media print{.btn{display:none}body{padding:18px}}</style></head><body>
 <div class="hdr"><div>${logoHTML}<div class="enm">${CFG.emp}</div><div class="esl">Elaboración y Reparación de Hamacas Artesanales</div>${CFG.tel?`<div class="esl">📞 ${CFG.tel}</div>`:''}</div>
 <div style="text-align:right"><div class="pid">${id}</div><div style="font-size:11px;color:#888;margin-top:3px">Fecha: ${new Date().toLocaleDateString('es-MX')}</div>
-<div style="margin-top:5px;font-size:11px;padding:2px 8px;background:${p.estado==='entregado'?'#f0fdf4':'#f0eeff'};color:${p.estado==='entregado'?'#166534':'#7c6af7'};border-radius:12px;display:inline-block">${p.estado.replace('_',' ')}</div></div></div>
+<div style="margin-top:6px;font-size:11px;color:#7c6af7;font-weight:700;letter-spacing:.06em;text-transform:uppercase">Orden de pedido</div></div></div>
 <div class="sec">Cliente</div>
-<div class="cbox"><strong>${c.nombre}</strong>${c.telefono?`<span style="color:#555;font-size:11px"> · 📞 ${c.telefono}</span>`:''}${c.email?`<br><span style="color:#555;font-size:11px">${c.email}</span>`:''}</div>
+<div class="cbox"><strong>${c.nombre}</strong>${c.email?`<br><span style="color:#555;font-size:11px">${c.email}</span>`:''}</div>
 <div class="sec">Pedido</div>
 ${prod?`<div class="row"><span class="lbl">Línea</span><strong>${prodTitulo}</strong></div>`:''}
 ${prodDetalleHtml?`<div class="row"><span class="lbl">Detalle</span><span>${prodDetalles.join(' · ') || prod.nombre || ''}</span></div>`:''}
 ${det?.cantidad?`<div class="row"><span class="lbl">Cantidad</span><span>${det.cantidad}</span></div>`:''}
-${p.fecha_entrega?`<div class="row"><span class="lbl">Fecha de entrega</span><strong>${p.fecha_entrega}</strong></div>`:''}
 ${p.notas?`<div class="row"><span class="lbl">Notas</span><span style="font-size:11px">${p.notas}</span></div>`:''}
 <div class="sec">Cuenta</div>
 <div class="tbox">
