@@ -1321,8 +1321,8 @@ function applyLineaCatalogoRules(context, linea){
     hide(cfg.color2Wrap); hide(cfg.coloresWrap); hide(cfg.disenoWrap);
     disable(cfg.color2, true); disable(cfg.colores, true); disable(cfg.diseno, true);
   } else if(key==='combinada'){
-    show(cfg.color2Wrap); show(cfg.coloresWrap); hide(cfg.disenoWrap);
-    enable(cfg.color2); enable(cfg.colores); disable(cfg.diseno, true);
+    show(cfg.color2Wrap); hide(cfg.coloresWrap); hide(cfg.disenoWrap);
+    enable(cfg.color2); disable(cfg.colores, true); disable(cfg.diseno, true);
   } else if(key==='especial'){
     show(cfg.color2Wrap); show(cfg.coloresWrap); show(cfg.disenoWrap);
     enable(cfg.color2); enable(cfg.colores); enable(cfg.diseno);
@@ -3665,8 +3665,13 @@ async function guardarProducto() {
       // primer material se guarda también en los campos legacy
       p.material_hilo_id = recetaRows[0].material_id;
       p.tubos_hilo = Number(recetaRows[0].cantidad||0);
-      const idxProd=D.productos.findIndex(x=>x.id===id); if(idxProd>=0) Object.assign(D.productos[idxProd], {material_hilo_id:p.material_hilo_id,tubos_hilo:p.tubos_hilo});
-      await actualizar('productos',{id,material_hilo_id:p.material_hilo_id,tubos_hilo:p.tubos_hilo});
+      const idxProd=D.productos.findIndex(x=>x.id===id);
+      if(idxProd>=0){
+        Object.assign(D.productos[idxProd], {material_hilo_id:p.material_hilo_id,tubos_hilo:p.tubos_hilo});
+        await actualizar('productos', D.productos[idxProd]);
+      } else {
+        await actualizar('productos', Object.assign({}, p, {material_hilo_id:p.material_hilo_id,tubos_hilo:p.tubos_hilo}));
+      }
       const nuevasRecetas = recetaRows.map(rec=>({id:genId('REC', arr(D.recetas)), pedido_id:tplId, material_id:rec.material_id, cantidad:rec.cantidad, componente:rec.componente||'cuerpo', color:rec.color}));
       D.recetas.push(...nuevasRecetas);
       await Promise.all(nuevasRecetas.map(rr=>crear('recetas', rr).catch(err=>console.warn('No se pudo crear receta base', rr, err))));
