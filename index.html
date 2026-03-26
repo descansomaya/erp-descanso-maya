@@ -787,7 +787,7 @@ body.modal-open{overflow:hidden}
       </div>
     </div>
     <div class="form-group"><label class="form-label">Precio de venta ($) *</label><input type="number" class="form-input" id="pr-precio" placeholder="0.00"></div>
-    <div class="form-group"><label class="form-label">Costo estimado automático ($)</label><input type="number" class="form-input" id="pr-costo" placeholder="0.00" readonly><div style="font-size:11px;color:var(--text3);margin-top:6px">Se calcula con receta de materiales + mano de obra estimada.</div><div id="pr-cost-breakdown" style="margin-top:6px"></div></div>
+    <div class="form-group"><label class="form-label">Costo estimado / compra ($)</label><input type="number" class="form-input" id="pr-costo" placeholder="0.00" readonly><div id="pr-costo-help" style="font-size:11px;color:var(--text3);margin-top:6px">Se calcula con receta de materiales + mano de obra estimada.</div><div id="pr-cost-breakdown" style="margin-top:6px"></div></div>
     <div class="form-group"><label class="form-label">Stock disponible</label><input type="number" class="form-input" id="pr-stock" value="0" min="0"></div>
     <button class="btn btn-primary" id="btn-guardar-prod" onclick="guardarProducto()">Guardar producto</button>
     <button class="btn btn-secondary" onclick="cerrar('modal-producto')">Cancelar</button>
@@ -1566,17 +1566,20 @@ function cargaRecetaProductoEnPedido(prod, force=false){
   const cat=(typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod?.categoria||'fabricacion'));
   if(cat!=='fabricacion') return;
   if(!force && host.children.length) return;
+  const qtyActual = Math.max(1, Number(getV('p-cant')||1));
   host.innerHTML=''; window.matPedItems=[];
   const recs = recetasPlantillaProducto(prod.id);
   if(recs.length){
-    recs.forEach(r=>addMatPedido(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'));
+    recs.forEach(r=>addMatPedido(r.material_id, Number(r.cantidad||0) * qtyActual, r.color||'', r.componente||'cuerpo'));
+    setQtyAplicadaRecetaPedido(qtyActual);
     return;
   }
   if(prod.material_hilo_id){
-    addMatPedido(prod.material_hilo_id, Number(prod.tubos_hilo||1), '');
+    addMatPedido(prod.material_hilo_id, Number(prod.tubos_hilo||1) * qtyActual, '');
   } else {
     addMatPedido();
   }
+  setQtyAplicadaRecetaPedido(qtyActual);
 }
 
 
@@ -3134,9 +3137,10 @@ async function recalcularCostosCatalogo(){
   }
   for(const prod of D.productos.filter(x=>categoriaProducto(x)!=='fabricacion')){
     const avg=costoPromedioCompras('producto',prod.id);
-    if(Math.abs(Number(prod.costo_produccion||0)-avg)>0.000001){
+    if(Math.abs(Number(prod.costo_produccion||0)-avg)>0.000001 || Math.abs(Number(prod.precio_compra||0)-avg)>0.000001){
       prod.costo_produccion=avg;
-      await actualizar('productos',{id:prod.id,costo_produccion:avg});
+      prod.precio_compra=avg;
+      await actualizar('productos',{id:prod.id,costo_produccion:avg,precio_compra:avg});
     }
   }
 }
@@ -3344,6 +3348,7 @@ async function asegurarCatalogoCompra(idx, destino) {
       nombre,
       categoria,
       precio_venta:Number(getV('ci-new-price-'+idx)||0),
+      precio_compra:0,
       costo_produccion:0,
       stock_disponible:0,
       notas:getV('ci-new-notes-'+idx)
@@ -5979,6 +5984,64 @@ document.addEventListener('DOMContentLoaded', () => {
     host.appendChild(row);
   };
 
+
+  function valorNumericoValido(v){
+    if(v===null || v===undefined || v==='') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  function costoCompraProducto(prod){
+    const directo = valorNumericoValido(prod?.precio_compra);
+    if(directo!==null) return directo;
+    const promedio = valorNumericoValido(prod?.costo_produccion);
+    if(promedio!==null) return promedio;
+    return Number(prod?.costo_unitario || prod?.costo || prod?.costo_reventa || 0);
+  }
+  function actualizarModoCostoProducto(){
+    const cat = (typeof getV==='function' ? getV('pr-cat') : 'fabricacion');
+    const inp = document.getElementById('pr-costo');
+    const help = document.getElementById('pr-costo-help');
+    const box = document.getElementById('pr-cost-breakdown');
+    if(inp){
+      inp.readOnly = cat==='fabricacion';
+      inp.placeholder = cat==='fabricacion' ? '0.00' : 'Costo de compra';
+    }
+    if(help){
+      help.textContent = cat==='fabricacion'
+        ? 'Se calcula con receta de materiales + mano de obra estimada.'
+        : 'Para reventa captura aquí el costo o precio de compra unitario. Si compras producto desde Compras, el promedio también se actualizará.';
+    }
+    if(box && cat!=='fabricacion' && !box.innerHTML){
+      box.innerHTML = '<div class="card-note">Para reventa este valor se usa como costo base del producto y del pedido.</div>';
+    }
+  }
+  function setQtyAplicadaRecetaPedido(qty){
+    const host = $('p-mat-list');
+    if(host) host.dataset.qtyApplied = String(Math.max(1, Number(qty||1)));
+  }
+  function qtyAplicadaRecetaPedido(){
+    const host = $('p-mat-list');
+    return Math.max(1, Number(host?.dataset?.qtyApplied || 1));
+  }
+  function escalarRecetaPedidoActual(nuevaQty){
+    const host = $('p-mat-list');
+    if(!host || !host.children.length) return;
+    const qtyNueva = Math.max(1, Number(nuevaQty||1));
+    const qtyAnterior = qtyAplicadaRecetaPedido();
+    if(!qtyAnterior || Math.abs(qtyAnterior-qtyNueva)<0.000001){
+      setQtyAplicadaRecetaPedido(qtyNueva);
+      return;
+    }
+    const factor = qtyNueva / qtyAnterior;
+    (window.matPedItems||[]).forEach(i=>{
+      const el = document.getElementById('pm-qty-'+i);
+      if(!el) return;
+      const actual = Number(el.value || 0);
+      el.value = Math.round((actual * factor) * 10000) / 10000;
+    });
+    setQtyAplicadaRecetaPedido(qtyNueva);
+  }
+
   window.onProdChange = function(){
     const pid=getV('p-producto');
     const prod=arr(D.productos).find(p=>String(p.id)===String(pid));
@@ -6004,7 +6067,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if(!getV('p-diseno') && prod?.diseno_ref) setV('p-diseno', prod.diseno_ref);
     applyLineaCatalogoRules('pedido', inferLineaCatalogo(prod, null));
     calcTotal();
-    if(cat==='fabricacion'){ cargaRecetaProductoEnPedido(prod, true); }
+    if(cat==='fabricacion'){
+      cargaRecetaProductoEnPedido(prod, true);
+    } else {
+      const host=$('p-mat-list');
+      if(host){ host.innerHTML=''; host.dataset.qtyApplied=String(Math.max(1, Number(getV('p-cant')||1))); }
+      window.matPedItems=[];
+    }
   };
 
   window.calcTotal = function(){
@@ -6015,6 +6084,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if(totalEl && prod && (!Number(totalEl.value)||totalEl.dataset.auto==='1')){
       totalEl.value=Number(prod.precio_venta||0)*qty;
       totalEl.dataset.auto='1';
+    }
+    if(prod){
+      const cat=(typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion'));
+      if(cat==='fabricacion'){
+        const host=$('p-mat-list');
+        if(host && host.children.length) escalarRecetaPedidoActual(qty);
+      }
     }
   };
 
@@ -6113,9 +6189,16 @@ document.addEventListener('DOMContentLoaded', () => {
       $('p-mat-list').innerHTML=''; window.matPedItems=[];
       if(cat==='fabricacion'){
         const recs=arr(D.recetas).filter(r=>String(r.pedido_id)===String(det?.id));
-        if(recs.length) recs.forEach(r=>addMatPedido(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'));
-        else cargaRecetaProductoEnPedido(prod, true);
+        if(recs.length){
+          recs.forEach(r=>addMatPedido(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'));
+          setQtyAplicadaRecetaPedido(det?.cantidad||1);
+        } else {
+          cargaRecetaProductoEnPedido(prod, true);
+        }
+      } else {
+        setQtyAplicadaRecetaPedido(det?.cantidad||1);
       }
+      calcTotal();
     }, 50);
   };
 
@@ -6164,6 +6247,9 @@ document.addEventListener('DOMContentLoaded', () => {
         colores_comerciales:getV('p-colores')||'',
         diseno_comercial:getV('p-diseno')||''
       });
+      const costoUnitarioEstimado = cat==='reventa'
+        ? costoCompraProducto(prod)
+        : Number(typeof calcCostoEstimadoProducto==='function' ? calcCostoEstimadoProducto() : (prod?.costo_produccion||0));
       const detPayload={
         id:detalleId,
         pedido_id:pedidoId,
@@ -6177,6 +6263,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tamano_comercial:getV('p-medidas')||'',
         diseno_comercial:getV('p-diseno')||'',
         precio_unitario: qty ? (total/qty) : total,
+        costo_unitario: Number(costoUnitarioEstimado||0),
         subtotal: total
       };
       if(det){
@@ -6195,9 +6282,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       D.recetas=arr(D.recetas).filter(r=>String(r.pedido_id)!==String(detalleId));
       if(cat==='fabricacion'){
+        const qtyAplicada = qtyAplicadaRecetaPedido();
+        const factorNormalizacion = qtyAplicada>0 ? (qty / qtyAplicada) : 1;
         const nuevos = (window.matPedItems||[]).map(i=>({
           material_id:getV('pm-mat-'+i),
-          cantidad:Number(getV('pm-qty-'+i)||0),
+          cantidad:Number(getV('pm-qty-'+i)||0) * factorNormalizacion,
           componente:getV('pm-comp-'+i)||'cuerpo',
           color:getV('pm-color-'+i)||''
         })).filter(x=>x.material_id && x.cantidad>0);
@@ -6625,7 +6714,11 @@ window.addEventListener('unhandledrejection', function(ev){
   window.calcCostoEstimadoProducto = function(){
     const cat = (typeof getV==='function' ? getV('pr-cat') : 'fabricacion');
     if(cat!=='fabricacion'){
-      return Number((document.getElementById('pr-costo')||{}).value||0);
+      const inp = document.getElementById('pr-costo');
+      const total = Number((inp||{}).value||0);
+      const box = document.getElementById('pr-cost-breakdown');
+      if(box) box.innerHTML = `<div class="card-note">Costo de compra / reventa: $${typeof fmx==='function'?fmx(total):total}</div>`;
+      return total;
     }
     const recetaRowsDom = Array.from(document.querySelectorAll('#pr-receta-list > div[id^="prm-"]'));
     let totalMat = 0;
@@ -6724,6 +6817,7 @@ window.addEventListener('unhandledrejection', function(ev){
       setV('pr-diseno-ref', p.diseno_ref||'');
       setV('pr-dias', p.dias_produccion||7);
       setV('pr-precio', p.precio_venta||0);
+      setV('pr-costo', (typeof categoriaProducto==='function' && categoriaProducto(p)==='reventa') ? costoCompraProducto(p) : (p.costo_produccion||0));
       setV('pr-stock', p.stock_disponible||0);
       const matRows = (typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(id) : []).filter(r=>!String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:'));
       if(matRows.length) matRows.forEach(r=>addMatProducto(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'));
@@ -6738,6 +6832,7 @@ window.addEventListener('unhandledrejection', function(ev){
       setV('pr-cat','fabricacion');
       setV('pr-linea','unicolor');
       setV('pr-dias','7');
+      setV('pr-costo','0');
       setV('pr-stock','0');
       addMatProducto();
       addArtProducto();
@@ -6754,9 +6849,15 @@ window.addEventListener('unhandledrejection', function(ev){
     if(sec) sec.style.display = cat==='fabricacion' ? 'block' : 'none';
     const stockWrap = document.getElementById('pr-stock')?.closest('.form-group');
     if(stockWrap) stockWrap.style.display = cat==='fabricacion' ? 'none' : 'block';
+    actualizarModoCostoProducto();
     if(cat==='fabricacion'){
       if(document.getElementById('pr-receta-list') && !document.getElementById('pr-receta-list').children.length) addMatProducto();
       if(document.getElementById('pr-art-list') && !document.getElementById('pr-art-list').children.length) addArtProducto();
+      calcCostoEstimadoProducto();
+    } else {
+      const actual = Number(getV('pr-costo')||0);
+      const fallback = editIds.prod ? costoCompraProducto((D.productos||[]).find(x=>String(x.id)===String(editIds.prod))||{}) : 0;
+      setV('pr-costo', actual || fallback || 0);
       calcCostoEstimadoProducto();
     }
     applyLineaCatalogoRules('producto');
@@ -6780,6 +6881,7 @@ window.addEventListener('unhandledrejection', function(ev){
       }else if(linea==='combinada'){
         coloresRef=''; disenoRef='';
       }
+      const costoCapturado = Number(getV('pr-costo')||0);
       const p = {
         id,
         nombre,
@@ -6791,7 +6893,8 @@ window.addEventListener('unhandledrejection', function(ev){
         colores_ref:coloresRef,
         diseno_ref:disenoRef,
         precio_venta:Number(precio||0),
-        costo_produccion: cat==='fabricacion' ? calcCostoEstimadoProducto() : Number(getV('pr-costo')||0),
+        precio_compra: cat==='reventa' ? costoCapturado : '',
+        costo_produccion: cat==='fabricacion' ? calcCostoEstimadoProducto() : costoCapturado,
         stock_disponible: cat==='fabricacion' ? 0 : Number(getV('pr-stock')||0),
         dias_produccion:Number(getV('pr-dias')||7)
       };
