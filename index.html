@@ -1236,15 +1236,19 @@ function lineaCatalogoLabel(v){
   return (CATALOGO_LINEAS.find(x=>x.id===key)||{}).label || '';
 }
 function inferLineaCatalogo(prod, det){
-  const explicit = String(det?.linea_catalogo || prod?.linea_catalogo || '').toLowerCase().trim();
-  if(explicit) return explicit;
-  // Solo inferir desde el detalle/pedido cuando no haya clasificación explícita.
-  // En productos, si no existe linea_catalogo guardada, asumimos unicolor para no contaminar otros registros.
+  const explicitDet = String(det?.linea_catalogo || '').toLowerCase().trim();
+  if(explicitDet) return explicitDet;
+  const explicitProd = String(prod?.linea_catalogo || '').toLowerCase().trim();
+  if(explicitProd) return explicitProd;
+  // Solo inferir desde el detalle/pedido cuando aún no exista una línea explícita.
+  // Para productos SIEMPRE usar valor guardado o default unicolor.
   const multi = String(det?.colores_comerciales || '').trim();
   const color2 = String(det?.color_hilo2 || '').trim();
   const dis = String(det?.diseno_comercial || '').trim();
-  if(dis) return 'especial';
-  if(multi || color2) return 'combinada';
+  if(det){
+    if(dis) return 'especial';
+    if(multi || color2) return 'combinada';
+  }
   return 'unicolor';
 }
 function nombreCatalogoProducto(prod, det){
@@ -3692,7 +3696,7 @@ function renderProductos() {
   if(filtroProd!=='todos') lista=lista.filter(p=>categoriaProducto(p)===filtroProd);
   if(!lista.length){el.innerHTML=empty('Sin productos — crea uno con + Nuevo');return;}
   const grupos={unicolor:[], combinada:[], especial:[], sin:[]};
-  lista.forEach(p=>{ const key=String(inferLineaCatalogo(p,null)||'sin').toLowerCase(); if(!grupos[key]) grupos[key]=[]; grupos[key].push(p); });
+  lista.forEach(p=>{ const key=String(p.linea_catalogo || 'unicolor').toLowerCase(); if(!grupos[key]) grupos[key]=[]; grupos[key].push(p); });
   const orden=['unicolor','combinada','especial','sin'];
   el.innerHTML='';
   orden.forEach(key=>{
@@ -6712,6 +6716,12 @@ window.addEventListener('unhandledrejection', function(ev){
       const p = (D.productos||[]).find(x=>String(x.id)===String(id)); if(!p) return;
       setV('pr-nombre', p.nombre||'');
       setV('pr-cat', (typeof categoriaProducto==='function'?categoriaProducto(p):(p.categoria||'fabricacion')));
+      setV('pr-linea', String(p.linea_catalogo||'unicolor').toLowerCase());
+      setV('pr-tamano-ref', p.tamano_ref||'');
+      setV('pr-color-ref', p.color_ref||'');
+      setV('pr-color-ref2', p.color_ref2||'');
+      setV('pr-colores-ref', p.colores_ref||'');
+      setV('pr-diseno-ref', p.diseno_ref||'');
       setV('pr-dias', p.dias_produccion||7);
       setV('pr-precio', p.precio_venta||0);
       setV('pr-stock', p.stock_disponible||0);
@@ -6721,10 +6731,12 @@ window.addEventListener('unhandledrejection', function(ev){
       const labRows = laborRowsProducto(id);
       if(labRows.length) labRows.forEach(r=>addArtProducto(tipoTrabajoFromRow(r), r.tarifa_artesano_id||'', r.cantidad||1, r.color||'', r.artesano_sugerido_id||String(r.material_id||'').replace(/^ART:/,''), r.componente||tipoTrabajoFromRow(r)||'cuerpo'));
       else addArtProducto();
+      applyLineaCatalogoRules('producto', String(p.linea_catalogo||'unicolor').toLowerCase());
       setTimeout(()=>calcCostoEstimadoProducto(), 30);
     } else {
-      clr('pr-nombre','pr-precio');
+      clr('pr-nombre','pr-precio','pr-linea','pr-tamano-ref','pr-color-ref','pr-color-ref2','pr-colores-ref','pr-diseno-ref');
       setV('pr-cat','fabricacion');
+      setV('pr-linea','unicolor');
       setV('pr-dias','7');
       setV('pr-stock','0');
       addMatProducto();
@@ -6758,10 +6770,26 @@ window.addEventListener('unhandledrejection', function(ev){
     try{
       const id = editIds.prod || genId('PRO', D.productos||[]);
       const cat = getV('pr-cat');
+      const linea = String(getV('pr-linea')||'unicolor').toLowerCase().trim() || 'unicolor';
+      let colorRef = getV('pr-color-ref')||'';
+      let colorRef2 = getV('pr-color-ref2')||'';
+      let coloresRef = getV('pr-colores-ref')||'';
+      let disenoRef = getV('pr-diseno-ref')||'';
+      if(linea==='unicolor'){
+        colorRef2=''; coloresRef=''; disenoRef='';
+      }else if(linea==='combinada'){
+        coloresRef=''; disenoRef='';
+      }
       const p = {
         id,
         nombre,
         categoria:cat,
+        linea_catalogo:linea,
+        tamano_ref:getV('pr-tamano-ref')||'',
+        color_ref:colorRef,
+        color_ref2:colorRef2,
+        colores_ref:coloresRef,
+        diseno_ref:disenoRef,
         precio_venta:Number(precio||0),
         costo_produccion: cat==='fabricacion' ? calcCostoEstimadoProducto() : Number(getV('pr-costo')||0),
         stock_disponible: cat==='fabricacion' ? 0 : Number(getV('pr-stock')||0),
