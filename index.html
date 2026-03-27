@@ -4725,497 +4725,6 @@ ${notas?`<div class="notas">${notas}</div>`:''}
 <div class="ftr">${firmaHtml}</div>
 <button class="btn" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
 
-
-<script>
-(function(){
-  function dmClose(ids){
-    (ids||[]).forEach(id=>{
-      const el=document.getElementById(id);
-      if(el){ el.classList.remove('open'); el.style.display=''; }
-    });
-    if(typeof syncModalState==='function') syncModalState();
-  }
-  function dmNum(v, d=0){
-    const n=Number(v);
-    return Number.isFinite(n) ? n : d;
-  }
-  function dmCostoCompraProducto(prod){
-    const direct = prod && prod.precio_compra!=='' && prod.precio_compra!=null ? Number(prod.precio_compra) : NaN;
-    if(Number.isFinite(direct)) return direct;
-    const avg = prod && prod.costo_produccion!=='' && prod.costo_produccion!=null ? Number(prod.costo_produccion) : NaN;
-    if(Number.isFinite(avg)) return avg;
-    return Number(prod?.costo_unitario || prod?.costo || prod?.costo_reventa || 0);
-  }
-  function dmActualizarModoCostoProducto(){
-    const cat = typeof getV==='function' ? getV('pr-cat') : 'fabricacion';
-    const inp = document.getElementById('pr-costo');
-    const help = document.getElementById('pr-costo-help');
-    const box = document.getElementById('pr-cost-breakdown');
-    if(inp){
-      inp.readOnly = cat==='fabricacion';
-      inp.placeholder = cat==='fabricacion' ? '0.00' : 'Costo de compra';
-    }
-    if(help){
-      help.textContent = cat==='fabricacion'
-        ? 'Se calcula con receta de materiales + mano de obra estimada.'
-        : 'Para reventa captura aquí el costo de compra unitario.';
-    }
-    if(box && cat!=='fabricacion'){
-      const total = dmNum(inp?.value||0);
-      box.innerHTML = '<div class="card-note">Costo de compra / reventa: $'+(typeof fmx==='function'?fmx(total):total)+'</div>';
-    }
-  }
-  function dmPedidoQty(){
-    return Math.max(1, dmNum((document.getElementById('p-cant')||{}).value || 1, 1));
-  }
-  function dmSetQtyApplied(q){
-    const host=document.getElementById('p-mat-list');
-    if(host) host.dataset.qtyApplied=String(Math.max(1, dmNum(q,1)));
-  }
-  function dmQtyApplied(){
-    const host=document.getElementById('p-mat-list');
-    return Math.max(1, dmNum(host?.dataset?.qtyApplied || 1,1));
-  }
-  function dmEscalarRecetaPedidoActual(nuevaQty){
-    const host=document.getElementById('p-mat-list');
-    if(!host || !host.children.length) return;
-    const fromQty = dmQtyApplied();
-    const toQty = Math.max(1, dmNum(nuevaQty,1));
-    if(!fromQty || fromQty===toQty) return;
-    Array.from(host.querySelectorAll('div[id^="pm-"]')).forEach(row=>{
-      const i=String(row.id||'').replace('pm-','');
-      const inp=document.getElementById('pm-qty-'+i);
-      if(!inp) return;
-      const actual=dmNum(inp.value||0,0);
-      const base=actual/fromQty;
-      inp.value = Math.round((base*toQty)*1000)/1000;
-    });
-    dmSetQtyApplied(toQty);
-  }
-  function dmLoadRecetaProductoEnPedido(prod, force=false){
-    const host=document.getElementById('p-mat-list');
-    if(!host) return;
-    const cat=(typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod?.categoria||'fabricacion'));
-    if(cat!=='fabricacion') return;
-    if(!force && host.children.length) return;
-    host.innerHTML=''; window.matPedItems=[];
-    const qty = dmPedidoQty();
-    const recs = (typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(prod.id) : [])
-      .filter(r=>!String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:'));
-    if(recs.length){
-      recs.forEach(r=>{
-        const cant = dmNum(r.cantidad||0,0) * qty;
-        if(typeof addMatPedido==='function') addMatPedido(r.material_id, cant, r.color||'', r.componente||'cuerpo');
-      });
-    } else if(prod.material_hilo_id){
-      if(typeof addMatPedido==='function') addMatPedido(prod.material_hilo_id, dmNum(prod.tubos_hilo||1,1)*qty, '');
-    } else if(typeof addMatPedido==='function'){
-      addMatPedido();
-    }
-    dmSetQtyApplied(qty);
-  }
-  window.cargaRecetaProductoEnPedido = dmLoadRecetaProductoEnPedido;
-
-  window.abrirModalProducto = function(id){
-    try{
-      dmClose(['sub-productos','modal-pedido','sub-pedidos','det-pedido']);
-      editIds.prod = id || null;
-      window.recetaProdItems = [];
-      window.laborProdItems = Array.isArray(window.laborProdItems) ? [] : [];
-      const recList=document.getElementById('pr-receta-list');
-      const artList=document.getElementById('pr-art-list');
-      if(recList) recList.innerHTML='';
-      if(artList) artList.innerHTML='';
-      const tit=document.getElementById('tit-prod');
-      const btn=document.getElementById('btn-guardar-prod');
-      if(tit) tit.textContent = id ? 'Editar producto' : 'Nuevo producto';
-      if(btn) btn.textContent = id ? 'Guardar cambios' : 'Guardar producto';
-
-      if(id){
-        const p=(D.productos||[]).find(x=>String(x.id)===String(id));
-        if(!p){ toast('No se encontró el producto'); return; }
-        setV('pr-nombre', p.nombre||'');
-        setV('pr-cat', typeof categoriaProducto==='function' ? categoriaProducto(p) : (p.categoria||'fabricacion'));
-        setV('pr-linea', String(p.linea_catalogo||'unicolor').toLowerCase());
-        setV('pr-tamano-ref', p.tamano_ref||'');
-        setV('pr-color-ref', p.color_ref||'');
-        setV('pr-color-ref2', p.color_ref2||'');
-        setV('pr-colores-ref', p.colores_ref||'');
-        setV('pr-diseno-ref', p.diseno_ref||'');
-        setV('pr-dias', p.dias_produccion||7);
-        setV('pr-precio', p.precio_venta||0);
-        setV('pr-costo', (typeof categoriaProducto==='function' && categoriaProducto(p)==='reventa') ? dmCostoCompraProducto(p) : (p.costo_produccion||0));
-        setV('pr-stock', p.stock_disponible||0);
-
-        const matRows = (typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(id) : [])
-          .filter(r=>!String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:'));
-        if(matRows.length) matRows.forEach(r=>{ if(typeof addMatProducto==='function') addMatProducto(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'); });
-        else if(typeof addMatProducto==='function') addMatProducto();
-
-        try{
-          const labRows = (Array.isArray(D.recetas)?D.recetas:[]).filter(r=>String(r.pedido_id)==='PRODLAB:'+String(id));
-          if(labRows.length && typeof addArtProducto==='function'){
-            labRows.forEach(r=>addArtProducto(
-              r.tipo_trabajo || String(r.material_id||'').replace(/^LAB:/,'').replace(/^ART:/,''),
-              r.tarifa_artesano_id||'',
-              r.cantidad||1,
-              r.color||'',
-              r.artesano_sugerido_id||'',
-              r.componente||'cuerpo'
-            ));
-          } else if(typeof addArtProducto==='function'){
-            addArtProducto();
-          }
-        }catch(_e){
-          if(typeof addArtProducto==='function' && !document.querySelector('#pr-art-list > div[id^="pra-"]')) addArtProducto();
-        }
-
-        if(typeof applyLineaCatalogoRules==='function') applyLineaCatalogoRules('producto', String(p.linea_catalogo||'unicolor').toLowerCase());
-      } else {
-        if(typeof clr==='function') clr('pr-nombre','pr-precio','pr-linea','pr-tamano-ref','pr-color-ref','pr-color-ref2','pr-colores-ref','pr-diseno-ref');
-        setV('pr-cat','fabricacion');
-        setV('pr-linea','unicolor');
-        setV('pr-dias','7');
-        setV('pr-costo','0');
-        setV('pr-stock','0');
-        if(typeof addMatProducto==='function') addMatProducto();
-        if(typeof addArtProducto==='function') addArtProducto();
-        if(typeof applyLineaCatalogoRules==='function') applyLineaCatalogoRules('producto','unicolor');
-      }
-      window.onProdCatChange();
-      if(typeof abrirModal==='function') abrirModal('modal-producto');
-      setTimeout(function(){
-        try{ if(typeof calcCostoEstimadoProducto==='function') calcCostoEstimadoProducto(); }catch(_e){}
-      },30);
-    }catch(err){
-      console.error('abrirModalProducto estable', err);
-      toast('Error al abrir producto: '+(err.message||err));
-    }
-  };
-
-  window.onProdCatChange = function(){
-    const cat = getV('pr-cat');
-    const sec = document.getElementById('pr-fab-section');
-    if(sec) sec.style.display = cat==='fabricacion' ? 'block' : 'none';
-    const stockWrap = document.getElementById('pr-stock')?.closest('.form-group');
-    if(stockWrap) stockWrap.style.display = cat==='fabricacion' ? 'none' : 'block';
-    dmActualizarModoCostoProducto();
-    if(cat==='fabricacion'){
-      if(document.getElementById('pr-receta-list') && !document.getElementById('pr-receta-list').children.length && typeof addMatProducto==='function') addMatProducto();
-      if(document.getElementById('pr-art-list') && !document.getElementById('pr-art-list').children.length && typeof addArtProducto==='function') addArtProducto();
-      try{ if(typeof calcCostoEstimadoProducto==='function') calcCostoEstimadoProducto(); }catch(_e){}
-    }
-    if(typeof applyLineaCatalogoRules==='function') applyLineaCatalogoRules('producto');
-  };
-
-  window.crearProductoRapidoDesdePedido = function(){
-    window.pendingProducto = { flujo:'pedido' };
-    dmClose(['modal-pedido']);
-    window.abrirModalProducto();
-  };
-
-  window.onProdChange = function(){
-    const pid=getV('p-producto');
-    const prod=arr(D.productos).find(p=>String(p.id)===String(pid));
-    const badge=$('p-badge');
-    const matSec=$('p-mat-section');
-    if(!prod){
-      if(badge){ badge.style.display='none'; badge.innerHTML=''; }
-      if(matSec) matSec.style.display='none';
-      return;
-    }
-    const cat = (typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion'));
-    if(badge){
-      badge.style.display='block';
-      badge.innerHTML='<div class="alert alert-info">'+(cat==='reventa'?'🏷️ Reventa: descuenta producto terminado':'🧵 Fabricación: genera producción y materiales')+'</div>';
-    }
-    if(matSec) matSec.style.display = cat==='fabricacion' ? 'block' : 'none';
-    const lblPago=$('lbl-p-pago');
-    if(lblPago) lblPago.textContent = cat==='reventa' ? 'Pago recibido ($)' : 'Anticipo ($)';
-    if(!getV('p-color') && prod?.color_ref) setV('p-color', prod.color_ref);
-    if(!getV('p-color2') && prod?.color_ref2) setV('p-color2', prod.color_ref2);
-    if(!getV('p-colores') && prod?.colores_ref) setV('p-colores', prod.colores_ref);
-    if(!getV('p-medidas') && prod?.tamano_ref) setV('p-medidas', prod.tamano_ref);
-    if(!getV('p-diseno') && prod?.diseno_ref) setV('p-diseno', prod.diseno_ref);
-    if(typeof applyLineaCatalogoRules==='function') applyLineaCatalogoRules('pedido', typeof inferLineaCatalogo==='function' ? inferLineaCatalogo(prod, null) : (prod?.linea_catalogo||'unicolor'));
-    window.calcTotal();
-    if(cat==='fabricacion') dmLoadRecetaProductoEnPedido(prod, true);
-    else{
-      const host=document.getElementById('p-mat-list');
-      if(host){ host.innerHTML=''; window.matPedItems=[]; host.dataset.qtyApplied='1'; }
-    }
-  };
-
-  window.calcTotal = function(){
-    const pid=getV('p-producto');
-    const prod=arr(D.productos).find(p=>String(p.id)===String(pid));
-    const qty=dmPedidoQty();
-    const totalEl=$('p-total');
-    if(totalEl && prod && (!Number(totalEl.value)||totalEl.dataset.auto==='1')){
-      totalEl.value = Number(prod.precio_venta||0) * qty;
-      totalEl.dataset.auto='1';
-    }
-    const cat = prod ? (typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion')) : '';
-    if(cat==='fabricacion') dmEscalarRecetaPedidoActual(qty);
-  };
-
-  window.recargarRecetaMaestraPedido = function(){
-    const pid=getV('p-producto');
-    const prod=arr(D.productos).find(p=>String(p.id)===String(pid));
-    if(!prod){ toast('Selecciona primero un producto'); return; }
-    const cat=(typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion'));
-    if(cat!=='fabricacion'){ toast('Este producto no usa receta de fabricación'); return; }
-    const host=document.getElementById('p-mat-list');
-    if(host){ host.innerHTML=''; window.matPedItems=[]; }
-    dmLoadRecetaProductoEnPedido(prod, true);
-    toast('✓ Receta maestra cargada al pedido');
-  };
-
-  window.guardarProducto = async function(){
-    const nombre=getV('pr-nombre'), precio=getV('pr-precio');
-    if(!nombre || !precio){ toast('Nombre y precio son requeridos'); return; }
-    const btn=document.getElementById('btn-guardar-prod');
-    if(btn){ btn.disabled=true; btn.textContent='Guardando...'; }
-    try{
-      const id=editIds.prod || genId('PRO', D.productos||[]);
-      const cat=getV('pr-cat');
-      const linea=String(getV('pr-linea')||'unicolor').toLowerCase().trim() || 'unicolor';
-      let colorRef=getV('pr-color-ref')||'';
-      let colorRef2=getV('pr-color-ref2')||'';
-      let coloresRef=getV('pr-colores-ref')||'';
-      let disenoRef=getV('pr-diseno-ref')||'';
-      if(linea==='unicolor'){ colorRef2=''; coloresRef=''; disenoRef=''; }
-      else if(linea==='combinada'){ coloresRef=''; disenoRef=''; }
-      const costoCapturado=dmNum(getV('pr-costo')||0,0);
-      const costoFab = cat==='fabricacion' && typeof calcCostoEstimadoProducto==='function' ? dmNum(calcCostoEstimadoProducto(),0) : costoCapturado;
-      const p = {
-        id,
-        nombre,
-        categoria:cat,
-        precio_venta:dmNum(precio,0),
-        precio_compra: cat==='reventa' ? costoCapturado : '',
-        costo_produccion: cat==='fabricacion' ? costoFab : costoCapturado,
-        stock_disponible: cat==='fabricacion' ? 0 : dmNum(getV('pr-stock')||0,0),
-        linea_catalogo:linea,
-        tamano_ref:getV('pr-tamano-ref')||'',
-        color_ref:colorRef,
-        color_ref2:colorRef2,
-        colores_ref:coloresRef,
-        diseno_ref:disenoRef,
-        dias_produccion:dmNum(getV('pr-dias')||7,7)
-      };
-
-      const recetaRows = Array.from(document.querySelectorAll('#pr-receta-list > div[id^="prm-"]')).map(row=>{
-        const i=String(row.id||'').replace('prm-','');
-        return {
-          material_id:document.getElementById('prm-mat-'+i)?.value || '',
-          cantidad:dmNum(document.getElementById('prm-qty-'+i)?.value || 0,0),
-          componente:document.getElementById('prm-comp-'+i)?.value || 'cuerpo',
-          color:document.getElementById('prm-color-'+i)?.value || ''
-        };
-      }).filter(x=>x.material_id && x.cantidad>0);
-      p.material_hilo_id = recetaRows[0]?.material_id || '';
-      p.tubos_hilo = dmNum(recetaRows[0]?.cantidad || 0,0);
-
-      if(editIds.prod){
-        const idx=(D.productos||[]).findIndex(x=>String(x.id)===String(id));
-        if(idx>=0) Object.assign(D.productos[idx], p);
-        await actualizar('productos', p);
-      } else {
-        D.productos.push(p);
-        await crear('productos', p);
-      }
-
-      const tplId='PROD:'+String(id);
-      const prevMat=(D.recetas||[]).filter(r=>String(r.pedido_id)===tplId);
-      for(const r of prevMat){ if(r.id) await eliminar('recetas', r.id).catch(()=>{}); }
-      D.recetas=(D.recetas||[]).filter(r=>String(r.pedido_id)!==tplId);
-      if(cat==='fabricacion'){
-        for(const rec of recetaRows){
-          const rr={id:genId('REC', D.recetas||[]), pedido_id:tplId, material_id:rec.material_id, cantidad:rec.cantidad, componente:rec.componente||'cuerpo', color:rec.color};
-          D.recetas.push(rr); await crear('recetas', rr);
-        }
-      }
-
-      const labId='PRODLAB:'+String(id);
-      const prevLab=(D.recetas||[]).filter(r=>String(r.pedido_id)===labId);
-      for(const r of prevLab){ if(r.id) await eliminar('recetas', r.id).catch(()=>{}); }
-      D.recetas=(D.recetas||[]).filter(r=>String(r.pedido_id)!==labId);
-
-      const laborRows = Array.from(document.querySelectorAll('#pr-art-list > div[id^="pra-"]')).map(row=>{
-        const i=String(row.id||'').replace('pra-','');
-        const tarifaId=document.getElementById('pra-tarifa-'+i)?.value || '';
-        return {
-          tipo_trabajo:document.getElementById('pra-tipo-'+i)?.value || '',
-          tarifa_artesano_id:tarifaId,
-          factor:dmNum(document.getElementById('pra-factor-'+i)?.value || 0,0),
-          componente:document.getElementById('pra-comp-'+i)?.value || 'cuerpo',
-          nota:document.getElementById('pra-nota-'+i)?.value || '',
-          artesano_sugerido_id:document.getElementById('pra-art-'+i)?.value || ''
-        };
-      }).filter(x=>x.tipo_trabajo && x.tarifa_artesano_id && x.factor>0);
-
-      if(cat==='fabricacion'){
-        for(const row of laborRows){
-          const tarifa = typeof tarifaArtesanoById==='function' ? (tarifaArtesanoById(row.tarifa_artesano_id)||{}) : {};
-          const rr={
-            id:genId('REC', D.recetas||[]),
-            pedido_id:labId,
-            material_id:'LAB:'+row.tipo_trabajo,
-            cantidad:row.factor,
-            color:row.nota,
-            tipo_trabajo:row.tipo_trabajo,
-            componente:row.componente||'cuerpo',
-            artesano_sugerido_id:row.artesano_sugerido_id,
-            tarifa_artesano_id:row.tarifa_artesano_id,
-            tarifa_nombre:tarifa.nombre_tarifa||tarifa.nombre||'',
-            esquema_pago:tarifa.esquema_pago||'por_pieza',
-            monto_tarifa:dmNum(tarifa.monto||0,0)
-          };
-          D.recetas.push(rr); await crear('recetas', rr);
-        }
-      }
-
-      toast(editIds.prod ? '✓ Producto actualizado' : '✓ Producto guardado');
-      const savedId=id;
-      const pendingFlow = window.pendingProducto ? window.pendingProducto.flujo : '';
-      editIds.prod=null;
-      if(typeof cerrar==='function') cerrar('modal-producto');
-      if(typeof renderProductos==='function') renderProductos();
-      if(pendingFlow==='pedido'){
-        window.pendingProducto = null;
-        if(typeof abrirModal_pedido==='function') abrirModal_pedido(true);
-        setTimeout(()=>{
-          const sel=document.getElementById('p-producto');
-          if(sel){
-            sel.innerHTML = typeof optionsProductosAgrupados==='function' ? optionsProductosAgrupados(savedId) : sel.innerHTML;
-            setV('p-producto', savedId);
-            if(typeof onProdChange==='function') onProdChange();
-          }
-        },80);
-      }
-    }catch(err){
-      console.error('guardarProducto estable', err);
-      toast('Error al guardar producto: '+(err.message||err));
-    }finally{
-      if(btn){ btn.disabled=false; btn.textContent='Guardar producto'; }
-    }
-  };
-
-  window.guardarPedido = async function(){
-    const clienteId=getV('p-cliente'), productoId=getV('p-producto');
-    if(!clienteId || !productoId){ toast('Selecciona cliente y producto'); return; }
-    const qty=dmPedidoQty();
-    const total=dmNum(getV('p-total')||0,0);
-    const prod=arr(D.productos).find(p=>String(p.id)===String(productoId));
-    const cat=prod ? (typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion')) : 'fabricacion';
-    const btn=$('btn-guardar-pedido');
-    if(btn){ btn.disabled=true; btn.textContent='Guardando...'; }
-    try{
-      let pedidoId=editIds.pedido;
-      let det=pedidoId ? detallePedido(pedidoId) : null;
-      const isNew=!pedidoId;
-      if(isNew) pedidoId=genId('PED', arr(D.pedidos));
-      const pagoRecibido=dmNum(getV('p-anticipo')||0,0);
-      const estadoBase=(arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{}).estado || 'nuevo';
-      let estadoPedido=estadoBase;
-      if(cat==='reventa' && total>0 && pagoRecibido>=total) estadoPedido='entregado';
-      const pedido={
-        id:pedidoId,
-        cliente_id:clienteId,
-        estado:estadoPedido,
-        total:total,
-        anticipo:pagoRecibido,
-        fecha_entrega:getV('p-fecha')||'',
-        notas:getV('p-notas')||'',
-        fecha_creacion:(arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{}).fecha_creacion || hoy(),
-        tipo_flujo:cat==='reventa'?'reventa':'fabricacion'
-      };
-      if(isNew){ D.pedidos.push(pedido); await crear('pedidos', pedido); }
-      else{
-        const idx=arr(D.pedidos).findIndex(p=>String(p.id)===String(pedidoId));
-        if(idx>=0) Object.assign(D.pedidos[idx], pedido);
-        await actualizar('pedidos', pedido);
-      }
-
-      const detalleId = det?.id || genId('DET', arr(D.ped_det));
-      const costoUnitario = cat==='reventa'
-        ? dmCostoCompraProducto(prod||{})
-        : (qty>0 ? Array.from(document.querySelectorAll('#p-mat-list > div[id^="pm-"]')).reduce((s,row)=>{
-            const i=String(row.id||'').replace('pm-','');
-            const matId=document.getElementById('pm-mat-'+i)?.value || '';
-            const cant=dmNum(document.getElementById('pm-qty-'+i)?.value || 0,0);
-            const mat=arr(D.materiales).find(m=>String(m.id)===String(matId));
-            const costo = Number(mat?.costo_promedio || mat?.costo_unitario || mat?.costo || mat?.ultimo_costo || mat?.precio_compra || 0);
-            return s + (cant*costo);
-          },0)/qty : 0);
-
-      const detPayload={
-        id:detalleId,
-        pedido_id:pedidoId,
-        producto_id:productoId,
-        cantidad:qty,
-        linea_catalogo: typeof inferLineaCatalogo==='function' ? inferLineaCatalogo(prod||{}, {
-          linea_catalogo: prod?.linea_catalogo || '',
-          color_hilo:getV('p-color')||'',
-          color_hilo2:getV('p-color2')||'',
-          colores_comerciales:getV('p-colores')||'',
-          diseno_comercial:getV('p-diseno')||''
-        }) : (prod?.linea_catalogo||'unicolor'),
-        color_hilo:getV('p-color')||'',
-        color_hilo2:getV('p-color2')||'',
-        colores_comerciales:getV('p-colores')||'',
-        medidas:getV('p-medidas')||'',
-        tamano_comercial:getV('p-medidas')||'',
-        diseno_comercial:getV('p-diseno')||'',
-        precio_unitario: qty ? (total/qty) : total,
-        costo_unitario: Math.round(dmNum(costoUnitario,0)*100)/100,
-        subtotal: total
-      };
-
-      if(det){
-        const idx=arr(D.ped_det).findIndex(x=>String(x.id)===String(detalleId));
-        if(idx>=0) Object.assign(D.ped_det[idx], detPayload);
-        await actualizar('ped_det', detPayload);
-      } else {
-        D.ped_det.push(detPayload);
-        await crear('ped_det', detPayload);
-      }
-
-      const recetasPrev=arr(D.recetas).filter(r=>String(r.pedido_id)===String(detalleId));
-      if(recetasPrev.length){
-        await Promise.all(recetasPrev.filter(r=>r.id).map(r=>eliminar('recetas', r.id).catch(()=>{})));
-      }
-      D.recetas=arr(D.recetas).filter(r=>String(r.pedido_id)!==String(detalleId));
-      if(cat==='fabricacion'){
-        const nuevos = (window.matPedItems||[]).map(i=>({
-          material_id:getV('pm-mat-'+i),
-          cantidad:dmNum(getV('pm-qty-'+i)||0,0),
-          color:getV('pm-color-'+i)||'',
-          componente:getV('pm-comp-'+i)||'cuerpo'
-        })).filter(x=>x.material_id && x.cantidad>0);
-        for(const rec of nuevos){
-          const rr={id:genId('REC', arr(D.recetas)), pedido_id:detalleId, material_id:rec.material_id, cantidad:rec.cantidad, color:rec.color, componente:rec.componente||'cuerpo'};
-          D.recetas.push(rr);
-          await crear('recetas', rr);
-        }
-      }
-
-      if(typeof rebuildPedidoReservas==='function') await rebuildPedidoReservas(pedidoId, detalleId, prod);
-      toast(editIds.pedido ? '✓ Pedido actualizado' : '✓ Pedido guardado');
-      editIds.pedido=null;
-      if(typeof cerrar==='function') cerrar('modal-pedido');
-      if(typeof refreshUIAfter==='function') refreshUIAfter('pedido');
-    }catch(err){
-      console.error('guardarPedido estable', err);
-      toast('Error al guardar pedido: '+(err.message||err));
-    }finally{
-      if(btn){ btn.disabled=false; btn.textContent='Guardar pedido'; }
-    }
-  };
-})();
-</script>
-
 </body></html>`;
   // Guardar en historial (o actualizar si es edición)
   const editId=$('modal-cot')?.dataset?.editId;
@@ -6046,497 +5555,6 @@ ${p.notas?`<div class="row"><span class="lbl">Notas</span><span style="font-size
 </div>
 <div class="ftr">${firmaPdfHtml()}</div>
 <button class="btn" onclick="window.print()">🖨 Imprimir</button>
-
-
-<script>
-(function(){
-  function dmClose(ids){
-    (ids||[]).forEach(id=>{
-      const el=document.getElementById(id);
-      if(el){ el.classList.remove('open'); el.style.display=''; }
-    });
-    if(typeof syncModalState==='function') syncModalState();
-  }
-  function dmNum(v, d=0){
-    const n=Number(v);
-    return Number.isFinite(n) ? n : d;
-  }
-  function dmCostoCompraProducto(prod){
-    const direct = prod && prod.precio_compra!=='' && prod.precio_compra!=null ? Number(prod.precio_compra) : NaN;
-    if(Number.isFinite(direct)) return direct;
-    const avg = prod && prod.costo_produccion!=='' && prod.costo_produccion!=null ? Number(prod.costo_produccion) : NaN;
-    if(Number.isFinite(avg)) return avg;
-    return Number(prod?.costo_unitario || prod?.costo || prod?.costo_reventa || 0);
-  }
-  function dmActualizarModoCostoProducto(){
-    const cat = typeof getV==='function' ? getV('pr-cat') : 'fabricacion';
-    const inp = document.getElementById('pr-costo');
-    const help = document.getElementById('pr-costo-help');
-    const box = document.getElementById('pr-cost-breakdown');
-    if(inp){
-      inp.readOnly = cat==='fabricacion';
-      inp.placeholder = cat==='fabricacion' ? '0.00' : 'Costo de compra';
-    }
-    if(help){
-      help.textContent = cat==='fabricacion'
-        ? 'Se calcula con receta de materiales + mano de obra estimada.'
-        : 'Para reventa captura aquí el costo de compra unitario.';
-    }
-    if(box && cat!=='fabricacion'){
-      const total = dmNum(inp?.value||0);
-      box.innerHTML = '<div class="card-note">Costo de compra / reventa: $'+(typeof fmx==='function'?fmx(total):total)+'</div>';
-    }
-  }
-  function dmPedidoQty(){
-    return Math.max(1, dmNum((document.getElementById('p-cant')||{}).value || 1, 1));
-  }
-  function dmSetQtyApplied(q){
-    const host=document.getElementById('p-mat-list');
-    if(host) host.dataset.qtyApplied=String(Math.max(1, dmNum(q,1)));
-  }
-  function dmQtyApplied(){
-    const host=document.getElementById('p-mat-list');
-    return Math.max(1, dmNum(host?.dataset?.qtyApplied || 1,1));
-  }
-  function dmEscalarRecetaPedidoActual(nuevaQty){
-    const host=document.getElementById('p-mat-list');
-    if(!host || !host.children.length) return;
-    const fromQty = dmQtyApplied();
-    const toQty = Math.max(1, dmNum(nuevaQty,1));
-    if(!fromQty || fromQty===toQty) return;
-    Array.from(host.querySelectorAll('div[id^="pm-"]')).forEach(row=>{
-      const i=String(row.id||'').replace('pm-','');
-      const inp=document.getElementById('pm-qty-'+i);
-      if(!inp) return;
-      const actual=dmNum(inp.value||0,0);
-      const base=actual/fromQty;
-      inp.value = Math.round((base*toQty)*1000)/1000;
-    });
-    dmSetQtyApplied(toQty);
-  }
-  function dmLoadRecetaProductoEnPedido(prod, force=false){
-    const host=document.getElementById('p-mat-list');
-    if(!host) return;
-    const cat=(typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod?.categoria||'fabricacion'));
-    if(cat!=='fabricacion') return;
-    if(!force && host.children.length) return;
-    host.innerHTML=''; window.matPedItems=[];
-    const qty = dmPedidoQty();
-    const recs = (typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(prod.id) : [])
-      .filter(r=>!String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:'));
-    if(recs.length){
-      recs.forEach(r=>{
-        const cant = dmNum(r.cantidad||0,0) * qty;
-        if(typeof addMatPedido==='function') addMatPedido(r.material_id, cant, r.color||'', r.componente||'cuerpo');
-      });
-    } else if(prod.material_hilo_id){
-      if(typeof addMatPedido==='function') addMatPedido(prod.material_hilo_id, dmNum(prod.tubos_hilo||1,1)*qty, '');
-    } else if(typeof addMatPedido==='function'){
-      addMatPedido();
-    }
-    dmSetQtyApplied(qty);
-  }
-  window.cargaRecetaProductoEnPedido = dmLoadRecetaProductoEnPedido;
-
-  window.abrirModalProducto = function(id){
-    try{
-      dmClose(['sub-productos','modal-pedido','sub-pedidos','det-pedido']);
-      editIds.prod = id || null;
-      window.recetaProdItems = [];
-      window.laborProdItems = Array.isArray(window.laborProdItems) ? [] : [];
-      const recList=document.getElementById('pr-receta-list');
-      const artList=document.getElementById('pr-art-list');
-      if(recList) recList.innerHTML='';
-      if(artList) artList.innerHTML='';
-      const tit=document.getElementById('tit-prod');
-      const btn=document.getElementById('btn-guardar-prod');
-      if(tit) tit.textContent = id ? 'Editar producto' : 'Nuevo producto';
-      if(btn) btn.textContent = id ? 'Guardar cambios' : 'Guardar producto';
-
-      if(id){
-        const p=(D.productos||[]).find(x=>String(x.id)===String(id));
-        if(!p){ toast('No se encontró el producto'); return; }
-        setV('pr-nombre', p.nombre||'');
-        setV('pr-cat', typeof categoriaProducto==='function' ? categoriaProducto(p) : (p.categoria||'fabricacion'));
-        setV('pr-linea', String(p.linea_catalogo||'unicolor').toLowerCase());
-        setV('pr-tamano-ref', p.tamano_ref||'');
-        setV('pr-color-ref', p.color_ref||'');
-        setV('pr-color-ref2', p.color_ref2||'');
-        setV('pr-colores-ref', p.colores_ref||'');
-        setV('pr-diseno-ref', p.diseno_ref||'');
-        setV('pr-dias', p.dias_produccion||7);
-        setV('pr-precio', p.precio_venta||0);
-        setV('pr-costo', (typeof categoriaProducto==='function' && categoriaProducto(p)==='reventa') ? dmCostoCompraProducto(p) : (p.costo_produccion||0));
-        setV('pr-stock', p.stock_disponible||0);
-
-        const matRows = (typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(id) : [])
-          .filter(r=>!String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:'));
-        if(matRows.length) matRows.forEach(r=>{ if(typeof addMatProducto==='function') addMatProducto(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'); });
-        else if(typeof addMatProducto==='function') addMatProducto();
-
-        try{
-          const labRows = (Array.isArray(D.recetas)?D.recetas:[]).filter(r=>String(r.pedido_id)==='PRODLAB:'+String(id));
-          if(labRows.length && typeof addArtProducto==='function'){
-            labRows.forEach(r=>addArtProducto(
-              r.tipo_trabajo || String(r.material_id||'').replace(/^LAB:/,'').replace(/^ART:/,''),
-              r.tarifa_artesano_id||'',
-              r.cantidad||1,
-              r.color||'',
-              r.artesano_sugerido_id||'',
-              r.componente||'cuerpo'
-            ));
-          } else if(typeof addArtProducto==='function'){
-            addArtProducto();
-          }
-        }catch(_e){
-          if(typeof addArtProducto==='function' && !document.querySelector('#pr-art-list > div[id^="pra-"]')) addArtProducto();
-        }
-
-        if(typeof applyLineaCatalogoRules==='function') applyLineaCatalogoRules('producto', String(p.linea_catalogo||'unicolor').toLowerCase());
-      } else {
-        if(typeof clr==='function') clr('pr-nombre','pr-precio','pr-linea','pr-tamano-ref','pr-color-ref','pr-color-ref2','pr-colores-ref','pr-diseno-ref');
-        setV('pr-cat','fabricacion');
-        setV('pr-linea','unicolor');
-        setV('pr-dias','7');
-        setV('pr-costo','0');
-        setV('pr-stock','0');
-        if(typeof addMatProducto==='function') addMatProducto();
-        if(typeof addArtProducto==='function') addArtProducto();
-        if(typeof applyLineaCatalogoRules==='function') applyLineaCatalogoRules('producto','unicolor');
-      }
-      window.onProdCatChange();
-      if(typeof abrirModal==='function') abrirModal('modal-producto');
-      setTimeout(function(){
-        try{ if(typeof calcCostoEstimadoProducto==='function') calcCostoEstimadoProducto(); }catch(_e){}
-      },30);
-    }catch(err){
-      console.error('abrirModalProducto estable', err);
-      toast('Error al abrir producto: '+(err.message||err));
-    }
-  };
-
-  window.onProdCatChange = function(){
-    const cat = getV('pr-cat');
-    const sec = document.getElementById('pr-fab-section');
-    if(sec) sec.style.display = cat==='fabricacion' ? 'block' : 'none';
-    const stockWrap = document.getElementById('pr-stock')?.closest('.form-group');
-    if(stockWrap) stockWrap.style.display = cat==='fabricacion' ? 'none' : 'block';
-    dmActualizarModoCostoProducto();
-    if(cat==='fabricacion'){
-      if(document.getElementById('pr-receta-list') && !document.getElementById('pr-receta-list').children.length && typeof addMatProducto==='function') addMatProducto();
-      if(document.getElementById('pr-art-list') && !document.getElementById('pr-art-list').children.length && typeof addArtProducto==='function') addArtProducto();
-      try{ if(typeof calcCostoEstimadoProducto==='function') calcCostoEstimadoProducto(); }catch(_e){}
-    }
-    if(typeof applyLineaCatalogoRules==='function') applyLineaCatalogoRules('producto');
-  };
-
-  window.crearProductoRapidoDesdePedido = function(){
-    window.pendingProducto = { flujo:'pedido' };
-    dmClose(['modal-pedido']);
-    window.abrirModalProducto();
-  };
-
-  window.onProdChange = function(){
-    const pid=getV('p-producto');
-    const prod=arr(D.productos).find(p=>String(p.id)===String(pid));
-    const badge=$('p-badge');
-    const matSec=$('p-mat-section');
-    if(!prod){
-      if(badge){ badge.style.display='none'; badge.innerHTML=''; }
-      if(matSec) matSec.style.display='none';
-      return;
-    }
-    const cat = (typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion'));
-    if(badge){
-      badge.style.display='block';
-      badge.innerHTML='<div class="alert alert-info">'+(cat==='reventa'?'🏷️ Reventa: descuenta producto terminado':'🧵 Fabricación: genera producción y materiales')+'</div>';
-    }
-    if(matSec) matSec.style.display = cat==='fabricacion' ? 'block' : 'none';
-    const lblPago=$('lbl-p-pago');
-    if(lblPago) lblPago.textContent = cat==='reventa' ? 'Pago recibido ($)' : 'Anticipo ($)';
-    if(!getV('p-color') && prod?.color_ref) setV('p-color', prod.color_ref);
-    if(!getV('p-color2') && prod?.color_ref2) setV('p-color2', prod.color_ref2);
-    if(!getV('p-colores') && prod?.colores_ref) setV('p-colores', prod.colores_ref);
-    if(!getV('p-medidas') && prod?.tamano_ref) setV('p-medidas', prod.tamano_ref);
-    if(!getV('p-diseno') && prod?.diseno_ref) setV('p-diseno', prod.diseno_ref);
-    if(typeof applyLineaCatalogoRules==='function') applyLineaCatalogoRules('pedido', typeof inferLineaCatalogo==='function' ? inferLineaCatalogo(prod, null) : (prod?.linea_catalogo||'unicolor'));
-    window.calcTotal();
-    if(cat==='fabricacion') dmLoadRecetaProductoEnPedido(prod, true);
-    else{
-      const host=document.getElementById('p-mat-list');
-      if(host){ host.innerHTML=''; window.matPedItems=[]; host.dataset.qtyApplied='1'; }
-    }
-  };
-
-  window.calcTotal = function(){
-    const pid=getV('p-producto');
-    const prod=arr(D.productos).find(p=>String(p.id)===String(pid));
-    const qty=dmPedidoQty();
-    const totalEl=$('p-total');
-    if(totalEl && prod && (!Number(totalEl.value)||totalEl.dataset.auto==='1')){
-      totalEl.value = Number(prod.precio_venta||0) * qty;
-      totalEl.dataset.auto='1';
-    }
-    const cat = prod ? (typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion')) : '';
-    if(cat==='fabricacion') dmEscalarRecetaPedidoActual(qty);
-  };
-
-  window.recargarRecetaMaestraPedido = function(){
-    const pid=getV('p-producto');
-    const prod=arr(D.productos).find(p=>String(p.id)===String(pid));
-    if(!prod){ toast('Selecciona primero un producto'); return; }
-    const cat=(typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion'));
-    if(cat!=='fabricacion'){ toast('Este producto no usa receta de fabricación'); return; }
-    const host=document.getElementById('p-mat-list');
-    if(host){ host.innerHTML=''; window.matPedItems=[]; }
-    dmLoadRecetaProductoEnPedido(prod, true);
-    toast('✓ Receta maestra cargada al pedido');
-  };
-
-  window.guardarProducto = async function(){
-    const nombre=getV('pr-nombre'), precio=getV('pr-precio');
-    if(!nombre || !precio){ toast('Nombre y precio son requeridos'); return; }
-    const btn=document.getElementById('btn-guardar-prod');
-    if(btn){ btn.disabled=true; btn.textContent='Guardando...'; }
-    try{
-      const id=editIds.prod || genId('PRO', D.productos||[]);
-      const cat=getV('pr-cat');
-      const linea=String(getV('pr-linea')||'unicolor').toLowerCase().trim() || 'unicolor';
-      let colorRef=getV('pr-color-ref')||'';
-      let colorRef2=getV('pr-color-ref2')||'';
-      let coloresRef=getV('pr-colores-ref')||'';
-      let disenoRef=getV('pr-diseno-ref')||'';
-      if(linea==='unicolor'){ colorRef2=''; coloresRef=''; disenoRef=''; }
-      else if(linea==='combinada'){ coloresRef=''; disenoRef=''; }
-      const costoCapturado=dmNum(getV('pr-costo')||0,0);
-      const costoFab = cat==='fabricacion' && typeof calcCostoEstimadoProducto==='function' ? dmNum(calcCostoEstimadoProducto(),0) : costoCapturado;
-      const p = {
-        id,
-        nombre,
-        categoria:cat,
-        precio_venta:dmNum(precio,0),
-        precio_compra: cat==='reventa' ? costoCapturado : '',
-        costo_produccion: cat==='fabricacion' ? costoFab : costoCapturado,
-        stock_disponible: cat==='fabricacion' ? 0 : dmNum(getV('pr-stock')||0,0),
-        linea_catalogo:linea,
-        tamano_ref:getV('pr-tamano-ref')||'',
-        color_ref:colorRef,
-        color_ref2:colorRef2,
-        colores_ref:coloresRef,
-        diseno_ref:disenoRef,
-        dias_produccion:dmNum(getV('pr-dias')||7,7)
-      };
-
-      const recetaRows = Array.from(document.querySelectorAll('#pr-receta-list > div[id^="prm-"]')).map(row=>{
-        const i=String(row.id||'').replace('prm-','');
-        return {
-          material_id:document.getElementById('prm-mat-'+i)?.value || '',
-          cantidad:dmNum(document.getElementById('prm-qty-'+i)?.value || 0,0),
-          componente:document.getElementById('prm-comp-'+i)?.value || 'cuerpo',
-          color:document.getElementById('prm-color-'+i)?.value || ''
-        };
-      }).filter(x=>x.material_id && x.cantidad>0);
-      p.material_hilo_id = recetaRows[0]?.material_id || '';
-      p.tubos_hilo = dmNum(recetaRows[0]?.cantidad || 0,0);
-
-      if(editIds.prod){
-        const idx=(D.productos||[]).findIndex(x=>String(x.id)===String(id));
-        if(idx>=0) Object.assign(D.productos[idx], p);
-        await actualizar('productos', p);
-      } else {
-        D.productos.push(p);
-        await crear('productos', p);
-      }
-
-      const tplId='PROD:'+String(id);
-      const prevMat=(D.recetas||[]).filter(r=>String(r.pedido_id)===tplId);
-      for(const r of prevMat){ if(r.id) await eliminar('recetas', r.id).catch(()=>{}); }
-      D.recetas=(D.recetas||[]).filter(r=>String(r.pedido_id)!==tplId);
-      if(cat==='fabricacion'){
-        for(const rec of recetaRows){
-          const rr={id:genId('REC', D.recetas||[]), pedido_id:tplId, material_id:rec.material_id, cantidad:rec.cantidad, componente:rec.componente||'cuerpo', color:rec.color};
-          D.recetas.push(rr); await crear('recetas', rr);
-        }
-      }
-
-      const labId='PRODLAB:'+String(id);
-      const prevLab=(D.recetas||[]).filter(r=>String(r.pedido_id)===labId);
-      for(const r of prevLab){ if(r.id) await eliminar('recetas', r.id).catch(()=>{}); }
-      D.recetas=(D.recetas||[]).filter(r=>String(r.pedido_id)!==labId);
-
-      const laborRows = Array.from(document.querySelectorAll('#pr-art-list > div[id^="pra-"]')).map(row=>{
-        const i=String(row.id||'').replace('pra-','');
-        const tarifaId=document.getElementById('pra-tarifa-'+i)?.value || '';
-        return {
-          tipo_trabajo:document.getElementById('pra-tipo-'+i)?.value || '',
-          tarifa_artesano_id:tarifaId,
-          factor:dmNum(document.getElementById('pra-factor-'+i)?.value || 0,0),
-          componente:document.getElementById('pra-comp-'+i)?.value || 'cuerpo',
-          nota:document.getElementById('pra-nota-'+i)?.value || '',
-          artesano_sugerido_id:document.getElementById('pra-art-'+i)?.value || ''
-        };
-      }).filter(x=>x.tipo_trabajo && x.tarifa_artesano_id && x.factor>0);
-
-      if(cat==='fabricacion'){
-        for(const row of laborRows){
-          const tarifa = typeof tarifaArtesanoById==='function' ? (tarifaArtesanoById(row.tarifa_artesano_id)||{}) : {};
-          const rr={
-            id:genId('REC', D.recetas||[]),
-            pedido_id:labId,
-            material_id:'LAB:'+row.tipo_trabajo,
-            cantidad:row.factor,
-            color:row.nota,
-            tipo_trabajo:row.tipo_trabajo,
-            componente:row.componente||'cuerpo',
-            artesano_sugerido_id:row.artesano_sugerido_id,
-            tarifa_artesano_id:row.tarifa_artesano_id,
-            tarifa_nombre:tarifa.nombre_tarifa||tarifa.nombre||'',
-            esquema_pago:tarifa.esquema_pago||'por_pieza',
-            monto_tarifa:dmNum(tarifa.monto||0,0)
-          };
-          D.recetas.push(rr); await crear('recetas', rr);
-        }
-      }
-
-      toast(editIds.prod ? '✓ Producto actualizado' : '✓ Producto guardado');
-      const savedId=id;
-      const pendingFlow = window.pendingProducto ? window.pendingProducto.flujo : '';
-      editIds.prod=null;
-      if(typeof cerrar==='function') cerrar('modal-producto');
-      if(typeof renderProductos==='function') renderProductos();
-      if(pendingFlow==='pedido'){
-        window.pendingProducto = null;
-        if(typeof abrirModal_pedido==='function') abrirModal_pedido(true);
-        setTimeout(()=>{
-          const sel=document.getElementById('p-producto');
-          if(sel){
-            sel.innerHTML = typeof optionsProductosAgrupados==='function' ? optionsProductosAgrupados(savedId) : sel.innerHTML;
-            setV('p-producto', savedId);
-            if(typeof onProdChange==='function') onProdChange();
-          }
-        },80);
-      }
-    }catch(err){
-      console.error('guardarProducto estable', err);
-      toast('Error al guardar producto: '+(err.message||err));
-    }finally{
-      if(btn){ btn.disabled=false; btn.textContent='Guardar producto'; }
-    }
-  };
-
-  window.guardarPedido = async function(){
-    const clienteId=getV('p-cliente'), productoId=getV('p-producto');
-    if(!clienteId || !productoId){ toast('Selecciona cliente y producto'); return; }
-    const qty=dmPedidoQty();
-    const total=dmNum(getV('p-total')||0,0);
-    const prod=arr(D.productos).find(p=>String(p.id)===String(productoId));
-    const cat=prod ? (typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion')) : 'fabricacion';
-    const btn=$('btn-guardar-pedido');
-    if(btn){ btn.disabled=true; btn.textContent='Guardando...'; }
-    try{
-      let pedidoId=editIds.pedido;
-      let det=pedidoId ? detallePedido(pedidoId) : null;
-      const isNew=!pedidoId;
-      if(isNew) pedidoId=genId('PED', arr(D.pedidos));
-      const pagoRecibido=dmNum(getV('p-anticipo')||0,0);
-      const estadoBase=(arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{}).estado || 'nuevo';
-      let estadoPedido=estadoBase;
-      if(cat==='reventa' && total>0 && pagoRecibido>=total) estadoPedido='entregado';
-      const pedido={
-        id:pedidoId,
-        cliente_id:clienteId,
-        estado:estadoPedido,
-        total:total,
-        anticipo:pagoRecibido,
-        fecha_entrega:getV('p-fecha')||'',
-        notas:getV('p-notas')||'',
-        fecha_creacion:(arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{}).fecha_creacion || hoy(),
-        tipo_flujo:cat==='reventa'?'reventa':'fabricacion'
-      };
-      if(isNew){ D.pedidos.push(pedido); await crear('pedidos', pedido); }
-      else{
-        const idx=arr(D.pedidos).findIndex(p=>String(p.id)===String(pedidoId));
-        if(idx>=0) Object.assign(D.pedidos[idx], pedido);
-        await actualizar('pedidos', pedido);
-      }
-
-      const detalleId = det?.id || genId('DET', arr(D.ped_det));
-      const costoUnitario = cat==='reventa'
-        ? dmCostoCompraProducto(prod||{})
-        : (qty>0 ? Array.from(document.querySelectorAll('#p-mat-list > div[id^="pm-"]')).reduce((s,row)=>{
-            const i=String(row.id||'').replace('pm-','');
-            const matId=document.getElementById('pm-mat-'+i)?.value || '';
-            const cant=dmNum(document.getElementById('pm-qty-'+i)?.value || 0,0);
-            const mat=arr(D.materiales).find(m=>String(m.id)===String(matId));
-            const costo = Number(mat?.costo_promedio || mat?.costo_unitario || mat?.costo || mat?.ultimo_costo || mat?.precio_compra || 0);
-            return s + (cant*costo);
-          },0)/qty : 0);
-
-      const detPayload={
-        id:detalleId,
-        pedido_id:pedidoId,
-        producto_id:productoId,
-        cantidad:qty,
-        linea_catalogo: typeof inferLineaCatalogo==='function' ? inferLineaCatalogo(prod||{}, {
-          linea_catalogo: prod?.linea_catalogo || '',
-          color_hilo:getV('p-color')||'',
-          color_hilo2:getV('p-color2')||'',
-          colores_comerciales:getV('p-colores')||'',
-          diseno_comercial:getV('p-diseno')||''
-        }) : (prod?.linea_catalogo||'unicolor'),
-        color_hilo:getV('p-color')||'',
-        color_hilo2:getV('p-color2')||'',
-        colores_comerciales:getV('p-colores')||'',
-        medidas:getV('p-medidas')||'',
-        tamano_comercial:getV('p-medidas')||'',
-        diseno_comercial:getV('p-diseno')||'',
-        precio_unitario: qty ? (total/qty) : total,
-        costo_unitario: Math.round(dmNum(costoUnitario,0)*100)/100,
-        subtotal: total
-      };
-
-      if(det){
-        const idx=arr(D.ped_det).findIndex(x=>String(x.id)===String(detalleId));
-        if(idx>=0) Object.assign(D.ped_det[idx], detPayload);
-        await actualizar('ped_det', detPayload);
-      } else {
-        D.ped_det.push(detPayload);
-        await crear('ped_det', detPayload);
-      }
-
-      const recetasPrev=arr(D.recetas).filter(r=>String(r.pedido_id)===String(detalleId));
-      if(recetasPrev.length){
-        await Promise.all(recetasPrev.filter(r=>r.id).map(r=>eliminar('recetas', r.id).catch(()=>{})));
-      }
-      D.recetas=arr(D.recetas).filter(r=>String(r.pedido_id)!==String(detalleId));
-      if(cat==='fabricacion'){
-        const nuevos = (window.matPedItems||[]).map(i=>({
-          material_id:getV('pm-mat-'+i),
-          cantidad:dmNum(getV('pm-qty-'+i)||0,0),
-          color:getV('pm-color-'+i)||'',
-          componente:getV('pm-comp-'+i)||'cuerpo'
-        })).filter(x=>x.material_id && x.cantidad>0);
-        for(const rec of nuevos){
-          const rr={id:genId('REC', arr(D.recetas)), pedido_id:detalleId, material_id:rec.material_id, cantidad:rec.cantidad, color:rec.color, componente:rec.componente||'cuerpo'};
-          D.recetas.push(rr);
-          await crear('recetas', rr);
-        }
-      }
-
-      if(typeof rebuildPedidoReservas==='function') await rebuildPedidoReservas(pedidoId, detalleId, prod);
-      toast(editIds.pedido ? '✓ Pedido actualizado' : '✓ Pedido guardado');
-      editIds.pedido=null;
-      if(typeof cerrar==='function') cerrar('modal-pedido');
-      if(typeof refreshUIAfter==='function') refreshUIAfter('pedido');
-    }catch(err){
-      console.error('guardarPedido estable', err);
-      toast('Error al guardar pedido: '+(err.message||err));
-    }finally{
-      if(btn){ btn.disabled=false; btn.textContent='Guardar pedido'; }
-    }
-  };
-})();
-</script>
 
 </body></html>`;
   cerrar('det-pedido');
@@ -8041,491 +7059,376 @@ window.addEventListener('unhandledrejection', function(ev){
 
 <script>
 (function(){
-  function dmClose(ids){
-    (ids||[]).forEach(id=>{
-      const el=document.getElementById(id);
-      if(el){ el.classList.remove('open'); el.style.display=''; }
-    });
-    if(typeof syncModalState==='function') syncModalState();
+  const n=v=>Number(v||0)||0;
+  const q=s=>document.getElementById(s);
+  const arr2=v=>Array.isArray(v)?v:[];
+  function catOf(prod){
+    try{ return (typeof categoriaProducto==='function'?categoriaProducto(prod):(prod?.categoria||'fabricacion')); }
+    catch(_){ return String(prod?.categoria||'fabricacion'); }
   }
-  function dmNum(v, d=0){
-    const n=Number(v);
-    return Number.isFinite(n) ? n : d;
+  function costoReventa(prod){
+    if(!prod) return 0;
+    const stats = (typeof costoCompraProductoStats==='function') ? costoCompraProductoStats(prod.id) : {ultimo:0,promedio:0};
+    return n(prod.precio_compra || prod.costo_compra || prod.costo_reventa || stats.ultimo || stats.promedio || prod.costo_produccion || prod.costo_unitario || prod.costo || 0);
   }
-  function dmCostoCompraProducto(prod){
-    const direct = prod && prod.precio_compra!=='' && prod.precio_compra!=null ? Number(prod.precio_compra) : NaN;
-    if(Number.isFinite(direct)) return direct;
-    const avg = prod && prod.costo_produccion!=='' && prod.costo_produccion!=null ? Number(prod.costo_produccion) : NaN;
-    if(Number.isFinite(avg)) return avg;
-    return Number(prod?.costo_unitario || prod?.costo || prod?.costo_reventa || 0);
-  }
-  function dmActualizarModoCostoProducto(){
-    const cat = typeof getV==='function' ? getV('pr-cat') : 'fabricacion';
-    const inp = document.getElementById('pr-costo');
-    const help = document.getElementById('pr-costo-help');
-    const box = document.getElementById('pr-cost-breakdown');
-    if(inp){
-      inp.readOnly = cat==='fabricacion';
-      inp.placeholder = cat==='fabricacion' ? '0.00' : 'Costo de compra';
-    }
-    if(help){
-      help.textContent = cat==='fabricacion'
-        ? 'Se calcula con receta de materiales + mano de obra estimada.'
-        : 'Para reventa captura aquí el costo de compra unitario.';
-    }
-    if(box && cat!=='fabricacion'){
-      const total = dmNum(inp?.value||0);
-      box.innerHTML = '<div class="card-note">Costo de compra / reventa: $'+(typeof fmx==='function'?fmx(total):total)+'</div>';
+  function syncCostoProductoUI(){
+    const cat = String((q('pr-cat')?.value)||'fabricacion');
+    const inp = q('pr-costo');
+    const note = inp ? inp.parentElement?.querySelector('div[style*="font-size:11px"]') : null;
+    if(!inp) return;
+    if(cat==='reventa'){
+      inp.readOnly = false;
+      inp.placeholder = 'Costo de compra';
+      if(note) note.textContent = 'Para reventa, captura aquí el costo de compra del producto.';
+      const br = q('pr-cost-breakdown'); if(br) br.innerHTML='';
+    }else{
+      inp.readOnly = true;
+      inp.placeholder = '0.00';
+      if(note) note.textContent = 'Se calcula con receta de materiales + mano de obra estimada.';
+      if(typeof calcCostoEstimadoProducto==='function') setTimeout(()=>calcCostoEstimadoProducto(), 30);
     }
   }
-  function dmPedidoQty(){
-    return Math.max(1, dmNum((document.getElementById('p-cant')||{}).value || 1, 1));
-  }
-  function dmSetQtyApplied(q){
-    const host=document.getElementById('p-mat-list');
-    if(host) host.dataset.qtyApplied=String(Math.max(1, dmNum(q,1)));
-  }
-  function dmQtyApplied(){
-    const host=document.getElementById('p-mat-list');
-    return Math.max(1, dmNum(host?.dataset?.qtyApplied || 1,1));
-  }
-  function dmEscalarRecetaPedidoActual(nuevaQty){
-    const host=document.getElementById('p-mat-list');
-    if(!host || !host.children.length) return;
-    const fromQty = dmQtyApplied();
-    const toQty = Math.max(1, dmNum(nuevaQty,1));
-    if(!fromQty || fromQty===toQty) return;
-    Array.from(host.querySelectorAll('div[id^="pm-"]')).forEach(row=>{
+  function recipeRowsFromUI(){
+    return Array.from(document.querySelectorAll('#p-mat-list > div[id^="pm-"]')).map(row=>{
       const i=String(row.id||'').replace('pm-','');
-      const inp=document.getElementById('pm-qty-'+i);
-      if(!inp) return;
-      const actual=dmNum(inp.value||0,0);
-      const base=actual/fromQty;
-      inp.value = Math.round((base*toQty)*1000)/1000;
-    });
-    dmSetQtyApplied(toQty);
+      return {
+        idn:i,
+        material_id:q('pm-mat-'+i)?.value||'',
+        cantidad:n(q('pm-qty-'+i)?.value),
+        componente:q('pm-comp-'+i)?.value||'cuerpo',
+        color:q('pm-color-'+i)?.value||''
+      };
+    }).filter(x=>x.material_id);
   }
-  function dmLoadRecetaProductoEnPedido(prod, force=false){
-    const host=document.getElementById('p-mat-list');
-    if(!host) return;
-    const cat=(typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod?.categoria||'fabricacion'));
-    if(cat!=='fabricacion') return;
-    if(!force && host.children.length) return;
-    host.innerHTML=''; window.matPedItems=[];
-    const qty = dmPedidoQty();
-    const recs = (typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(prod.id) : [])
-      .filter(r=>!String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:'));
-    if(recs.length){
-      recs.forEach(r=>{
-        const cant = dmNum(r.cantidad||0,0) * qty;
-        if(typeof addMatPedido==='function') addMatPedido(r.material_id, cant, r.color||'', r.componente||'cuerpo');
-      });
-    } else if(prod.material_hilo_id){
-      if(typeof addMatPedido==='function') addMatPedido(prod.material_hilo_id, dmNum(prod.tubos_hilo||1,1)*qty, '');
-    } else if(typeof addMatPedido==='function'){
+  function escalarRecetaDesdeActual(newQty, oldQty){
+    const from = Math.max(1,n(oldQty||1));
+    const to = Math.max(1,n(newQty||1));
+    if(from===to) return;
+    recipeRowsFromUI().forEach(r=>{
+      const el=q('pm-qty-'+r.idn);
+      if(el) el.value = ((n(el.value)/from)*to).toFixed(4).replace(/\.0+$/,'').replace(/(\.\d*?)0+$/,'$1');
+    });
+  }
+  function cargarRecetaEscalada(prod){
+    const host=q('p-mat-list');
+    if(!host || !prod) return;
+    host.innerHTML='';
+    window.matPedItems=[];
+    const qty = Math.max(1,n(q('p-cant')?.value||1));
+    const recs = (typeof recetasPlantillaProducto==='function') ? recetasPlantillaProducto(prod.id) : [];
+    if(recs && recs.length){
+      recs.forEach(r=>{ if(typeof addMatPedido==='function') addMatPedido(r.material_id, n(r.cantidad)*qty, r.color||'', r.componente||'cuerpo'); });
+    }else if(prod.material_hilo_id && typeof addMatPedido==='function'){
+      addMatPedido(prod.material_hilo_id, Math.max(1,n(prod.tubos_hilo||1))*qty, '', 'cuerpo');
+    }else if(typeof addMatPedido==='function'){
       addMatPedido();
     }
-    dmSetQtyApplied(qty);
+    if(q('p-cant')) q('p-cant').dataset.prevQty = String(qty);
   }
-  window.cargaRecetaProductoEnPedido = dmLoadRecetaProductoEnPedido;
+  function costoUnitarioPedido(prod){
+    const cat=catOf(prod);
+    if(cat==='reventa') return costoReventa(prod);
+    return n(prod?.costo_produccion || 0);
+  }
 
+  const _abrirModalProducto = window.abrirModalProducto;
   window.abrirModalProducto = function(id){
-    try{
-      dmClose(['sub-productos','modal-pedido','sub-pedidos','det-pedido']);
-      editIds.prod = id || null;
-      window.recetaProdItems = [];
-      window.laborProdItems = Array.isArray(window.laborProdItems) ? [] : [];
-      const recList=document.getElementById('pr-receta-list');
-      const artList=document.getElementById('pr-art-list');
-      if(recList) recList.innerHTML='';
-      if(artList) artList.innerHTML='';
-      const tit=document.getElementById('tit-prod');
-      const btn=document.getElementById('btn-guardar-prod');
-      if(tit) tit.textContent = id ? 'Editar producto' : 'Nuevo producto';
-      if(btn) btn.textContent = id ? 'Guardar cambios' : 'Guardar producto';
-
-      if(id){
-        const p=(D.productos||[]).find(x=>String(x.id)===String(id));
-        if(!p){ toast('No se encontró el producto'); return; }
-        setV('pr-nombre', p.nombre||'');
-        setV('pr-cat', typeof categoriaProducto==='function' ? categoriaProducto(p) : (p.categoria||'fabricacion'));
-        setV('pr-linea', String(p.linea_catalogo||'unicolor').toLowerCase());
-        setV('pr-tamano-ref', p.tamano_ref||'');
-        setV('pr-color-ref', p.color_ref||'');
-        setV('pr-color-ref2', p.color_ref2||'');
-        setV('pr-colores-ref', p.colores_ref||'');
-        setV('pr-diseno-ref', p.diseno_ref||'');
-        setV('pr-dias', p.dias_produccion||7);
-        setV('pr-precio', p.precio_venta||0);
-        setV('pr-costo', (typeof categoriaProducto==='function' && categoriaProducto(p)==='reventa') ? dmCostoCompraProducto(p) : (p.costo_produccion||0));
-        setV('pr-stock', p.stock_disponible||0);
-
-        const matRows = (typeof recetasPlantillaProducto==='function' ? recetasPlantillaProducto(id) : [])
-          .filter(r=>!String(r.material_id||'').startsWith('ART:') && !String(r.material_id||'').startsWith('LAB:'));
-        if(matRows.length) matRows.forEach(r=>{ if(typeof addMatProducto==='function') addMatProducto(r.material_id, r.cantidad, r.color||'', r.componente||'cuerpo'); });
-        else if(typeof addMatProducto==='function') addMatProducto();
-
-        try{
-          const labRows = (Array.isArray(D.recetas)?D.recetas:[]).filter(r=>String(r.pedido_id)==='PRODLAB:'+String(id));
-          if(labRows.length && typeof addArtProducto==='function'){
-            labRows.forEach(r=>addArtProducto(
-              r.tipo_trabajo || String(r.material_id||'').replace(/^LAB:/,'').replace(/^ART:/,''),
-              r.tarifa_artesano_id||'',
-              r.cantidad||1,
-              r.color||'',
-              r.artesano_sugerido_id||'',
-              r.componente||'cuerpo'
-            ));
-          } else if(typeof addArtProducto==='function'){
-            addArtProducto();
-          }
-        }catch(_e){
-          if(typeof addArtProducto==='function' && !document.querySelector('#pr-art-list > div[id^="pra-"]')) addArtProducto();
-        }
-
-        if(typeof applyLineaCatalogoRules==='function') applyLineaCatalogoRules('producto', String(p.linea_catalogo||'unicolor').toLowerCase());
-      } else {
-        if(typeof clr==='function') clr('pr-nombre','pr-precio','pr-linea','pr-tamano-ref','pr-color-ref','pr-color-ref2','pr-colores-ref','pr-diseno-ref');
-        setV('pr-cat','fabricacion');
-        setV('pr-linea','unicolor');
-        setV('pr-dias','7');
-        setV('pr-costo','0');
-        setV('pr-stock','0');
-        if(typeof addMatProducto==='function') addMatProducto();
-        if(typeof addArtProducto==='function') addArtProducto();
-        if(typeof applyLineaCatalogoRules==='function') applyLineaCatalogoRules('producto','unicolor');
-      }
-      window.onProdCatChange();
-      if(typeof abrirModal==='function') abrirModal('modal-producto');
-      setTimeout(function(){
-        try{ if(typeof calcCostoEstimadoProducto==='function') calcCostoEstimadoProducto(); }catch(_e){}
-      },30);
-    }catch(err){
-      console.error('abrirModalProducto estable', err);
-      toast('Error al abrir producto: '+(err.message||err));
-    }
+    if(typeof _abrirModalProducto==='function') _abrirModalProducto(id);
+    const p = id ? arr2(window.D?.productos).find(x=>String(x.id)===String(id)) : null;
+    const cat = p ? catOf(p) : String((q('pr-cat')?.value)||'fabricacion');
+    if(p && cat==='reventa') q('pr-costo') && (q('pr-costo').value = costoReventa(p));
+    syncCostoProductoUI();
   };
 
+  const _onProdCatChange = window.onProdCatChange;
   window.onProdCatChange = function(){
-    const cat = getV('pr-cat');
-    const sec = document.getElementById('pr-fab-section');
-    if(sec) sec.style.display = cat==='fabricacion' ? 'block' : 'none';
-    const stockWrap = document.getElementById('pr-stock')?.closest('.form-group');
+    if(typeof _onProdCatChange==='function') _onProdCatChange();
+    syncCostoProductoUI();
+    const cat = String((q('pr-cat')?.value)||'fabricacion');
+    const stockWrap = q('pr-stock')?.closest('.form-group');
     if(stockWrap) stockWrap.style.display = cat==='fabricacion' ? 'none' : 'block';
-    dmActualizarModoCostoProducto();
-    if(cat==='fabricacion'){
-      if(document.getElementById('pr-receta-list') && !document.getElementById('pr-receta-list').children.length && typeof addMatProducto==='function') addMatProducto();
-      if(document.getElementById('pr-art-list') && !document.getElementById('pr-art-list').children.length && typeof addArtProducto==='function') addArtProducto();
-      try{ if(typeof calcCostoEstimadoProducto==='function') calcCostoEstimadoProducto(); }catch(_e){}
-    }
-    if(typeof applyLineaCatalogoRules==='function') applyLineaCatalogoRules('producto');
-  };
-
-  window.crearProductoRapidoDesdePedido = function(){
-    window.pendingProducto = { flujo:'pedido' };
-    dmClose(['modal-pedido']);
-    window.abrirModalProducto();
-  };
-
-  window.onProdChange = function(){
-    const pid=getV('p-producto');
-    const prod=arr(D.productos).find(p=>String(p.id)===String(pid));
-    const badge=$('p-badge');
-    const matSec=$('p-mat-section');
-    if(!prod){
-      if(badge){ badge.style.display='none'; badge.innerHTML=''; }
-      if(matSec) matSec.style.display='none';
-      return;
-    }
-    const cat = (typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion'));
-    if(badge){
-      badge.style.display='block';
-      badge.innerHTML='<div class="alert alert-info">'+(cat==='reventa'?'🏷️ Reventa: descuenta producto terminado':'🧵 Fabricación: genera producción y materiales')+'</div>';
-    }
-    if(matSec) matSec.style.display = cat==='fabricacion' ? 'block' : 'none';
-    const lblPago=$('lbl-p-pago');
-    if(lblPago) lblPago.textContent = cat==='reventa' ? 'Pago recibido ($)' : 'Anticipo ($)';
-    if(!getV('p-color') && prod?.color_ref) setV('p-color', prod.color_ref);
-    if(!getV('p-color2') && prod?.color_ref2) setV('p-color2', prod.color_ref2);
-    if(!getV('p-colores') && prod?.colores_ref) setV('p-colores', prod.colores_ref);
-    if(!getV('p-medidas') && prod?.tamano_ref) setV('p-medidas', prod.tamano_ref);
-    if(!getV('p-diseno') && prod?.diseno_ref) setV('p-diseno', prod.diseno_ref);
-    if(typeof applyLineaCatalogoRules==='function') applyLineaCatalogoRules('pedido', typeof inferLineaCatalogo==='function' ? inferLineaCatalogo(prod, null) : (prod?.linea_catalogo||'unicolor'));
-    window.calcTotal();
-    if(cat==='fabricacion') dmLoadRecetaProductoEnPedido(prod, true);
-    else{
-      const host=document.getElementById('p-mat-list');
-      if(host){ host.innerHTML=''; window.matPedItems=[]; host.dataset.qtyApplied='1'; }
-    }
-  };
-
-  window.calcTotal = function(){
-    const pid=getV('p-producto');
-    const prod=arr(D.productos).find(p=>String(p.id)===String(pid));
-    const qty=dmPedidoQty();
-    const totalEl=$('p-total');
-    if(totalEl && prod && (!Number(totalEl.value)||totalEl.dataset.auto==='1')){
-      totalEl.value = Number(prod.precio_venta||0) * qty;
-      totalEl.dataset.auto='1';
-    }
-    const cat = prod ? (typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion')) : '';
-    if(cat==='fabricacion') dmEscalarRecetaPedidoActual(qty);
-  };
-
-  window.recargarRecetaMaestraPedido = function(){
-    const pid=getV('p-producto');
-    const prod=arr(D.productos).find(p=>String(p.id)===String(pid));
-    if(!prod){ toast('Selecciona primero un producto'); return; }
-    const cat=(typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion'));
-    if(cat!=='fabricacion'){ toast('Este producto no usa receta de fabricación'); return; }
-    const host=document.getElementById('p-mat-list');
-    if(host){ host.innerHTML=''; window.matPedItems=[]; }
-    dmLoadRecetaProductoEnPedido(prod, true);
-    toast('✓ Receta maestra cargada al pedido');
   };
 
   window.guardarProducto = async function(){
-    const nombre=getV('pr-nombre'), precio=getV('pr-precio');
+    const nombre=getV('pr-nombre'), precio=n(getV('pr-precio'));
     if(!nombre || !precio){ toast('Nombre y precio son requeridos'); return; }
-    const btn=document.getElementById('btn-guardar-prod');
+    const btn=q('btn-guardar-prod');
     if(btn){ btn.disabled=true; btn.textContent='Guardando...'; }
     try{
-      const id=editIds.prod || genId('PRO', D.productos||[]);
-      const cat=getV('pr-cat');
-      const linea=String(getV('pr-linea')||'unicolor').toLowerCase().trim() || 'unicolor';
+      const id = editIds.prod || genId('PRO', arr2(D.productos));
+      const cat = String(getV('pr-cat')||'fabricacion');
+      const linea = String(getV('pr-linea')||'unicolor').toLowerCase().trim() || 'unicolor';
       let colorRef=getV('pr-color-ref')||'';
       let colorRef2=getV('pr-color-ref2')||'';
       let coloresRef=getV('pr-colores-ref')||'';
       let disenoRef=getV('pr-diseno-ref')||'';
       if(linea==='unicolor'){ colorRef2=''; coloresRef=''; disenoRef=''; }
       else if(linea==='combinada'){ coloresRef=''; disenoRef=''; }
-      const costoCapturado=dmNum(getV('pr-costo')||0,0);
-      const costoFab = cat==='fabricacion' && typeof calcCostoEstimadoProducto==='function' ? dmNum(calcCostoEstimadoProducto(),0) : costoCapturado;
+      const costoManual = n(getV('pr-costo'));
+      const costoFab = (cat==='fabricacion' && typeof calcCostoEstimadoProducto==='function') ? n(calcCostoEstimadoProducto()) : costoManual;
       const p = {
         id,
         nombre,
         categoria:cat,
-        precio_venta:dmNum(precio,0),
-        precio_compra: cat==='reventa' ? costoCapturado : '',
-        costo_produccion: cat==='fabricacion' ? costoFab : costoCapturado,
-        stock_disponible: cat==='fabricacion' ? 0 : dmNum(getV('pr-stock')||0,0),
         linea_catalogo:linea,
         tamano_ref:getV('pr-tamano-ref')||'',
         color_ref:colorRef,
         color_ref2:colorRef2,
         colores_ref:coloresRef,
         diseno_ref:disenoRef,
-        dias_produccion:dmNum(getV('pr-dias')||7,7)
+        precio_venta:precio,
+        precio_compra: cat==='reventa' ? costoManual : n((arr2(D.productos).find(x=>String(x.id)===String(id))||{}).precio_compra || 0),
+        costo_produccion: cat==='reventa' ? costoManual : costoFab,
+        stock_disponible: cat==='fabricacion' ? n((arr2(D.productos).find(x=>String(x.id)===String(id))||{}).stock_disponible || 0) : n(getV('pr-stock')),
+        dias_produccion:n(getV('pr-dias')||7)
       };
-
       const recetaRows = Array.from(document.querySelectorAll('#pr-receta-list > div[id^="prm-"]')).map(row=>{
         const i=String(row.id||'').replace('prm-','');
         return {
-          material_id:document.getElementById('prm-mat-'+i)?.value || '',
-          cantidad:dmNum(document.getElementById('prm-qty-'+i)?.value || 0,0),
-          componente:document.getElementById('prm-comp-'+i)?.value || 'cuerpo',
-          color:document.getElementById('prm-color-'+i)?.value || ''
+          material_id:q('prm-mat-'+i)?.value||'',
+          cantidad:n(q('prm-qty-'+i)?.value),
+          componente:q('prm-comp-'+i)?.value||'cuerpo',
+          color:q('prm-color-'+i)?.value||''
         };
       }).filter(x=>x.material_id && x.cantidad>0);
-      p.material_hilo_id = recetaRows[0]?.material_id || '';
-      p.tubos_hilo = dmNum(recetaRows[0]?.cantidad || 0,0);
+      p.material_hilo_id = cat==='fabricacion' ? (recetaRows[0]?.material_id || '') : '';
+      p.tubos_hilo = cat==='fabricacion' ? n(recetaRows[0]?.cantidad || 0) : 0;
 
       if(editIds.prod){
-        const idx=(D.productos||[]).findIndex(x=>String(x.id)===String(id));
+        const idx=arr2(D.productos).findIndex(x=>String(x.id)===String(id));
         if(idx>=0) Object.assign(D.productos[idx], p);
         await actualizar('productos', p);
-      } else {
+      }else{
         D.productos.push(p);
         await crear('productos', p);
       }
 
-      const tplId='PROD:'+String(id);
-      const prevMat=(D.recetas||[]).filter(r=>String(r.pedido_id)===tplId);
-      for(const r of prevMat){ if(r.id) await eliminar('recetas', r.id).catch(()=>{}); }
-      D.recetas=(D.recetas||[]).filter(r=>String(r.pedido_id)!==tplId);
+      const tplId = (typeof recetaTemplateId==='function') ? recetaTemplateId(id) : ('PROD:'+String(id));
+      const prevTpl = arr2(D.recetas).filter(r=>String(r.pedido_id)===String(tplId));
+      for(const r of prevTpl){ if(r.id) await eliminar('recetas', r.id); }
+      D.recetas = arr2(D.recetas).filter(r=>String(r.pedido_id)!==String(tplId));
       if(cat==='fabricacion'){
         for(const rec of recetaRows){
-          const rr={id:genId('REC', D.recetas||[]), pedido_id:tplId, material_id:rec.material_id, cantidad:rec.cantidad, componente:rec.componente||'cuerpo', color:rec.color};
+          const rr={id:genId('REC', arr2(D.recetas)), pedido_id:tplId, material_id:rec.material_id, cantidad:rec.cantidad, componente:rec.componente||'cuerpo', color:rec.color};
           D.recetas.push(rr); await crear('recetas', rr);
         }
       }
 
-      const labId='PRODLAB:'+String(id);
-      const prevLab=(D.recetas||[]).filter(r=>String(r.pedido_id)===labId);
-      for(const r of prevLab){ if(r.id) await eliminar('recetas', r.id).catch(()=>{}); }
-      D.recetas=(D.recetas||[]).filter(r=>String(r.pedido_id)!==labId);
-
-      const laborRows = Array.from(document.querySelectorAll('#pr-art-list > div[id^="pra-"]')).map(row=>{
-        const i=String(row.id||'').replace('pra-','');
-        const tarifaId=document.getElementById('pra-tarifa-'+i)?.value || '';
-        return {
-          tipo_trabajo:document.getElementById('pra-tipo-'+i)?.value || '',
-          tarifa_artesano_id:tarifaId,
-          factor:dmNum(document.getElementById('pra-factor-'+i)?.value || 0,0),
-          componente:document.getElementById('pra-comp-'+i)?.value || 'cuerpo',
-          nota:document.getElementById('pra-nota-'+i)?.value || '',
-          artesano_sugerido_id:document.getElementById('pra-art-'+i)?.value || ''
-        };
-      }).filter(x=>x.tipo_trabajo && x.tarifa_artesano_id && x.factor>0);
-
-      if(cat==='fabricacion'){
-        for(const row of laborRows){
-          const tarifa = typeof tarifaArtesanoById==='function' ? (tarifaArtesanoById(row.tarifa_artesano_id)||{}) : {};
-          const rr={
-            id:genId('REC', D.recetas||[]),
-            pedido_id:labId,
-            material_id:'LAB:'+row.tipo_trabajo,
-            cantidad:row.factor,
-            color:row.nota,
-            tipo_trabajo:row.tipo_trabajo,
-            componente:row.componente||'cuerpo',
-            artesano_sugerido_id:row.artesano_sugerido_id,
-            tarifa_artesano_id:row.tarifa_artesano_id,
-            tarifa_nombre:tarifa.nombre_tarifa||tarifa.nombre||'',
-            esquema_pago:tarifa.esquema_pago||'por_pieza',
-            monto_tarifa:dmNum(tarifa.monto||0,0)
-          };
-          D.recetas.push(rr); await crear('recetas', rr);
+      if(typeof laborRowsProducto==='function'){
+        const labId='PRODLAB:'+String(id);
+        const prevLab = arr2(D.recetas).filter(r=>String(r.pedido_id)===String(labId));
+        for(const r of prevLab){ if(r.id) await eliminar('recetas', r.id); }
+        D.recetas = arr2(D.recetas).filter(r=>String(r.pedido_id)!==String(labId));
+        const laborRows = arr2(window.laborProdItems).map(i=>({
+          tipo_trabajo:q('pra-tipo-'+i)?.value||'',
+          tarifa_artesano_id:q('pra-tarifa-'+i)?.value||'',
+          factor:n(q('pra-factor-'+i)?.value),
+          componente:q('pra-comp-'+i)?.value||'cuerpo',
+          nota:q('pra-nota-'+i)?.value||'',
+          artesano_sugerido_id:q('pra-art-'+i)?.value||''
+        })).filter(x=>x.tipo_trabajo && x.tarifa_artesano_id && x.factor>0);
+        if(cat==='fabricacion'){
+          for(const row of laborRows){
+            const tarifa = (typeof tarifaArtesanoById==='function') ? (tarifaArtesanoById(row.tarifa_artesano_id)||{}) : {};
+            const rr={
+              id:genId('REC', arr2(D.recetas)), pedido_id:labId, material_id:'LAB:'+row.tipo_trabajo, cantidad:row.factor, color:row.nota,
+              tipo_trabajo:row.tipo_trabajo, componente:row.componente||'cuerpo', artesano_sugerido_id:row.artesano_sugerido_id,
+              tarifa_artesano_id:row.tarifa_artesano_id, tarifa_nombre:tarifa.nombre_tarifa||tarifa.nombre||'', esquema_pago:tarifa.esquema_pago||'por_pieza', monto_tarifa:n(tarifa.monto)
+            };
+            D.recetas.push(rr); await crear('recetas', rr);
+          }
         }
       }
 
-      toast(editIds.prod ? '✓ Producto actualizado' : '✓ Producto guardado');
       const savedId=id;
-      const pendingFlow = window.pendingProducto ? window.pendingProducto.flujo : '';
+      const flujoPendiente = window.pendingProducto?.flujo || '';
+      toast(editIds.prod ? '✓ Producto actualizado' : '✓ Producto guardado');
       editIds.prod=null;
-      if(typeof cerrar==='function') cerrar('modal-producto');
-      if(typeof renderProductos==='function') renderProductos();
-      if(pendingFlow==='pedido'){
-        window.pendingProducto = null;
+      cerrar('modal-producto');
+      if(typeof refreshUIAfter==='function') refreshUIAfter('producto');
+      if(flujoPendiente==='pedido'){
+        window.pendingProducto=null;
         if(typeof abrirModal_pedido==='function') abrirModal_pedido(true);
         setTimeout(()=>{
-          const sel=document.getElementById('p-producto');
+          const sel=q('p-producto');
           if(sel){
-            sel.innerHTML = typeof optionsProductosAgrupados==='function' ? optionsProductosAgrupados(savedId) : sel.innerHTML;
+            if(typeof optionsProductosAgrupados==='function') sel.innerHTML=optionsProductosAgrupados(savedId);
+            else sel.innerHTML='<option value="">— Selecciona producto —</option>'+arr2(D.productos).map(pp=>`<option value="${pp.id}">${pp.nombre}</option>`).join('');
             setV('p-producto', savedId);
             if(typeof onProdChange==='function') onProdChange();
           }
         },80);
       }
     }catch(err){
-      console.error('guardarProducto estable', err);
+      console.error('guardarProducto final', err);
       toast('Error al guardar producto: '+(err.message||err));
     }finally{
-      if(btn){ btn.disabled=false; btn.textContent='Guardar producto'; }
+      if(btn){ btn.disabled=false; btn.textContent = editIds.prod ? 'Guardar cambios' : 'Guardar producto'; }
+      hideLoading();
     }
+  };
+
+  window.onProdChange = function(){
+    const pid=getV('p-producto');
+    const prod=arr2(D.productos).find(p=>String(p.id)===String(pid));
+    const badge=q('p-badge');
+    const matSec=q('p-mat-section');
+    if(!prod){
+      if(badge){ badge.style.display='none'; badge.innerHTML=''; }
+      if(matSec) matSec.style.display='none';
+      return;
+    }
+    const cat = catOf(prod);
+    if(badge){
+      badge.style.display='block';
+      badge.innerHTML = `<div class="alert alert-info">${cat==='reventa'?'🏷️ Reventa: descuenta producto terminado':'🧵 Fabricación: genera producción y materiales'}</div>`;
+    }
+    if(matSec) matSec.style.display = cat==='fabricacion' ? 'block' : 'none';
+    const lblPago=q('lbl-p-pago'); if(lblPago) lblPago.textContent = cat==='reventa' ? 'Pago recibido ($)' : 'Anticipo ($)';
+    if(prod?.color_ref) setV('p-color', prod.color_ref||'');
+    if(prod?.color_ref2) setV('p-color2', prod.color_ref2||'');
+    if(prod?.colores_ref) setV('p-colores', prod.colores_ref||'');
+    if(prod?.tamano_ref) setV('p-medidas', prod.tamano_ref||'');
+    if(prod?.diseno_ref) setV('p-diseno', prod.diseno_ref||'');
+    if(typeof applyLineaCatalogoRules==='function') applyLineaCatalogoRules('pedido', (typeof inferLineaCatalogo==='function'?inferLineaCatalogo(prod, null):String(prod.linea_catalogo||'unicolor')));
+    if(q('p-cant')) q('p-cant').dataset.prevQty = String(Math.max(1,n(q('p-cant').value||1)));
+    if(cat==='fabricacion') cargarRecetaEscalada(prod); else if(q('p-mat-list')){ q('p-mat-list').innerHTML=''; window.matPedItems=[]; }
+    if(typeof calcTotal==='function') calcTotal();
+  };
+
+  window.calcTotal = function(){
+    const pid=getV('p-producto');
+    const prod=arr2(D.productos).find(p=>String(p.id)===String(pid));
+    const qty=Math.max(1,n(getV('p-cant')||1));
+    const totalEl=q('p-total');
+    if(totalEl && prod && (!n(totalEl.value) || totalEl.dataset.auto==='1')){
+      totalEl.value = n(prod.precio_venta)*qty;
+      totalEl.dataset.auto='1';
+    }
+  };
+
+  const _editarPedido = window.editarPedido;
+  window.editarPedido = async function(id){
+    if(typeof _editarPedido==='function') await _editarPedido(id);
+    setTimeout(()=>{
+      const qty=Math.max(1,n(getV('p-cant')||1));
+      if(q('p-cant')) q('p-cant').dataset.prevQty = String(qty);
+    },120);
   };
 
   window.guardarPedido = async function(){
     const clienteId=getV('p-cliente'), productoId=getV('p-producto');
     if(!clienteId || !productoId){ toast('Selecciona cliente y producto'); return; }
-    const qty=dmPedidoQty();
-    const total=dmNum(getV('p-total')||0,0);
-    const prod=arr(D.productos).find(p=>String(p.id)===String(productoId));
-    const cat=prod ? (typeof categoriaProducto==='function' ? categoriaProducto(prod) : (prod.categoria||'fabricacion')) : 'fabricacion';
-    const btn=$('btn-guardar-pedido');
+    const qty=Math.max(1,n(getV('p-cant')||1));
+    const total=n(getV('p-total')||0);
+    const prod=arr2(D.productos).find(p=>String(p.id)===String(productoId));
+    const cat=catOf(prod);
+    const btn=q('btn-guardar-pedido');
     if(btn){ btn.disabled=true; btn.textContent='Guardando...'; }
     try{
       let pedidoId=editIds.pedido;
-      let det=pedidoId ? detallePedido(pedidoId) : null;
+      let det=pedidoId ? (typeof detallePedido==='function' ? detallePedido(pedidoId) : arr2(D.ped_det).find(x=>String(x.pedido_id)===String(pedidoId))) : null;
       const isNew=!pedidoId;
-      if(isNew) pedidoId=genId('PED', arr(D.pedidos));
-      const pagoRecibido=dmNum(getV('p-anticipo')||0,0);
-      const estadoBase=(arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{}).estado || 'nuevo';
-      let estadoPedido=estadoBase;
+      if(isNew) pedidoId=genId('PED', arr2(D.pedidos));
+      const pagoRecibido=n(getV('p-anticipo')||0);
+      const basePedido=arr2(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{};
+      let estadoPedido=basePedido.estado || 'nuevo';
       if(cat==='reventa' && total>0 && pagoRecibido>=total) estadoPedido='entregado';
       const pedido={
-        id:pedidoId,
-        cliente_id:clienteId,
-        estado:estadoPedido,
-        total:total,
-        anticipo:pagoRecibido,
-        fecha_entrega:getV('p-fecha')||'',
-        notas:getV('p-notas')||'',
-        fecha_creacion:(arr(D.pedidos).find(p=>String(p.id)===String(pedidoId))||{}).fecha_creacion || hoy(),
+        id:pedidoId, cliente_id:clienteId, estado:estadoPedido, total:total, anticipo:pagoRecibido,
+        fecha_entrega:getV('p-fecha')||'', notas:getV('p-notas')||'', fecha_creacion:basePedido.fecha_creacion || hoy(),
         tipo_flujo:cat==='reventa'?'reventa':'fabricacion'
       };
       if(isNew){ D.pedidos.push(pedido); await crear('pedidos', pedido); }
-      else{
-        const idx=arr(D.pedidos).findIndex(p=>String(p.id)===String(pedidoId));
+      else {
+        const idx=arr2(D.pedidos).findIndex(p=>String(p.id)===String(pedidoId));
         if(idx>=0) Object.assign(D.pedidos[idx], pedido);
         await actualizar('pedidos', pedido);
       }
 
-      const detalleId = det?.id || genId('DET', arr(D.ped_det));
-      const costoUnitario = cat==='reventa'
-        ? dmCostoCompraProducto(prod||{})
-        : (qty>0 ? Array.from(document.querySelectorAll('#p-mat-list > div[id^="pm-"]')).reduce((s,row)=>{
-            const i=String(row.id||'').replace('pm-','');
-            const matId=document.getElementById('pm-mat-'+i)?.value || '';
-            const cant=dmNum(document.getElementById('pm-qty-'+i)?.value || 0,0);
-            const mat=arr(D.materiales).find(m=>String(m.id)===String(matId));
-            const costo = Number(mat?.costo_promedio || mat?.costo_unitario || mat?.costo || mat?.ultimo_costo || mat?.precio_compra || 0);
-            return s + (cant*costo);
-          },0)/qty : 0);
-
+      const detalleId=det?.id || genId('DET', arr2(D.ped_det));
+      const detLinea = (typeof inferLineaCatalogo==='function') ? inferLineaCatalogo(prod||{}, {
+        linea_catalogo: prod?.linea_catalogo || '', color_hilo:getV('p-color')||'', color_hilo2:getV('p-color2')||'', colores_comerciales:getV('p-colores')||'', diseno_comercial:getV('p-diseno')||''
+      }) : String(prod?.linea_catalogo||'unicolor');
       const detPayload={
-        id:detalleId,
-        pedido_id:pedidoId,
-        producto_id:productoId,
-        cantidad:qty,
-        linea_catalogo: typeof inferLineaCatalogo==='function' ? inferLineaCatalogo(prod||{}, {
-          linea_catalogo: prod?.linea_catalogo || '',
-          color_hilo:getV('p-color')||'',
-          color_hilo2:getV('p-color2')||'',
-          colores_comerciales:getV('p-colores')||'',
-          diseno_comercial:getV('p-diseno')||''
-        }) : (prod?.linea_catalogo||'unicolor'),
-        color_hilo:getV('p-color')||'',
-        color_hilo2:getV('p-color2')||'',
-        colores_comerciales:getV('p-colores')||'',
-        medidas:getV('p-medidas')||'',
-        tamano_comercial:getV('p-medidas')||'',
-        diseno_comercial:getV('p-diseno')||'',
-        precio_unitario: qty ? (total/qty) : total,
-        costo_unitario: Math.round(dmNum(costoUnitario,0)*100)/100,
-        subtotal: total
+        id:detalleId, pedido_id:pedidoId, producto_id:productoId, cantidad:qty, linea_catalogo:detLinea,
+        color_hilo:getV('p-color')||'', color_hilo2:getV('p-color2')||'', colores_comerciales:getV('p-colores')||'',
+        medidas:getV('p-medidas')||'', tamano_comercial:getV('p-medidas')||'', diseno_comercial:getV('p-diseno')||'',
+        precio_unitario: qty ? (total/qty) : total, costo_unitario: costoUnitarioPedido(prod), subtotal: total
       };
-
       if(det){
-        const idx=arr(D.ped_det).findIndex(x=>String(x.id)===String(detalleId));
+        const idx=arr2(D.ped_det).findIndex(x=>String(x.id)===String(detalleId));
         if(idx>=0) Object.assign(D.ped_det[idx], detPayload);
         await actualizar('ped_det', detPayload);
-      } else {
+      }else{
         D.ped_det.push(detPayload);
         await crear('ped_det', detPayload);
       }
 
-      const recetasPrev=arr(D.recetas).filter(r=>String(r.pedido_id)===String(detalleId));
-      if(recetasPrev.length){
-        await Promise.all(recetasPrev.filter(r=>r.id).map(r=>eliminar('recetas', r.id).catch(()=>{})));
-      }
-      D.recetas=arr(D.recetas).filter(r=>String(r.pedido_id)!==String(detalleId));
+      const recetasPrev=arr2(D.recetas).filter(r=>String(r.pedido_id)===String(detalleId));
+      for(const r of recetasPrev){ if(r.id) await eliminar('recetas', r.id); }
+      D.recetas=arr2(D.recetas).filter(r=>String(r.pedido_id)!==String(detalleId));
       if(cat==='fabricacion'){
-        const nuevos = (window.matPedItems||[]).map(i=>({
-          material_id:getV('pm-mat-'+i),
-          cantidad:dmNum(getV('pm-qty-'+i)||0,0),
-          color:getV('pm-color-'+i)||'',
-          componente:getV('pm-comp-'+i)||'cuerpo'
-        })).filter(x=>x.material_id && x.cantidad>0);
+        const nuevos = recipeRowsFromUI().map(x=>({material_id:x.material_id, cantidad:n(x.cantidad), componente:x.componente||'cuerpo', color:x.color||''})).filter(x=>x.material_id && x.cantidad>0);
         for(const rec of nuevos){
-          const rr={id:genId('REC', arr(D.recetas)), pedido_id:detalleId, material_id:rec.material_id, cantidad:rec.cantidad, color:rec.color, componente:rec.componente||'cuerpo'};
-          D.recetas.push(rr);
-          await crear('recetas', rr);
+          const rr={id:genId('REC', arr2(D.recetas)), pedido_id:detalleId, material_id:rec.material_id, cantidad:rec.cantidad, componente:rec.componente||'cuerpo', color:rec.color};
+          D.recetas.push(rr); await crear('recetas', rr);
         }
       }
 
+      let ord=arr2(D.ordenes).find(o=>String(o.pedido_detalle_id)===String(detalleId));
+      if(cat==='fabricacion'){
+        if(ord){ ord.pedido_detalle_id=detalleId; await actualizar('ordenes', {id:ord.id, pedido_detalle_id:detalleId}); }
+        else {
+          const newOrd={id:genId('ORD', arr2(D.ordenes)), pedido_detalle_id:detalleId, artesano_id:'', estado:'pendiente', fecha_inicio:'', fecha_fin:'', fecha_creacion:hoy()};
+          D.ordenes.push(newOrd); await crear('ordenes', newOrd);
+        }
+      }else if(ord){
+        await eliminar('ordenes', ord.id);
+        D.ordenes=arr2(D.ordenes).filter(o=>String(o.id)!==String(ord.id));
+      }
+
       if(typeof rebuildPedidoReservas==='function') await rebuildPedidoReservas(pedidoId, detalleId, prod);
+      if(cat==='reventa'){
+        if(pedido.estado==='entregado'){
+          if(typeof ajustarSalidaProductoPedido==='function') await ajustarSalidaProductoPedido(pedidoId, true, 'Venta de contado / pedido liquidado');
+          if(typeof consumirReservasPedido==='function') await consumirReservasPedido(pedidoId,'Venta entregada de contado');
+        }else{
+          if(typeof ajustarSalidaProductoPedido==='function') await ajustarSalidaProductoPedido(pedidoId, false, 'Reversión de salida por edición de pedido');
+        }
+      }
       toast(editIds.pedido ? '✓ Pedido actualizado' : '✓ Pedido guardado');
       editIds.pedido=null;
-      if(typeof cerrar==='function') cerrar('modal-pedido');
+      cerrar('modal-pedido');
       if(typeof refreshUIAfter==='function') refreshUIAfter('pedido');
     }catch(err){
-      console.error('guardarPedido estable', err);
+      console.error('guardarPedido final', err);
       toast('Error al guardar pedido: '+(err.message||err));
     }finally{
       if(btn){ btn.disabled=false; btn.textContent='Guardar pedido'; }
+      hideLoading();
     }
   };
+
+  function bindFinalFixes(){
+    const cat=q('pr-cat'); if(cat && !cat.dataset.fixFinal){ cat.dataset.fixFinal='1'; cat.addEventListener('change', ()=>window.onProdCatChange()); }
+    const qty=q('p-cant'); if(qty && !qty.dataset.fixFinal){
+      qty.dataset.fixFinal='1';
+      qty.addEventListener('input', ()=>{
+        const pid=getV('p-producto');
+        const prod=arr2(D.productos).find(p=>String(p.id)===String(pid));
+        if(!prod || catOf(prod)!=='fabricacion') return;
+        const oldQty=Math.max(1,n(qty.dataset.prevQty||1));
+        const newQty=Math.max(1,n(qty.value||1));
+        if(q('p-mat-list') && q('p-mat-list').children.length) escalarRecetaDesdeActual(newQty, oldQty);
+        else cargarRecetaEscalada(prod);
+        qty.dataset.prevQty=String(newQty);
+      });
+    }
+    syncCostoProductoUI();
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', bindFinalFixes);
+  else setTimeout(bindFinalFixes, 50);
 })();
 </script>
 
