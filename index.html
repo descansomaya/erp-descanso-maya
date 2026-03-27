@@ -6129,7 +6129,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.crearProductoRapidoDesdePedido = function(){
     window.pendingProducto = { flujo:'pedido' };
     cerrar('modal-pedido');
-    if(typeof abrirModalProducto==='function') abrirModalProducto();
+    if(typeof window.abrirModalProducto==='function') window.abrirModalProducto();
   };
 
   window.recargarRecetaMaestraPedido = function(){
@@ -6798,6 +6798,7 @@ window.addEventListener('unhandledrejection', function(ev){
 
   const _origAbrirModalProducto = window.abrirModalProducto;
   window.abrirModalProducto = function(id){
+    try{ ['sub-productos','modal-pedido','sub-pedidos','det-pedido'].forEach(x=>{ const el=document.getElementById(x); if(el) el.classList.remove('open'); }); }catch(_e){}
     editIds.prod = id || null;
     window.recetaProdItems = [];
     window.laborProdItems = [];
@@ -6840,7 +6841,7 @@ window.addEventListener('unhandledrejection', function(ev){
     }
     onProdCatChange();
     applyLineaCatalogoRules('producto');
-    abrirModal('modal-producto');
+    try{ abrirModal('modal-producto'); }catch(err){ console.error('abrirModalProducto', err); toast('Error al abrir producto: '+(err.message||err)); }
   };
 
   window.onProdCatChange = function(){
@@ -7018,6 +7019,12 @@ window.addEventListener('unhandledrejection', function(ev){
       if(getV('pr-cat')==='fabricacion') calcCostoEstimadoProducto();
     }
   }, true);
+
+  try{
+    window.abrirModalProducto = window.abrirModalProducto || abrirModalProducto;
+    window.guardarProducto = window.guardarProducto || guardarProducto;
+    window.crearProductoRapidoDesdePedido = window.crearProductoRapidoDesdePedido || crearProductoRapidoDesdePedido;
+  }catch(_e){}
 })();
 </script>
 
