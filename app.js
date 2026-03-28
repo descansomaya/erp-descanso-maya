@@ -1,12 +1,12 @@
 /**
- * DESCANSO MAYA ERP - Motor Principal v13
- * Sistema de Seguridad con PIN (Login)
+ * DESCANSO MAYA ERP - Motor Principal v14
+ * Corrección de Pantalla de Login (Loader tapando formulario)
  */
 
 const App = {
     state: {
         config: { empresa: "Descanso Maya", moneda: "MXN" },
-        pinAcceso: localStorage.getItem('erp_pin') || null, // Recupera el PIN si ya inició sesión antes
+        pinAcceso: localStorage.getItem('erp_pin') || null, 
         pedidos: [], pedido_detalle: [], ordenes_produccion: [],
         artesanos: [], inventario: [], productos: [], clientes: [], abonos: [], gastos: []
     },
@@ -16,22 +16,15 @@ const App = {
         
         async fetch(action, payload = {}) {
             try {
-                // NUEVO: Agregamos el PIN a todas las peticiones
-                const bodyRequest = { 
-                    action: action, 
-                    payload: payload, 
-                    pin: App.state.pinAcceso 
-                };
-                
+                const bodyRequest = { action: action, payload: payload, pin: App.state.pinAcceso };
                 const response = await fetch(this.gasUrl, { method: 'POST', body: JSON.stringify(bodyRequest) });
                 const text = await response.text(); 
                 try { 
                     const data = JSON.parse(text); 
-                    // Si el servidor nos rechaza por el PIN, borramos el PIN viejo
                     if (data.message === "Acceso Denegado. PIN incorrecto.") {
                         localStorage.removeItem('erp_pin');
                         App.state.pinAcceso = null;
-                        App.router.handleRoute(); // Forzamos la pantalla de login
+                        App.router.handleRoute(); 
                     }
                     return data;
                 } catch (e) { return { status: "error", message: "Error de servidor." }; }
@@ -61,22 +54,16 @@ const App = {
     },
 
     logic: {
-        // --- NUEVO: FUNCIÓN PARA VALIDAR EL PIN ---
         async verificarPIN(pinIngresado) {
             App.ui.showLoader("Verificando acceso...");
-            App.state.pinAcceso = pinIngresado; // Lo guardamos temporalmente para hacer la prueba
-            
-            // Hacemos un "ping" al servidor para ver si la llave abre la puerta
+            App.state.pinAcceso = pinIngresado; 
             const res = await App.api.fetch("ping");
             
             if (res.status === "success") {
-                // Si la puerta se abre, lo guardamos permanentemente en el celular
                 localStorage.setItem('erp_pin', pinIngresado);
                 App.ui.toast("¡Acceso concedido!");
-                // Ahora sí, descargamos la información
                 this.cargarDatosIniciales();
             } else {
-                // Si la puerta no abre, borramos el temporal y mostramos error
                 App.state.pinAcceso = null;
                 App.ui.hideLoader();
                 App.ui.toast("PIN Incorrecto. Intenta de nuevo.");
@@ -84,7 +71,7 @@ const App = {
         },
         
         async cargarDatosIniciales() {
-            App.ui.toast("Descargando base de datos...");
+            App.ui.showLoader("Descargando base de datos...");
             try {
                 const [resMat, resCli, resProd, resPed, resDet, resOrd, resArt, resAbo, resGas] = await Promise.all([
                     App.api.fetch("leer_hoja", { nombreHoja: "materiales" }), App.api.fetch("leer_hoja", { nombreHoja: "clientes" }), App.api.fetch("leer_hoja", { nombreHoja: "productos" }), App.api.fetch("leer_hoja", { nombreHoja: "pedidos" }), App.api.fetch("leer_hoja", { nombreHoja: "pedido_detalle" }), App.api.fetch("leer_hoja", { nombreHoja: "ordenes_produccion" }), App.api.fetch("leer_hoja", { nombreHoja: "artesanos" }), App.api.fetch("leer_hoja", { nombreHoja: "abonos_clientes" }), App.api.fetch("leer_hoja", { nombreHoja: "gastos" })
@@ -108,17 +95,13 @@ const App = {
     },
 
     views: {
-        // --- NUEVA VISTA: PANTALLA DE LOGIN ---
         login() {
-            // Ocultar la barra de navegación inferior mientras estamos en el login
             document.getElementById('bottom-nav').style.display = 'none';
-            
             return `
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 80vh; text-align: center;">
                     <div style="background: var(--primary); color: white; width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; margin-bottom: 20px;">🔒</div>
                     <h2 style="margin-bottom: 10px; color: var(--primary-dark);">Descanso Maya</h2>
                     <p style="color: var(--text-muted); margin-bottom: 30px;">Ingresa el PIN de acceso al sistema ERP</p>
-                    
                     <div class="card" style="width: 100%; max-width: 320px;">
                         <input type="password" id="pin-input" placeholder="Ingresa el PIN" style="width: 100%; padding: 12px; font-size: 1.2rem; text-align: center; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px;">
                         <button class="btn btn-primary" style="width: 100%; padding: 12px; font-size: 1rem;" onclick="App.logic.verificarPIN(document.getElementById('pin-input').value)">Entrar al Sistema</button>
@@ -157,8 +140,9 @@ const App = {
         init() { window.addEventListener('hashchange', () => this.handleRoute()); this.handleRoute(); }, 
         navigate(route) { window.location.hash = route; }, 
         handleRoute() { 
-            // NUEVO: Redirigir siempre a login si no hay PIN
+            // Si no hay PIN, oculta loader, dibuja login y detiene todo.
             if (!App.state.pinAcceso) {
+                App.ui.hideLoader(); // <-- AQUÍ ESTÁ LA MAGIA PARA DESTAPAR LA PANTALLA
                 document.getElementById('app-content').innerHTML = App.views.login();
                 document.getElementById('header-title').textContent = "Acceso";
                 return;
@@ -176,9 +160,8 @@ const App = {
     },
     start() { 
         this.ui.init(); 
-        // NUEVO: Si no hay PIN, mostramos pantalla de login, si sí hay, descargamos datos
         if (!this.state.pinAcceso) {
-            this.router.init(); // El router lo mandará a login automáticamente
+            this.router.init(); 
         } else {
             this.logic.cargarDatosIniciales(); 
         }
