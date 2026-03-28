@@ -1,6 +1,6 @@
 /**
  * DESCANSO MAYA ERP - Motor Principal v12
- * Generación de Notas (PDF/Print) e Integración con WhatsApp
+ * Corrección de Enlace nativo de WhatsApp
  */
 
 const App = {
@@ -11,7 +11,7 @@ const App = {
     },
 
     api: {
-        gasUrl: "https://script.google.com/macros/s/AKfycbxL3KzjesyZIfiC-Dyr0SwwzwNnPsv5FgHpt-JhyscNpN1eTvRwAh_rdgoxdVnKTAwu/exec", // <-- ¡PEGA TU URL AQUÍ!
+        gasUrl: "TU_URL_DE_WEB_APP_AQUI", // <-- ¡PEGA TU URL AQUÍ!
         
         async fetch(action, payload = {}) {
             try {
@@ -59,7 +59,7 @@ const App = {
             } catch (error) { App.ui.toast("Error: " + error.message); document.getElementById('btn-reintentar').classList.remove('hidden'); }
         },
 
-        // --- NUEVO: FUNCIONES DE WHATSAPP E IMPRESIÓN ---
+        // --- CORRECCIÓN WHATSAPP ---
         enviarWhatsApp(pedidoId) {
             const p = App.state.pedidos.find(x => x.id === pedidoId);
             const c = App.state.clientes.find(cli => cli.id === p.cliente_id);
@@ -69,7 +69,7 @@ const App = {
             const abonos = App.state.abonos.filter(a => a.pedido_id === p.id).reduce((s, a) => s + parseFloat(a.monto||0), 0);
             const saldoReal = parseFloat(p.total) - parseFloat(p.anticipo) - abonos;
 
-            if(!c.telefono) { App.ui.toast("El cliente no tiene teléfono registrado."); return; }
+            if(!c || !c.telefono) { App.ui.toast("El cliente no tiene teléfono registrado."); return; }
 
             let texto = `Hola *${c.nombre}* 👋,\nSomos de *Descanso Maya*.\n\nTe compartimos el detalle de tu pedido:\n`;
             texto += `📦 *Producto:* ${producto ? producto.nombre : 'Hamaca'}\n`;
@@ -80,12 +80,14 @@ const App = {
             if (p.fecha_entrega) texto += `\n📅 *Fecha de entrega:* ${p.fecha_entrega}\n`;
             texto += `\n¡Gracias por tu preferencia! ✨`;
 
-            // Limpiar teléfono (quitar espacios, guiones, y agregar +52 si es de México y tiene 10 dígitos)
-            let tel = c.telefono.replace(/\D/g,'');
-            if(tel.length === 10) tel = '52' + tel;
+            // SOLUCIÓN: Convertir a String para evitar que Google Sheets mande un "Number" que rompa la app.
+            let tel = String(c.telefono).replace(/\D/g,'');
+            if(tel.length === 10) tel = '52' + tel; // Agrega código de país si son 10 dígitos (México)
 
             const url = `https://wa.me/${tel}?text=${encodeURIComponent(texto)}`;
-            window.open(url, '_blank');
+            
+            // Usar location.href es mejor para PWA (App instalada) que window.open
+            window.location.href = url;
         },
 
         imprimirNota(pedidoId) {
@@ -93,7 +95,6 @@ const App = {
             const c = App.state.clientes.find(cli => cli.id === p.cliente_id);
             const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id);
             const producto = detalle ? App.state.productos.find(prod => prod.id === detalle.producto_id) : null;
-            
             const abonosDelPedido = App.state.abonos.filter(a => a.pedido_id === p.id);
             const totalAbonado = abonosDelPedido.reduce((s, a) => s + parseFloat(a.monto||0), 0);
             const saldoReal = parseFloat(p.total) - parseFloat(p.anticipo) - totalAbonado;
@@ -113,35 +114,19 @@ const App = {
                     @media print { body { padding: 0; } }
                 </style>
                 </head><body>
-                <div class="header">
-                    <h1>Descanso Maya</h1>
-                    <p>Nota de Pedido</p>
-                    <p><strong>Folio:</strong> ${p.id.replace('PED-','')}</p>
-                    <p><strong>Fecha:</strong> ${new Date(p.fecha_creacion).toLocaleDateString()}</p>
-                </div>
+                <div class="header"><h1>Descanso Maya</h1><p>Nota de Pedido</p><p><strong>Folio:</strong> ${p.id.replace('PED-','')}</p><p><strong>Fecha:</strong> ${new Date(p.fecha_creacion).toLocaleDateString()}</p></div>
                 <div class="row"><span><strong>Cliente:</strong></span> <span>${c.nombre}</span></div>
                 <div class="row"><span><strong>Teléfono:</strong></span> <span>${c.telefono || 'N/A'}</span></div>
                 ${p.fecha_entrega ? `<div class="row"><span><strong>Entrega:</strong></span> <span>${p.fecha_entrega}</span></div>` : ''}
-                
                 <h3 style="font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 20px;">Detalle del Artículo</h3>
                 <div class="row"><span>${detalle ? detalle.cantidad : 1}x ${producto ? producto.nombre : 'Artículo general'}</span> <span>$${p.total}</span></div>
                 ${p.notas ? `<p style="font-size: 13px; font-style: italic; color: #555;">Notas: ${p.notas}</p>` : ''}
-                
-                <div class="total-box">
-                    <div class="row"><span>Subtotal:</span> <span>$${p.total}</span></div>
-                    <div class="row"><span>Anticipo:</span> <span>-$${p.anticipo}</span></div>
-                    ${totalAbonado > 0 ? `<div class="row"><span>Abonos Posteriores:</span> <span>-$${totalAbonado}</span></div>` : ''}
-                    <div class="total-row" style="font-size: 18px; margin-top: 15px;"><span>Saldo a Pagar:</span> <span>$${saldoReal > 0 ? saldoReal : 0}</span></div>
-                </div>
-                <div class="footer">
-                    <p>¡Gracias por tu compra y por apoyar lo hecho a mano! 🧶</p>
-                    <p>Síguenos en nuestras redes sociales.</p>
-                </div>
+                <div class="total-box"><div class="row"><span>Subtotal:</span> <span>$${p.total}</span></div><div class="row"><span>Anticipo:</span> <span>-$${p.anticipo}</span></div>${totalAbonado > 0 ? `<div class="row"><span>Abonos Posteriores:</span> <span>-$${totalAbonado}</span></div>` : ''}<div class="total-row" style="font-size: 18px; margin-top: 15px;"><span>Saldo a Pagar:</span> <span>$${saldoReal > 0 ? saldoReal : 0}</span></div></div>
+                <div class="footer"><p>¡Gracias por tu compra y por apoyar lo hecho a mano! 🧶</p><p>Síguenos en nuestras redes sociales.</p></div>
                 <script>window.onload = function() { window.print(); }</script>
                 </body></html>
             `;
-            ventana.document.write(htmlNota);
-            ventana.document.close();
+            ventana.document.write(htmlNota); ventana.document.close();
         },
 
         async guardarAbono(datos) { App.ui.showLoader("Registrando pago..."); const nuevoAbono = { id: "ABO-" + Date.now(), pedido_id: datos.pedido_id, cliente_id: datos.cliente_id, monto: parseFloat(datos.monto) || 0, nota: datos.nota || "Pago de saldo", fecha: new Date().toISOString() }; const res = await App.api.fetch("guardar_fila", { nombreHoja: "abonos_clientes", datos: nuevoAbono }); App.ui.hideLoader(); if (res.status === "success") { App.state.abonos.push(nuevoAbono); App.ui.toast("¡Pago registrado!"); App.router.handleRoute(); } else { App.ui.toast("Error al guardar"); } },
@@ -165,31 +150,7 @@ const App = {
                 [...App.state.pedidos].reverse().slice(0, 50).forEach(p => {
                     const c = App.state.clientes.find(cli => cli.id === p.cliente_id); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id); const producto = detalle ? App.state.productos.find(prod => prod.id === detalle.producto_id) : null; const nombreProducto = producto ? producto.nombre : 'Producto no especificado'; const tieneOrden = detalle ? App.state.ordenes_produccion.some(o => o.pedido_detalle_id === detalle.id) : false;
                     const abonosDelPedido = App.state.abonos.filter(a => a.pedido_id === p.id); const totalAbonado = abonosDelPedido.reduce((sum, a) => sum + parseFloat(a.monto || 0), 0); const saldoReal = parseFloat(p.total || 0) - parseFloat(p.anticipo || 0) - totalAbonado; const estaPagado = saldoReal <= 0;
-                    
-                    html += `
-                        <div class="card" style="border: 1px solid var(--border); box-shadow: none;">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                                <strong>${p.id} - ${c ? c.nombre : 'Cliente'}</strong>
-                                ${estaPagado ? `<span class="badge" style="background: var(--success); color: white;">PAGADO</span>` : `<span class="badge ${p.estado || 'nuevo'}">${(p.estado || 'Nuevo').toUpperCase()}</span>`}
-                            </div>
-                            <p style="color: var(--primary); font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">${nombreProducto}</p>
-                            
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);">
-                                <div>
-                                    <small style="color: var(--text-muted); display: block;">Total: $${p.total || 0}</small>
-                                    <strong style="color: ${estaPagado ? 'var(--success)' : 'var(--danger)'}; font-size: 0.95rem;">Saldo: $${saldoReal > 0 ? saldoReal : 0}</strong>
-                                </div>
-                                <div style="display: flex; gap: 8px;">
-                                    ${!tieneOrden && detalle ? `<button class="btn btn-secondary" style="padding: 6px 10px; font-size: 0.8rem;" onclick="App.logic.mandarAProduccion('${p.id}')">🔨</button>` : ''}
-                                    ${!estaPagado ? `<button class="btn btn-primary" style="padding: 6px 10px; font-size: 0.8rem; background: var(--success); border-color: var(--success);" onclick="App.views.formCobrar('${p.id}', '${c.id}', ${saldoReal})">💰</button>` : ''}
-                                </div>
-                            </div>
-                            <div style="display: flex; gap: 10px; margin-top: 15px;">
-                                <button class="btn" style="flex: 1; font-size: 0.8rem; border-color: #38A169; color: #38A169;" onclick="App.logic.enviarWhatsApp('${p.id}')">💬 WhatsApp</button>
-                                <button class="btn" style="flex: 1; font-size: 0.8rem; border-color: var(--primary); color: var(--primary);" onclick="App.logic.imprimirNota('${p.id}')">🖨️ PDF/Nota</button>
-                            </div>
-                        </div>
-                    `;
+                    html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><strong>${p.id} - ${c ? c.nombre : 'Cliente'}</strong>${estaPagado ? `<span class="badge" style="background: var(--success); color: white;">PAGADO</span>` : `<span class="badge ${p.estado || 'nuevo'}">${(p.estado || 'Nuevo').toUpperCase()}</span>`}</div><p style="color: var(--primary); font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">${nombreProducto}</p><div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);"><div><small style="color: var(--text-muted); display: block;">Total: $${p.total || 0}</small><strong style="color: ${estaPagado ? 'var(--success)' : 'var(--danger)'}; font-size: 0.95rem;">Saldo: $${saldoReal > 0 ? saldoReal : 0}</strong></div><div style="display: flex; gap: 8px;">${!tieneOrden && detalle ? `<button class="btn btn-secondary" style="padding: 6px 10px; font-size: 0.8rem;" onclick="App.logic.mandarAProduccion('${p.id}')">🔨</button>` : ''}${!estaPagado ? `<button class="btn btn-primary" style="padding: 6px 10px; font-size: 0.8rem; background: var(--success); border-color: var(--success);" onclick="App.views.formCobrar('${p.id}', '${c.id}', ${saldoReal})">💰</button>` : ''}</div></div><div style="display: flex; gap: 10px; margin-top: 15px;"><button class="btn" style="flex: 1; font-size: 0.8rem; border-color: #38A169; color: #38A169;" onclick="App.logic.enviarWhatsApp('${p.id}')">💬 WhatsApp</button><button class="btn" style="flex: 1; font-size: 0.8rem; border-color: var(--primary); color: var(--primary);" onclick="App.logic.imprimirNota('${p.id}')">🖨️ PDF/Nota</button></div></div>`;
                 });
             } return html += `</div><button class="fab" onclick="App.views.formNuevoPedido()">+</button>`;
         },
