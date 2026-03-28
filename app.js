@@ -117,6 +117,32 @@ const App = {
             }
         }
     },
+	
+	async guardarNuevoCliente(datosFormulario) {
+            App.ui.showLoader(); // Mostramos el loader
+            
+            // Generamos un ID único para el cliente y la fecha de hoy
+            datosFormulario.id = "CLI-" + Date.now();
+            datosFormulario.fecha_creacion = new Date().toISOString();
+
+            // Enviamos al backend
+            const respuesta = await App.api.fetch("guardar_fila", {
+                nombreHoja: "clientes",
+                datos: datosFormulario
+            });
+
+            App.ui.hideLoader();
+
+            if (respuesta.status === "success") {
+                App.ui.toast("Cliente guardado con éxito");
+                // Agregamos el cliente a la memoria de la app para no tener que recargar todo
+                App.state.clientes.push(datosFormulario);
+                // Recargamos la vista actual
+                App.router.handleRoute();
+            } else {
+                App.ui.toast("Error al guardar: " + respuesta.message);
+            }
+        },
 
     views: {
         inicio() {
@@ -150,6 +176,31 @@ const App = {
             html += `</div>`;
             return html;
         },
+		formNuevoCliente() {
+            const formHTML = `
+                <form id="dynamic-form">
+                    <div class="form-group">
+                        <label>Nombre del Cliente</label>
+                        <input type="text" name="nombre" required placeholder="Ej. Juan Pérez">
+                    </div>
+                    <div class="form-group">
+                        <label>Teléfono</label>
+                        <input type="tel" name="telefono" placeholder="10 dígitos">
+                    </div>
+                    <div class="form-group">
+                        <label>Dirección</label>
+                        <input type="text" name="direccion" placeholder="Ej. Centro, Mérida">
+                    </div>
+                    <div class="form-group">
+                        <label>Email (Opcional)</label>
+                        <input type="email" name="email">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Guardar Cliente</button>
+                </form>
+            `;
+            App.ui.openSheet("Nuevo Cliente", formHTML, (data) => App.logic.guardarNuevoCliente(data));
+        },
+		
         inventario() {
             let html = `<div class="card"><h3 class="card-title">Stock Actual</h3>
                 <table style="width:100%; border-collapse: collapse; font-size: 0.9rem;">
@@ -191,6 +242,8 @@ const App = {
                 `;
             });
             html += `</div>`;
+            // Agregamos el botón flotante
+            html += `<button class="fab" onclick="App.views.formNuevoCliente()">+</button>`;
             return html;
         },
         produccion() {
