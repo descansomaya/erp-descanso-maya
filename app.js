@@ -1,5 +1,5 @@
 /**
- * DESCANSO MAYA ERP - Motor Principal v12
+ * DESCANSO MAYA ERP - Motor Principal v13
  * Corrección de Enlace nativo de WhatsApp
  */
 
@@ -11,7 +11,7 @@ const App = {
     },
 
     api: {
-        gasUrl: "TU_URL_DE_WEB_APP_AQUI", // <-- ¡PEGA TU URL AQUÍ!
+        gasUrl: "https://script.google.com/macros/s/AKfycbxL3KzjesyZIfiC-Dyr0SwwzwNnPsv5FgHpt-JhyscNpN1eTvRwAh_rdgoxdVnKTAwu/exec", // <-- ¡PEGA TU URL AQUÍ!
         
         async fetch(action, payload = {}) {
             try {
