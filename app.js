@@ -1,6 +1,6 @@
 /**
- * DESCANSO MAYA ERP - Motor Principal v6
- * Integración de Módulo de Producción (Kanban) y Artesanos
+ * DESCANSO MAYA ERP - Motor Principal v7
+ * Creación de Productos habilitada
  */
 
 const App = {
@@ -8,8 +8,8 @@ const App = {
         config: { empresa: "Descanso Maya", moneda: "MXN" },
         pedidos: [],
         pedido_detalle: [],
-        ordenes_produccion: [], // NUEVO: Para el Kanban
-        artesanos: [],          // NUEVO: Para asignar trabajos
+        ordenes_produccion: [],
+        artesanos: [],
         inventario: [], 
         productos: [],
         clientes: []
@@ -19,7 +19,6 @@ const App = {
         gasUrl: "https://script.google.com/macros/s/AKfycbxL3KzjesyZIfiC-Dyr0SwwzwNnPsv5FgHpt-JhyscNpN1eTvRwAh_rdgoxdVnKTAwu/exec", // <-- ¡PEGA TU URL AQUÍ!
         
         async fetch(action, payload = {}) {
-            console.log(`[API] Solicitando: ${action}`, payload);
             try {
                 const response = await fetch(this.gasUrl, {
                     method: 'POST',
@@ -93,7 +92,6 @@ const App = {
         async cargarDatosIniciales() {
             App.ui.toast("Descargando base de datos...");
             try {
-                // Descargamos todas las hojas, incluyendo Producción y Artesanos
                 const [resMat, resCli, resProd, resPed, resDet, resOrd, resArt] = await Promise.all([
                     App.api.fetch("leer_hoja", { nombreHoja: "materiales" }),
                     App.api.fetch("leer_hoja", { nombreHoja: "clientes" }),
@@ -122,8 +120,38 @@ const App = {
             }
         },
 
+        async guardarNuevoCliente(datos) {
+            App.ui.showLoader("Guardando cliente..."); 
+            datos.id = "CLI-" + Date.now();
+            datos.fecha_creacion = new Date().toISOString();
+
+            const res = await App.api.fetch("guardar_fila", { nombreHoja: "clientes", datos: datos });
+            App.ui.hideLoader();
+
+            if (res.status === "success") {
+                App.ui.toast("Cliente guardado"); App.state.clientes.push(datos); App.router.handleRoute();
+            } else { App.ui.toast("Error al guardar"); }
+        },
+
+        // --- NUEVO: GUARDAR PRODUCTO ---
+        async guardarNuevoProducto(datos) {
+            App.ui.showLoader("Guardando producto..."); 
+            datos.id = "PROD-" + Date.now();
+            datos.precio_venta = parseFloat(datos.precio_venta) || 0;
+            datos.activo = "TRUE"; // Por defecto activo
+
+            const res = await App.api.fetch("guardar_fila", { nombreHoja: "productos", datos: datos });
+            App.ui.hideLoader();
+
+            if (res.status === "success") {
+                App.ui.toast("Producto creado"); 
+                App.state.productos.push(datos); 
+                App.router.handleRoute();
+            } else { App.ui.toast("Error al guardar producto"); }
+        },
+
         async guardarNuevoPedido(datosFormulario) {
-            App.ui.showLoader("Creando pedido y detalle...");
+            App.ui.showLoader("Creando pedido...");
             const pedidoId = "PED-" + Date.now();
             const totalNum = parseFloat(datosFormulario.total) || 0;
             const anticipoNum = parseFloat(datosFormulario.anticipo) || 0;
@@ -143,39 +171,24 @@ const App = {
             const resPedido = await App.api.fetch("guardar_fila", { nombreHoja: "pedidos", datos: datosPedido });
             if (resPedido.status === "success") {
                 await App.api.fetch("guardar_fila", { nombreHoja: "pedido_detalle", datos: datosDetalle });
-                App.state.pedidos.push(datosPedido);
-                App.state.pedido_detalle.push(datosDetalle);
+                App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle);
                 App.ui.hideLoader(); App.ui.toast("Pedido registrado"); App.router.handleRoute();
             } else { App.ui.hideLoader(); App.ui.toast("Error al crear pedido"); }
         },
 
-        // --- NUEVO: CREAR ORDEN DE PRODUCCIÓN ---
         async mandarAProduccion(pedidoId) {
             App.ui.showLoader("Generando Orden...");
-            // Buscamos el detalle del pedido para vincularlo
             const detalle = App.state.pedido_detalle.find(d => d.pedido_id === pedidoId);
-            if (!detalle) {
-                App.ui.hideLoader(); App.ui.toast("Error: Pedido sin detalle"); return;
-            }
+            if (!detalle) { App.ui.hideLoader(); App.ui.toast("Error: Pedido sin detalle"); return; }
 
-            const nuevaOrden = {
-                id: "ORD-" + Date.now(),
-                pedido_detalle_id: detalle.id,
-                estado: "pendiente",
-                fecha_creacion: new Date().toISOString()
-            };
-
+            const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: detalle.id, estado: "pendiente", fecha_creacion: new Date().toISOString() };
             const res = await App.api.fetch("guardar_fila", { nombreHoja: "ordenes_produccion", datos: nuevaOrden });
             App.ui.hideLoader();
 
             if (res.status === "success") {
                 App.state.ordenes_produccion.push(nuevaOrden);
-                App.ui.toast("¡Enviado a producción!");
-                // Navegamos al Kanban para que el usuario vea su orden nueva
-                App.router.navigate('produccion'); 
-            } else {
-                App.ui.toast("Error al crear orden");
-            }
+                App.ui.toast("¡Enviado a producción!"); App.router.navigate('produccion'); 
+            } else { App.ui.toast("Error al crear orden"); }
         }
     },
 
@@ -197,8 +210,6 @@ const App = {
                     const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id);
                     const producto = detalle ? App.state.productos.find(prod => prod.id === detalle.producto_id) : null;
                     const nombreProducto = producto ? producto.nombre : 'Producto no especificado';
-                    
-                    // Verificamos si ya tiene orden de producción
                     const tieneOrden = detalle ? App.state.ordenes_produccion.some(o => o.pedido_detalle_id === detalle.id) : false;
 
                     html += `
@@ -208,7 +219,6 @@ const App = {
                                 <span class="badge ${p.estado || 'nuevo'}">${(p.estado || 'Nuevo').toUpperCase()}</span>
                             </div>
                             <p style="color: var(--primary); font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">${nombreProducto} (Cant: ${detalle ? detalle.cantidad : 1})</p>
-                            
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
                                 <small style="color: var(--text-muted);">Saldo: $${(p.total - p.anticipo) || 0}</small>
                                 ${!tieneOrden && detalle ? `<button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.8rem;" onclick="App.logic.mandarAProduccion('${p.id}')">🔨 Producir</button>` : ''}
@@ -220,24 +230,18 @@ const App = {
             }
             html += `</div><button class="fab" onclick="App.views.formNuevoPedido()">+</button>`; return html;
         },
-        
-        // --- NUEVO: TABLERO KANBAN DE PRODUCCIÓN ---
         produccion() {
             let html = `<div class="card"><h3 class="card-title">Tablero Kanban</h3></div>`;
-            
-            // Separamos las órdenes por estado
             const pendientes = App.state.ordenes_produccion.filter(o => o.estado === 'pendiente' || !o.estado);
             const enProceso = App.state.ordenes_produccion.filter(o => o.estado === 'en_proceso');
             const listas = App.state.ordenes_produccion.filter(o => o.estado === 'listo');
 
-            // Función auxiliar para dibujar tarjetas
             const dibujarTarjeta = (orden) => {
                 const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id);
                 const producto = detalle ? App.state.productos.find(p => p.id === detalle.producto_id) : null;
                 const artesano = App.state.artesanos.find(a => a.id === orden.artesano_id);
-                
                 return `
-                    <div class="kanban-card" onclick="App.ui.toast('Detalle de orden próximamente')">
+                    <div class="kanban-card" onclick="App.ui.toast('Detalle de orden')">
                         <strong>${orden.id}</strong><br>
                         <small style="color: var(--primary); font-weight: 600;">${producto ? producto.nombre : 'Producto interno'}</small>
                         <div style="margin-top: 8px; font-size: 0.8rem; color: var(--text-muted);">
@@ -249,18 +253,9 @@ const App = {
 
             html += `
                 <div class="kanban-board">
-                    <div class="kanban-column">
-                        <div class="kanban-header">Pendientes <span>${pendientes.length}</span></div>
-                        ${pendientes.map(dibujarTarjeta).join('') || '<p style="color:#aaa; font-size:0.8rem; text-align:center;">Vacío</p>'}
-                    </div>
-                    <div class="kanban-column">
-                        <div class="kanban-header">En Proceso <span>${enProceso.length}</span></div>
-                        ${enProceso.map(dibujarTarjeta).join('') || '<p style="color:#aaa; font-size:0.8rem; text-align:center;">Vacío</p>'}
-                    </div>
-                    <div class="kanban-column">
-                        <div class="kanban-header">Listas <span>${listas.length}</span></div>
-                        ${listas.map(dibujarTarjeta).join('') || '<p style="color:#aaa; font-size:0.8rem; text-align:center;">Vacío</p>'}
-                    </div>
+                    <div class="kanban-column"><div class="kanban-header">Pendientes <span>${pendientes.length}</span></div>${pendientes.map(dibujarTarjeta).join('') || '<p style="color:#aaa; font-size:0.8rem; text-align:center;">Vacío</p>'}</div>
+                    <div class="kanban-column"><div class="kanban-header">En Proceso <span>${enProceso.length}</span></div>${enProceso.map(dibujarTarjeta).join('') || '<p style="color:#aaa; font-size:0.8rem; text-align:center;">Vacío</p>'}</div>
+                    <div class="kanban-column"><div class="kanban-header">Listas <span>${listas.length}</span></div>${listas.map(dibujarTarjeta).join('') || '<p style="color:#aaa; font-size:0.8rem; text-align:center;">Vacío</p>'}</div>
                 </div>
             `;
             return html;
@@ -282,6 +277,32 @@ const App = {
             `;
             App.ui.openSheet("Nuevo Pedido", formHTML, (data) => App.logic.guardarNuevoPedido(data));
         },
+        formNuevoCliente() {
+            const formHTML = `<form id="dynamic-form">
+                <div class="form-group"><label>Nombre</label><input type="text" name="nombre" required></div>
+                <div class="form-group"><label>Teléfono</label><input type="tel" name="telefono"></div>
+                <div class="form-group"><label>Dirección</label><input type="text" name="direccion"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Guardar Cliente</button>
+            </form>`;
+            App.ui.openSheet("Nuevo Cliente", formHTML, (data) => App.logic.guardarNuevoCliente(data));
+        },
+        
+        // --- NUEVO: FORMULARIO DE PRODUCTOS ---
+        formNuevoProducto() {
+            const formHTML = `<form id="dynamic-form">
+                <div class="form-group"><label>Nombre del Producto</label><input type="text" name="nombre" required placeholder="Ej. Hamaca King Size"></div>
+                <div class="form-group"><label>Categoría</label>
+                    <select name="categoria">
+                        <option value="fabricacion">Fabricación Propia</option>
+                        <option value="reventa">Reventa</option>
+                    </select>
+                </div>
+                <div class="form-group"><label>Precio de Venta Sugerido ($)</label><input type="number" name="precio_venta" required placeholder="1500"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Guardar Producto</button>
+            </form>`;
+            App.ui.openSheet("Nuevo Producto", formHTML, (data) => App.logic.guardarNuevoProducto(data));
+        },
+
         inventario() {
             let html = `<div class="card"><h3 class="card-title">Stock Actual</h3><table style="width:100%; border-collapse: collapse; font-size: 0.9rem;"><tr style="border-bottom: 2px solid var(--border);"><th style="text-align:left; padding:8px;">Material</th><th style="padding:8px;">Stock</th></tr>`;
             App.state.inventario.forEach(i => { html += `<tr style="border-bottom: 1px solid var(--border);"><td style="padding: 10px 5px;">${i.nombre}</td><td style="padding: 10px 5px; text-align:center;">${i.stock_actual} ${i.unidad}</td></tr>`; });
@@ -289,13 +310,17 @@ const App = {
         },
         productos() {
             let html = `<div class="card"><h3 class="card-title">Catálogo</h3>`;
-            App.state.productos.forEach(p => { html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none; padding: 12px;"><div style="display: flex; justify-content: space-between;"><strong>${p.nombre}</strong><span style="color: var(--primary); font-weight: bold;">$${p.precio_venta}</span></div></div>`; });
-            return html += `</div>`;
+            if (App.state.productos.length === 0) html += `<p style="color: var(--text-muted);">No hay productos. ¡Agrega uno!</p>`;
+            App.state.productos.forEach(p => { html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none; padding: 12px;"><div style="display: flex; justify-content: space-between;"><strong>${p.nombre}</strong><span style="color: var(--primary); font-weight: bold;">$${p.precio_venta}</span></div><small style="color: var(--text-muted);">${p.categoria}</small></div>`; });
+            html += `</div>`; 
+            // NUEVO BOTÓN
+            html += `<button class="fab" onclick="App.views.formNuevoProducto()">+</button>`;
+            return html;
         },
         clientes() {
             let html = `<div class="card"><h3 class="card-title">Directorio</h3>`;
             App.state.clientes.forEach(c => { html += `<div class="card" style="border: 1px solid var(--border); padding: 10px; margin-bottom: 8px;"><strong>${c.nombre}</strong><br><small style="color: var(--text-muted);">📞 ${c.telefono || 'Sin teléfono'}</small></div>`; });
-            html += `</div>`; return html;
+            html += `</div><button class="fab" onclick="App.views.formNuevoCliente()">+</button>`; return html;
         },
         mas() {
             return `<div class="grid-2">
