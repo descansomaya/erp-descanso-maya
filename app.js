@@ -1,5 +1,5 @@
 /**
- * DESCANSO MAYA ERP - Motor Principal v11
+ * DESCANSO MAYA ERP - Motor Principal v12
  * Generación de Notas (PDF/Print) e Integración con WhatsApp
  */
 
