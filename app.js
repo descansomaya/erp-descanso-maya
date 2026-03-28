@@ -1,6 +1,6 @@
 /**
- * DESCANSO MAYA ERP - Motor Principal v3
- * Con guardado en la nube y ventanas modales restauradas
+ * DESCANSO MAYA ERP - Motor Principal v4
+ * Creación de Pedidos Relacionales
  */
 
 const App = {
@@ -27,16 +27,15 @@ const App = {
                 const text = await response.text(); 
                 
                 try {
-                    const json = JSON.parse(text);
-                    return json;
+                    return JSON.parse(text);
                 } catch (jsonError) {
                     console.error("El servidor NO devolvió un JSON válido. Respuesta:", text);
-                    return { status: "error", message: "Error de permisos en Apps Script. Verifica que el acceso sea 'Cualquier persona'." };
+                    return { status: "error", message: "Error de permisos en Apps Script." };
                 }
 
             } catch (error) {
                 console.error("Error fatal de red:", error);
-                return { status: "error", message: "Fallo de conexión (CORS o red). Revisa consola." };
+                return { status: "error", message: "Fallo de conexión." };
             }
         }
     },
@@ -80,10 +79,10 @@ const App = {
             const loader = document.getElementById('global-loader');
             if(loader) loader.classList.add('hidden');
         },
-        showLoader() {
+        showLoader(mensaje = "Guardando información...") {
             const loader = document.getElementById('global-loader');
             if(loader) {
-                document.getElementById('loader-text').textContent = "Guardando información...";
+                document.getElementById('loader-text').textContent = mensaje;
                 loader.classList.remove('hidden');
             }
         },
@@ -149,13 +148,10 @@ const App = {
         },
 
         async guardarNuevoCliente(datosFormulario) {
-            App.ui.showLoader(); 
-            
-            // Generamos un ID único y fecha
+            App.ui.showLoader("Guardando cliente..."); 
             datosFormulario.id = "CLI-" + Date.now();
             datosFormulario.fecha_creacion = new Date().toISOString();
 
-            // Enviamos al backend
             const respuesta = await App.api.fetch("guardar_fila", {
                 nombreHoja: "clientes",
                 datos: datosFormulario
@@ -165,12 +161,39 @@ const App = {
 
             if (respuesta.status === "success") {
                 App.ui.toast("Cliente guardado exitosamente");
-                // Lo inyectamos en la memoria para verlo de inmediato
                 App.state.clientes.push(datosFormulario);
-                // Refrescamos la pantalla
                 App.router.handleRoute();
             } else {
                 App.ui.toast("Error al guardar: " + respuesta.message);
+            }
+        },
+
+        // --- NUEVA LÓGICA: GUARDAR PEDIDO ---
+        async guardarNuevoPedido(datosFormulario) {
+            App.ui.showLoader("Registrando pedido...");
+            
+            // Llenamos los datos que faltan para la hoja de cálculo
+            datosFormulario.id = "PED-" + Date.now();
+            datosFormulario.fecha_creacion = new Date().toISOString();
+            datosFormulario.estado = "nuevo";
+            // Aseguramos que los números sean números
+            datosFormulario.total = parseFloat(datosFormulario.total) || 0;
+            datosFormulario.anticipo = parseFloat(datosFormulario.anticipo) || 0;
+            datosFormulario.saldo = datosFormulario.total - datosFormulario.anticipo;
+
+            const respuesta = await App.api.fetch("guardar_fila", {
+                nombreHoja: "pedidos",
+                datos: datosFormulario
+            });
+
+            App.ui.hideLoader();
+
+            if (respuesta.status === "success") {
+                App.ui.toast("Pedido creado exitosamente");
+                App.state.pedidos.push(datosFormulario);
+                App.router.handleRoute();
+            } else {
+                App.ui.toast("Error al crear pedido: " + respuesta.message);
             }
         }
     },
@@ -196,17 +219,59 @@ const App = {
                     html += `
                         <div class="card" style="border: 1px solid var(--border); box-shadow: none;">
                             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                                <strong>${p.id} - ${c ? c.nombre : 'Desconocido'}</strong>
+                                <strong>${p.id} - ${c ? c.nombre : 'Cliente Desconocido'}</strong>
                                 <span class="badge ${p.estado || 'nuevo'}">${(p.estado || 'Nuevo').toUpperCase()}</span>
                             </div>
-                            <p style="color: var(--text-muted); font-size: 0.85rem;">Total: $${p.total || 0}</p>
+                            <p style="color: var(--text-muted); font-size: 0.85rem;">
+                                Total: $${p.total || 0} | Saldo: $${p.saldo || 0} <br>
+                                <small>Entrega: ${p.fecha_entrega || 'Sin fecha'}</small>
+                            </p>
                         </div>
                     `;
                 });
             }
             html += `</div>`;
+            // Agregamos el botón flotante para crear pedido
+            html += `<button class="fab" onclick="App.views.formNuevoPedido()">+</button>`;
             return html;
         },
+        
+        // --- NUEVO FORMULARIO DE PEDIDOS ---
+        formNuevoPedido() {
+            // Llenar selectores con datos reales
+            const opcionesClientes = App.state.clientes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+            
+            const formHTML = `
+                <form id="dynamic-form">
+                    <div class="form-group">
+                        <label>Selecciona el Cliente</label>
+                        <select name="cliente_id" required>
+                            <option value="">-- Elige un cliente --</option>
+                            ${opcionesClientes}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Precio Total ($)</label>
+                        <input type="number" name="total" required placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label>Anticipo ($)</label>
+                        <input type="number" name="anticipo" value="0" required placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha de Entrega (Opcional)</label>
+                        <input type="date" name="fecha_entrega">
+                    </div>
+                    <div class="form-group">
+                        <label>Notas del Pedido</label>
+                        <textarea name="notas" rows="2" placeholder="Detalles, colores, etc..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Crear Pedido</button>
+                </form>
+            `;
+            App.ui.openSheet("Nuevo Pedido", formHTML, (data) => App.logic.guardarNuevoPedido(data));
+        },
+
         formNuevoCliente() {
             const formHTML = `
                 <form id="dynamic-form">
