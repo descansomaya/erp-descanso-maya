@@ -1,6 +1,6 @@
 /**
- * DESCANSO MAYA ERP - Motor Principal v2
- * Con manejo de errores estricto y módulos implementados
+ * DESCANSO MAYA ERP - Motor Principal v3
+ * Con guardado en la nube y ventanas modales restauradas
  */
 
 const App = {
@@ -24,7 +24,6 @@ const App = {
                     body: JSON.stringify({ action: action, payload: payload })
                 });
 
-                // Primero leemos la respuesta como texto para evitar que crashee si no es JSON
                 const text = await response.text(); 
                 
                 try {
@@ -80,15 +79,51 @@ const App = {
         hideGlobalLoader() {
             const loader = document.getElementById('global-loader');
             if(loader) loader.classList.add('hidden');
+        },
+        showLoader() {
+            const loader = document.getElementById('global-loader');
+            if(loader) {
+                document.getElementById('loader-text').textContent = "Guardando información...";
+                loader.classList.remove('hidden');
+            }
+        },
+        hideLoader() {
+            this.hideGlobalLoader();
+        },
+        openSheet(title, contentHTML, onSaveCallback) {
+            this.container.innerHTML = `
+                <div class="overlay-bg active" id="sheet-bg"></div>
+                <div class="bottom-sheet active" id="sheet-content">
+                    <div class="sheet-header">
+                        <h3>${title}</h3>
+                        <button class="sheet-close" id="sheet-close">&times;</button>
+                    </div>
+                    <div class="sheet-body">${contentHTML}</div>
+                </div>
+            `;
+            document.getElementById('sheet-close').onclick = this.closeSheet.bind(this);
+            document.getElementById('sheet-bg').onclick = this.closeSheet.bind(this);
+            
+            const form = document.getElementById('dynamic-form');
+            if(form && onSaveCallback) {
+                form.onsubmit = (e) => {
+                    e.preventDefault();
+                    const formData = new FormData(form);
+                    const data = Object.fromEntries(formData.entries());
+                    onSaveCallback(data);
+                    this.closeSheet();
+                };
+            }
+        },
+        closeSheet() {
+            this.container.innerHTML = '';
         }
     },
 
     logic: {
         async cargarDatosIniciales() {
             App.ui.toast("Iniciando descarga...");
-            
             try {
-                // Descarga paralela
                 const [resMat, resCli, resProd, resPed] = await Promise.all([
                     App.api.fetch("leer_hoja", { nombreHoja: "materiales" }),
                     App.api.fetch("leer_hoja", { nombreHoja: "clientes" }),
@@ -96,18 +131,14 @@ const App = {
                     App.api.fetch("leer_hoja", { nombreHoja: "pedidos" })
                 ]);
 
-                // Verificamos si alguna falló por permisos
                 if (resMat.status === "error") throw new Error(resMat.message);
                 if (resCli.status === "error") throw new Error(resCli.message);
 
-                // Asignamos datos
                 App.state.inventario = resMat.data || [];
                 App.state.clientes = resCli.data || [];
                 App.state.productos = resProd.data || [];
                 App.state.pedidos = resPed.data || [];
 
-                console.log("Datos cargados:", App.state);
-                
                 App.ui.hideGlobalLoader();
                 App.router.init();
 
@@ -115,13 +146,12 @@ const App = {
                 console.error("Fallo de inicialización:", error);
                 App.ui.showErrorEnPantalla(error.message);
             }
-        }
-    },
-	
-	async guardarNuevoCliente(datosFormulario) {
-            App.ui.showLoader(); // Mostramos el loader
+        },
+
+        async guardarNuevoCliente(datosFormulario) {
+            App.ui.showLoader(); 
             
-            // Generamos un ID único para el cliente y la fecha de hoy
+            // Generamos un ID único y fecha
             datosFormulario.id = "CLI-" + Date.now();
             datosFormulario.fecha_creacion = new Date().toISOString();
 
@@ -134,15 +164,16 @@ const App = {
             App.ui.hideLoader();
 
             if (respuesta.status === "success") {
-                App.ui.toast("Cliente guardado con éxito");
-                // Agregamos el cliente a la memoria de la app para no tener que recargar todo
+                App.ui.toast("Cliente guardado exitosamente");
+                // Lo inyectamos en la memoria para verlo de inmediato
                 App.state.clientes.push(datosFormulario);
-                // Recargamos la vista actual
+                // Refrescamos la pantalla
                 App.router.handleRoute();
             } else {
                 App.ui.toast("Error al guardar: " + respuesta.message);
             }
-        },
+        }
+    },
 
     views: {
         inicio() {
@@ -176,7 +207,7 @@ const App = {
             html += `</div>`;
             return html;
         },
-		formNuevoCliente() {
+        formNuevoCliente() {
             const formHTML = `
                 <form id="dynamic-form">
                     <div class="form-group">
@@ -200,7 +231,6 @@ const App = {
             `;
             App.ui.openSheet("Nuevo Cliente", formHTML, (data) => App.logic.guardarNuevoCliente(data));
         },
-		
         inventario() {
             let html = `<div class="card"><h3 class="card-title">Stock Actual</h3>
                 <table style="width:100%; border-collapse: collapse; font-size: 0.9rem;">
@@ -211,7 +241,6 @@ const App = {
             html += `</table></div>`;
             return html;
         },
-        // NUEVO MÓDULO: PRODUCTOS
         productos() {
             let html = `<div class="card"><h3 class="card-title">Catálogo de Productos</h3>`;
             if (App.state.productos.length === 0) html += `<p>No hay productos registrados.</p>`;
@@ -230,7 +259,6 @@ const App = {
             html += `</div>`;
             return html;
         },
-        // NUEVO MÓDULO: CLIENTES
         clientes() {
             let html = `<div class="card"><h3 class="card-title">Directorio de Clientes</h3>`;
             App.state.clientes.forEach(c => {
@@ -242,14 +270,13 @@ const App = {
                 `;
             });
             html += `</div>`;
-            // Agregamos el botón flotante
             html += `<button class="fab" onclick="App.views.formNuevoCliente()">+</button>`;
             return html;
         },
         produccion() {
             return `<div class="card">
                 <h3 class="card-title">Tablero Kanban</h3>
-                <p style="font-size: 0.9rem; color: var(--text-muted);">El tablero requiere cruzar la hoja de ordenes_produccion. Agregaremos esa consulta en el próximo paso una vez confirmemos la conexión estable.</p>
+                <p style="font-size: 0.9rem; color: var(--text-muted);">Próximamente conectaremos las órdenes de producción.</p>
                 <div class="kanban-board" style="margin-top: 15px;">
                     <div class="kanban-column">
                         <div class="kanban-header">Pendientes</div>
@@ -263,7 +290,6 @@ const App = {
             </div>`;
         },
         mas() {
-            // Menú adaptado para navegar a los módulos reales
             let html = `<div class="grid-2">
                 <div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('clientes')"><div class="label" style="margin-top:0;">Clientes</div></div>
                 <div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('productos')"><div class="label" style="margin-top:0;">Productos</div></div>
