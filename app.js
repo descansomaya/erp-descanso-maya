@@ -1,6 +1,6 @@
 /**
- * DESCANSO MAYA ERP - Motor Principal v18
- * Corrección Definitiva: Cierre de Orden y Mermas
+ * DESCANSO MAYA ERP - Motor Principal v19
+ * Corrección de Flujo de Ventanas (Bug del Cierre de Orden)
  */
 
 const App = {
@@ -38,11 +38,20 @@ const App = {
         toast(message) { const cont = document.getElementById('toast-container'); const t = document.createElement('div'); t.className = 'toast'; t.textContent = message; cont.appendChild(t); setTimeout(() => t.remove(), 4000); },
         showLoader(mensaje = "Procesando...") { const loader = document.getElementById('global-loader'); if(loader) { document.getElementById('loader-text').textContent = mensaje; loader.classList.remove('hidden'); } },
         hideLoader() { const loader = document.getElementById('global-loader'); if(loader) loader.classList.add('hidden'); },
+        
+        // --- SOLUCIÓN DEL BUG AQUÍ ---
         openSheet(title, contentHTML, onSaveCallback) {
             this.container.innerHTML = `<div class="overlay-bg active" id="sheet-bg"></div><div class="bottom-sheet active" id="sheet-content"><div class="sheet-header"><h3>${title}</h3><button class="sheet-close" id="sheet-close">&times;</button></div><div class="sheet-body">${contentHTML}</div></div>`;
             document.getElementById('sheet-close').onclick = this.closeSheet.bind(this); document.getElementById('sheet-bg').onclick = this.closeSheet.bind(this);
             const form = document.getElementById('dynamic-form');
-            if(form && onSaveCallback) { form.onsubmit = (e) => { e.preventDefault(); onSaveCallback(Object.fromEntries(new FormData(form).entries())); this.closeSheet(); }; }
+            if(form && onSaveCallback) { 
+                form.onsubmit = (e) => { 
+                    e.preventDefault(); 
+                    const data = Object.fromEntries(new FormData(form).entries());
+                    this.closeSheet(); // 1. Primero destruimos la ventana actual para limpiar la pantalla
+                    onSaveCallback(data); // 2. Luego ejecutamos la lógica (que ahora sí puede abrir la ventana dorada libremente)
+                }; 
+            }
         },
         closeSheet() { this.container.innerHTML = ''; }
     },
@@ -74,11 +83,9 @@ const App = {
             const dlAnchorElem = document.createElement('a'); dlAnchorElem.setAttribute("href", dataStr); dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`); dlAnchorElem.click(); App.ui.toast("Respaldo descargado exitosamente");
         },
 
-        // --- LA MAGIA ESTÁ AQUÍ ---
         async procesarCambioOrden(ordenId, datos) {
-            // Si eligen LISTO, abrimos el modal de cierre
+            // Si eligen LISTO, mandamos directo a abrir el modal dorado
             if (datos.estado === 'listo') {
-                App.ui.closeSheet(); 
                 App.views.formCerrarOrden(ordenId, datos.artesano_id); 
             } else {
                 App.ui.showLoader("Actualizando orden...");
@@ -93,7 +100,7 @@ const App = {
         },
 
         async cerrarOrdenProduccion(datosFormulario) {
-            App.ui.showLoader("Cerrando orden, descontando stock y registrando pago...");
+            App.ui.showLoader("Finalizando orden y ajustando stock...");
             const ordenId = datosFormulario.orden_id;
             const consumoReal = parseFloat(datosFormulario.consumo_real) || 0;
             const pagoArtesano = parseFloat(datosFormulario.pago_artesano) || 0;
@@ -126,7 +133,6 @@ const App = {
             App.ui.hideLoader(); App.ui.toast("¡Orden finalizada con éxito!"); App.router.handleRoute();
         },
 
-        // --- RESTO DE FUNCIONES ---
         async guardarNuevaCompra(datos) { App.ui.showLoader("Registrando..."); const compra = { id: "COM-" + Date.now(), proveedor_id: datos.proveedor_id, fecha: new Date().toISOString().split('T')[0], total: parseFloat(datos.total), monto_pagado: parseFloat(datos.total), estado: "pagado", fecha_creacion: new Date().toISOString() }; const res = await App.api.fetch("guardar_fila", { nombreHoja: "compras", datos: compra }); if (res.status === "success") { App.state.compras.push(compra); const material = App.state.inventario.find(m => m.id === datos.material_id); if(material) { const nuevoStock = parseFloat(material.stock_actual) + parseFloat(datos.cantidad); await App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } }); material.stock_actual = nuevoStock; } App.ui.hideLoader(); App.ui.toast("Compra y stock actualizados"); App.router.handleRoute(); } else { App.ui.hideLoader(); App.ui.toast("Error"); } },
         async guardarNuevaReparacion(datos) { App.ui.showLoader("Registrando..."); datos.id = "REP-" + Date.now(); datos.estado = "recibida"; datos.fecha_creacion = new Date().toISOString(); const res = await App.api.fetch("guardar_fila", { nombreHoja: "reparaciones", datos: datos }); App.ui.hideLoader(); if (res.status === "success") { App.state.reparaciones.push(datos); App.ui.toast("Reparación registrada"); App.router.handleRoute(); } else { App.ui.toast("Error"); } },
         enviarWhatsApp(pedidoId) { const p = App.state.pedidos.find(x => x.id === pedidoId); const c = App.state.clientes.find(cli => cli.id === p.cliente_id); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id); const producto = detalle ? App.state.productos.find(prod => prod.id === detalle.producto_id) : null; const abonos = App.state.abonos.filter(a => a.pedido_id === p.id).reduce((s, a) => s + parseFloat(a.monto||0), 0); const saldoReal = parseFloat(p.total) - parseFloat(p.anticipo) - abonos; if(!c || !c.telefono) return; let texto = `Hola *${c.nombre}* 👋,\nTe compartimos el detalle de tu pedido:\n📦 *Producto:* ${producto ? producto.nombre : 'Hamaca'}\n💰 *Total:* $${p.total}\n✅ *Abonado:* $${parseFloat(p.anticipo) + abonos}\n⚠️ *Saldo Pendiente:* $${saldoReal > 0 ? saldoReal : 0}\n¡Gracias por tu compra!`; let tel = String(c.telefono).replace(/\D/g,''); if(tel.length === 10) tel = '52' + tel; window.location.href = `https://wa.me/${tel}?text=${encodeURIComponent(texto)}`; },
@@ -154,7 +160,6 @@ const App = {
         
         produccion() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Tablero Kanban</h3></div>`; const pendientes = App.state.ordenes_produccion.filter(o => o.estado === 'pendiente' || !o.estado); const enProceso = App.state.ordenes_produccion.filter(o => o.estado === 'en_proceso'); const listas = App.state.ordenes_produccion.filter(o => o.estado === 'listo'); const dibujarTarjeta = (orden) => { const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id); const producto = detalle ? App.state.productos.find(p => p.id === detalle.producto_id) : null; return `<div class="kanban-card" onclick="App.views.modalEditarOrden('${orden.id}')"><strong>${orden.id}</strong><br><small style="color: var(--primary); font-weight: 600;">${producto ? producto.nombre : 'Producto interno'}</small></div>`; }; html += `<div class="kanban-board"><div class="kanban-column"><div class="kanban-header">Pendientes <span>${pendientes.length}</span></div>${pendientes.map(dibujarTarjeta).join('')}</div><div class="kanban-column"><div class="kanban-header">En Proceso <span>${enProceso.length}</span></div>${enProceso.map(dibujarTarjeta).join('')}</div><div class="kanban-column"><div class="kanban-header">Listas <span>${listas.length}</span></div>${listas.map(dibujarTarjeta).join('')}</div></div>`; return html; },
         
-        // --- AQUÍ ESTÁN LAS VISTAS DEL KANBAN ---
         modalEditarOrden(ordenId) { 
             const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); 
             const opcionesArtesanos = App.state.artesanos.map(a => `<option value="${a.id}" ${orden.artesano_id === a.id ? 'selected' : ''}>${a.nombre}</option>`).join(''); 
@@ -170,7 +175,28 @@ const App = {
             const artesano = App.state.artesanos.find(a => a.id === artesanoAsignadoId);
             const tarifa = App.state.tarifas_artesano.find(t => t.artesano_id === artesanoAsignadoId);
             const pagoSugerido = tarifa ? tarifa.monto : 0;
-            const formHTML = `<div style="background: #FEFCBF; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem;"><strong>Cierre de Producción</strong><br>Producto: ${producto.nombre}<br>Artesano: ${artesano ? artesano.nombre : 'General'}</div><form id="dynamic-form"><input type="hidden" name="orden_id" value="${ordenId}"><input type="hidden" name="consumo_teorico" value="${consumoTeorico}"><div class="form-group"><label>Consumo de Hilo/Material Reales</label><input type="number" step="0.1" name="consumo_real" value="${consumoTeorico}" required><small style="color: var(--text-muted);">El sistema esperaba gastar ${consumoTeorico}. Puedes ajustar si gastó más o menos.</small></div><div class="form-group"><label>Monto a pagar al Artesano ($)</label><input type="number" name="pago_artesano" value="${pagoSugerido}" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; background: var(--success); border-color: var(--success);">Finalizar y Descontar Stock</button></form>`;
+            
+            const formHTML = `
+                <div style="background: #FEFCBF; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem;">
+                    <strong>Cierre de Producción</strong><br>
+                    Producto: ${producto.nombre}<br>
+                    Artesano: ${artesano ? artesano.nombre : 'General'}
+                </div>
+                <form id="dynamic-form">
+                    <input type="hidden" name="orden_id" value="${ordenId}">
+                    <input type="hidden" name="consumo_teorico" value="${consumoTeorico}">
+                    <div class="form-group">
+                        <label>Consumo de Hilo/Material Reales</label>
+                        <input type="number" step="0.1" name="consumo_real" value="${consumoTeorico}" required>
+                        <small style="color: var(--text-muted);">El sistema esperaba gastar ${consumoTeorico}. Ajusta si es necesario.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Monto a pagar al Artesano ($)</label>
+                        <input type="number" name="pago_artesano" value="${pagoSugerido}" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; background: var(--success); border-color: var(--success);">Finalizar y Descontar Stock</button>
+                </form>
+            `;
             App.ui.openSheet("Cerrar Orden", formHTML, (datos) => App.logic.cerrarOrdenProduccion(datos));
         },
 
