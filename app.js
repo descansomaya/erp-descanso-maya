@@ -1,7 +1,6 @@
 /**
- * DESCANSO MAYA ERP - Motor Principal v21
- * Código Expandido, Limpio y con Módulo de Nómina
- * PARTE 1: Estado, API, UI y Lógica
+ * DESCANSO MAYA ERP - Motor Principal v22 (VERSIÓN EXPANDIDA)
+ * Módulo de Edición, Catálogos Completos y Ticket Premium
  */
 
 const App = {
@@ -101,8 +100,7 @@ const App = {
         },
         closeSheet() { this.container.innerHTML = ''; }
     },
-
-    logic: {
+	logic: {
         async verificarPIN(pinIngresado) {
             App.ui.showLoader("Verificando acceso..."); 
             App.state.pinAcceso = pinIngresado; 
@@ -165,53 +163,147 @@ const App = {
             App.ui.toast("Respaldo descargado exitosamente");
         },
 
-        // --- NUEVO: LÓGICA DE NÓMINA ---
-        async liquidarNomina(artesanoId) {
-            App.ui.showLoader("Liquidando pagos y registrando gasto...");
-            const pagosPendientes = App.state.pago_artesanos.filter(p => p.artesano_id === artesanoId && p.estado === 'pendiente');
-            const artesano = App.state.artesanos.find(a => a.id === artesanoId);
-            
-            let totalPagado = 0;
-            const promesasDePago = [];
-
-            // 1. Actualizamos todos los pagos de este artesano a "pagado"
-            for (let pago of pagosPendientes) {
-                promesasDePago.push(
-                    App.api.fetch("actualizar_fila", {
-                        nombreHoja: "pago_artesanos",
-                        idFila: pago.id,
-                        datosNuevos: { estado: 'pagado' }
-                    }).then(res => {
-                        if(res.status === "success") {
-                            pago.estado = 'pagado';
-                            totalPagado += parseFloat(pago.total || 0);
-                        }
-                    })
-                );
-            }
-
-            // Esperamos a que Google Sheets termine de actualizar todo
-            await Promise.all(promesasDePago);
-
-            // 2. Si se pagó algo, creamos un registro de gasto automáticamente
-            if (totalPagado > 0) {
-                const gastoObj = {
-                    id: "GAS-" + Date.now(),
-                    descripcion: "Nómina - " + (artesano ? artesano.nombre : 'Artesano'),
-                    categoria: "nomina",
-                    monto: totalPagado,
-                    fecha: new Date().toISOString().split('T')[0]
-                };
-                await App.api.fetch("guardar_fila", { nombreHoja: "gastos", datos: gastoObj });
-                App.state.gastos.push(gastoObj);
-            }
-
+        // --- FUNCIÓN MAESTRA DE EDICIÓN ---
+        async actualizarRegistroGenerico(nombreHoja, idFila, datosNuevos, nombreEstadoApp) {
+            App.ui.showLoader("Guardando cambios...");
+            const res = await App.api.fetch("actualizar_fila", {
+                nombreHoja: nombreHoja,
+                idFila: idFila,
+                datosNuevos: datosNuevos
+            });
             App.ui.hideLoader();
-            App.ui.toast(`Se liquidaron $${totalPagado} a ${artesano ? artesano.nombre : 'Artesano'}`);
-            App.router.handleRoute(); // Refresca la pantalla
+
+            if (res.status === "success") {
+                // Buscamos el elemento en la memoria local y lo actualizamos para no recargar todo
+                const index = App.state[nombreEstadoApp].findIndex(item => item.id === idFila);
+                if (index !== -1) {
+                    App.state[nombreEstadoApp][index] = { ...App.state[nombreEstadoApp][index], ...datosNuevos };
+                }
+                App.ui.toast("Actualizado correctamente");
+                App.router.handleRoute(); // Refresca la pantalla
+            } else {
+                App.ui.toast("Error al actualizar");
+            }
         },
 
-        // --- OPERACIONES DE KANBAN ---
+        async guardarNuevoGenerico(nombreHoja, datos, prefijoID, nombreEstadoApp) {
+            App.ui.showLoader("Registrando...");
+            datos.id = prefijoID + "-" + Date.now();
+            
+            // Si tiene fecha de creación la ponemos
+            if(!datos.fecha_creacion) datos.fecha_creacion = new Date().toISOString();
+
+            const res = await App.api.fetch("guardar_fila", { nombreHoja: nombreHoja, datos: datos });
+            App.ui.hideLoader();
+
+            if (res.status === "success") {
+                App.state[nombreEstadoApp].push(datos);
+                App.ui.toast("Registro exitoso");
+                App.router.handleRoute();
+            } else {
+                App.ui.toast("Error al guardar");
+            }
+        },
+
+        // --- NUEVA NOTA / TICKET PREMIUM ---
+        imprimirNota(pedidoId) { 
+            const p = App.state.pedidos.find(x => x.id === pedidoId); 
+            const c = App.state.clientes.find(cli => cli.id === p.cliente_id); 
+            const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id); 
+            const producto = detalle ? App.state.productos.find(prod => prod.id === detalle.producto_id) : null; 
+            const abonosDelPedido = App.state.abonos.filter(a => a.pedido_id === p.id); 
+            const totalAbonado = abonosDelPedido.reduce((s, a) => s + parseFloat(a.monto||0), 0); 
+            const saldoReal = parseFloat(p.total) - parseFloat(p.anticipo) - totalAbonado; 
+            
+            const ventana = window.open('', '_blank'); 
+            let htmlNota = `
+                <html>
+                <head>
+                    <title>Nota de Remisión - ${p.id}</title>
+                    <style>
+                        body { font-family: 'Arial', sans-serif; background: #f9f9f9; padding: 20px; color: #333; }
+                        .ticket { background: white; max-width: 380px; margin: 0 auto; padding: 25px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+                        .header { text-align: center; border-bottom: 2px dashed #cbd5e0; padding-bottom: 15px; margin-bottom: 15px; }
+                        .header h1 { margin: 0; color: #2d3748; font-size: 24px; text-transform: uppercase; letter-spacing: 1px; }
+                        .header p { margin: 5px 0 0 0; color: #718096; font-size: 13px; }
+                        .info-p { margin: 4px 0; font-size: 14px; color: #4a5568; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 15px; }
+                        th { border-bottom: 1px solid #e2e8f0; padding: 8px 0; text-align: left; font-size: 13px; color: #718096; }
+                        td { padding: 8px 0; font-size: 14px; color: #2d3748; }
+                        .totales { border-top: 2px solid #cbd5e0; padding-top: 15px; }
+                        .totales-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; }
+                        .saldo-final { display: flex; justify-content: space-between; margin-top: 10px; font-size: 18px; font-weight: bold; color: #2d3748; background: ${saldoReal <= 0 ? '#f0fff4' : '#fff5f5'}; padding: 10px; border-radius: 6px; }
+                        .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #a0aec0; }
+                        @media print { body { background: white; padding: 0; } .ticket { box-shadow: none; border: none; max-width: 100%; } }
+                    </style>
+                </head>
+                <body>
+                    <div class="ticket">
+                        <div class="header">
+                            <h1>Descanso Maya</h1>
+                            <p>Artesanía Yucateca Premium</p>
+                        </div>
+                        
+                        <div style="margin-bottom: 20px;">
+                            <p class="info-p"><strong>Folio:</strong> ${p.id.replace('PED-', '')}</p>
+                            <p class="info-p"><strong>Fecha:</strong> ${new Date(p.fecha_creacion).toLocaleDateString()}</p>
+                            <p class="info-p"><strong>Cliente:</strong> ${c ? c.nombre : 'Mostrador'}</p>
+                            <p class="info-p"><strong>Teléfono:</strong> ${c && c.telefono ? c.telefono : 'N/A'}</p>
+                            ${p.fecha_entrega ? `<p class="info-p"><strong>Entrega Estimada:</strong> ${p.fecha_entrega}</p>` : ''}
+                        </div>
+
+                        <table>
+                            <tr>
+                                <th>Cant</th>
+                                <th>Descripción</th>
+                                <th style="text-align: right;">Importe</th>
+                            </tr>
+                            <tr>
+                                <td>${detalle ? detalle.cantidad : 1}</td>
+                                <td>${producto ? producto.nombre : 'Artículo General'}<br><small style="color:#718096; font-size:11px;">${p.notas || ''}</small></td>
+                                <td style="text-align: right;">$${p.total}</td>
+                            </tr>
+                        </table>
+
+                        <div class="totales">
+                            <div class="totales-row"><span>Subtotal:</span> <span>$${p.total}</span></div>
+                            <div class="totales-row"><span>Anticipo Inicial:</span> <span style="color: #e53e3e;">-$${p.anticipo}</span></div>
+                            ${totalAbonado > 0 ? `<div class="totales-row"><span>Abonos (Pagos Extra):</span> <span style="color: #e53e3e;">-$${totalAbonado}</span></div>` : ''}
+                            
+                            <div class="saldo-final">
+                                <span>SALDO PENDIENTE:</span>
+                                <span>$${saldoReal > 0 ? saldoReal : 0}</span>
+                            </div>
+                        </div>
+
+                        <div class="footer">
+                            <p>¡Gracias por tu compra y por apoyar lo hecho a mano! 🧶</p>
+                            <p style="margin-top: 10px;">Conserva este ticket para cualquier aclaración.</p>
+                        </div>
+                    </div>
+                    <script>setTimeout(() => { window.print(); }, 500);</script>
+                </body>
+                </html>
+            `; 
+            ventana.document.write(htmlNota); 
+            ventana.document.close(); 
+        },
+
+        enviarWhatsApp(pedidoId) { 
+            const p = App.state.pedidos.find(x => x.id === pedidoId); 
+            const c = App.state.clientes.find(cli => cli.id === p.cliente_id); 
+            const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id); 
+            const producto = detalle ? App.state.productos.find(prod => prod.id === detalle.producto_id) : null; 
+            const abonos = App.state.abonos.filter(a => a.pedido_id === p.id).reduce((s, a) => s + parseFloat(a.monto||0), 0); 
+            const saldoReal = parseFloat(p.total) - parseFloat(p.anticipo) - abonos; 
+            if(!c || !c.telefono) { App.ui.toast("El cliente no tiene teléfono."); return; }
+            let texto = `Hola *${c.nombre}* 👋,\nSomos de *Descanso Maya*.\n\nTe compartimos el detalle de tu pedido:\n📦 *Producto:* ${producto ? producto.nombre : 'Hamaca'}\n💰 *Total:* $${p.total}\n✅ *Abonado:* $${parseFloat(p.anticipo) + abonos}\n⚠️ *Saldo Pendiente:* $${saldoReal > 0 ? saldoReal : 0}\n\n¡Gracias por tu compra!`; 
+            let tel = String(c.telefono).replace(/\D/g,''); 
+            if(tel.length === 10) tel = '52' + tel; 
+            window.location.href = `https://wa.me/${tel}?text=${encodeURIComponent(texto)}`; 
+        },
+
+        // --- Lógica del Kanban y Cierre ---
         async procesarCambioOrden(ordenId, datos) {
             if (datos.estado === 'listo') {
                 App.views.formCerrarOrden(ordenId, datos.artesano_id); 
@@ -222,11 +314,8 @@ const App = {
                 if (res.status === "success") { 
                     const ordenIndex = App.state.ordenes_produccion.findIndex(o => o.id === ordenId);
                     App.state.ordenes_produccion[ordenIndex] = { ...App.state.ordenes_produccion[ordenIndex], ...datos }; 
-                    App.ui.toast("Orden actualizada"); 
-                    App.router.handleRoute(); 
-                } else { 
-                    App.ui.toast("Error al actualizar"); 
-                }
+                    App.ui.toast("Orden actualizada"); App.router.handleRoute(); 
+                } else { App.ui.toast("Error al actualizar"); }
             }
         },
 
@@ -235,7 +324,6 @@ const App = {
             const ordenId = datosFormulario.orden_id;
             const consumoReal = parseFloat(datosFormulario.consumo_real) || 0;
             const pagoArtesano = parseFloat(datosFormulario.pago_artesano) || 0;
-            
             const orden = App.state.ordenes_produccion.find(o => o.id === ordenId);
             const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id);
             const producto = App.state.productos.find(p => p.id === detalle.producto_id);
@@ -248,42 +336,45 @@ const App = {
                 const nuevoStock = parseFloat(material.stock_actual) - consumoReal;
                 await App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } });
                 material.stock_actual = nuevoStock;
-                
-                const consumoObj = { 
-                    id: "CONS-" + Date.now(), 
-                    orden_id: ordenId, 
-                    material_id: material.id, 
-                    cantidad_teorica: datosFormulario.consumo_teorico, 
-                    cantidad_real: consumoReal, 
-                    fecha: new Date().toISOString() 
-                };
-                await App.api.fetch("guardar_fila", { nombreHoja: "consumos_produccion", datos: consumoObj });
-                App.state.consumos_produccion.push(consumoObj);
             }
 
             if (orden.artesano_id && pagoArtesano > 0) {
-                const pagoObj = { 
-                    id: "PAGO-" + Date.now(), 
-                    artesano_id: orden.artesano_id, 
-                    orden_id: ordenId, 
-                    monto_unitario: pagoArtesano, 
-                    total: pagoArtesano, 
-                    estado: "pendiente", 
-                    fecha: new Date().toISOString() 
-                };
+                const pagoObj = { id: "PAGO-" + Date.now(), artesano_id: orden.artesano_id, orden_id: ordenId, monto_unitario: pagoArtesano, total: pagoArtesano, estado: "pendiente", fecha: new Date().toISOString() };
                 await App.api.fetch("guardar_fila", { nombreHoja: "pago_artesanos", datos: pagoObj });
                 App.state.pago_artesanos.push(pagoObj);
             }
 
-            App.ui.hideLoader(); 
-            App.ui.toast("¡Orden finalizada con éxito!"); 
-            App.router.handleRoute();
+            App.ui.hideLoader(); App.ui.toast("¡Orden finalizada con éxito!"); App.router.handleRoute();
         },
 
-        // --- OPERACIONES DE GUARDADO GENERALES ---
+        async liquidarNomina(artesanoId) {
+            App.ui.showLoader("Liquidando pagos...");
+            const pagosPendientes = App.state.pago_artesanos.filter(p => p.artesano_id === artesanoId && p.estado === 'pendiente');
+            let totalPagado = 0;
+            const promesasDePago = [];
+
+            for (let pago of pagosPendientes) {
+                promesasDePago.push(
+                    App.api.fetch("actualizar_fila", { nombreHoja: "pago_artesanos", idFila: pago.id, datosNuevos: { estado: 'pagado' } })
+                    .then(res => { if(res.status === "success") { pago.estado = 'pagado'; totalPagado += parseFloat(pago.total || 0); } })
+                );
+            }
+            await Promise.all(promesasDePago);
+
+            if (totalPagado > 0) {
+                const artesano = App.state.artesanos.find(a => a.id === artesanoId);
+                const gastoObj = { id: "GAS-" + Date.now(), descripcion: "Nómina - " + (artesano ? artesano.nombre : 'Artesano'), categoria: "nomina", monto: totalPagado, fecha: new Date().toISOString().split('T')[0] };
+                await App.api.fetch("guardar_fila", { nombreHoja: "gastos", datos: gastoObj });
+                App.state.gastos.push(gastoObj);
+            }
+
+            App.ui.hideLoader(); App.ui.toast(`Se liquidaron $${totalPagado}`); App.router.handleRoute();
+        },
+
+        // Creaciones específicas con lógica extra
         async guardarNuevaCompra(datos) { 
             App.ui.showLoader("Registrando..."); 
-            const compra = { id: "COM-" + Date.now(), proveedor_id: datos.proveedor_id, fecha: new Date().toISOString().split('T')[0], total: parseFloat(datos.total), monto_pagado: parseFloat(datos.total), estado: "pagado", fecha_creacion: new Date().toISOString() }; 
+            const compra = { id: "COM-" + Date.now(), proveedor_id: datos.proveedor_id, fecha: datos.fecha, total: parseFloat(datos.total), monto_pagado: parseFloat(datos.total), estado: "pagado", fecha_creacion: new Date().toISOString() }; 
             const res = await App.api.fetch("guardar_fila", { nombreHoja: "compras", datos: compra }); 
             if (res.status === "success") { 
                 App.state.compras.push(compra); 
@@ -293,50 +384,10 @@ const App = {
                     await App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } }); 
                     material.stock_actual = nuevoStock; 
                 } 
-                App.ui.hideLoader(); 
-                App.ui.toast("Compra y stock actualizados"); 
-                App.router.handleRoute(); 
+                App.ui.hideLoader(); App.ui.toast("Compra y stock actualizados"); App.router.handleRoute(); 
             } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
         },
-        
-        async guardarNuevaReparacion(datos) { App.ui.showLoader("Registrando..."); datos.id = "REP-" + Date.now(); datos.estado = "recibida"; datos.fecha_creacion = new Date().toISOString(); const res = await App.api.fetch("guardar_fila", { nombreHoja: "reparaciones", datos: datos }); App.ui.hideLoader(); if (res.status === "success") { App.state.reparaciones.push(datos); App.ui.toast("Reparación registrada"); App.router.handleRoute(); } else { App.ui.toast("Error"); } },
-        
-        enviarWhatsApp(pedidoId) { 
-            const p = App.state.pedidos.find(x => x.id === pedidoId); 
-            const c = App.state.clientes.find(cli => cli.id === p.cliente_id); 
-            const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id); 
-            const producto = detalle ? App.state.productos.find(prod => prod.id === detalle.producto_id) : null; 
-            const abonos = App.state.abonos.filter(a => a.pedido_id === p.id).reduce((s, a) => s + parseFloat(a.monto||0), 0); 
-            const saldoReal = parseFloat(p.total) - parseFloat(p.anticipo) - abonos; 
-            
-            if(!c || !c.telefono) return; 
-            
-            let texto = `Hola *${c.nombre}* 👋,\nTe compartimos el detalle de tu pedido:\n📦 *Producto:* ${producto ? producto.nombre : 'Hamaca'}\n💰 *Total:* $${p.total}\n✅ *Abonado:* $${parseFloat(p.anticipo) + abonos}\n⚠️ *Saldo Pendiente:* $${saldoReal > 0 ? saldoReal : 0}\n¡Gracias por tu compra!`; 
-            let tel = String(c.telefono).replace(/\D/g,''); 
-            if(tel.length === 10) tel = '52' + tel; 
-            window.location.href = `https://wa.me/${tel}?text=${encodeURIComponent(texto)}`; 
-        },
-        
-        imprimirNota(pedidoId) { 
-            const p = App.state.pedidos.find(x => x.id === pedidoId); 
-            const c = App.state.clientes.find(cli => cli.id === p.cliente_id); 
-            const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id); 
-            const producto = detalle ? App.state.productos.find(prod => prod.id === detalle.producto_id) : null; 
-            const abonosDelPedido = App.state.abonos.filter(a => a.pedido_id === p.id); 
-            const totalAbonado = abonosDelPedido.reduce((s, a) => s + parseFloat(a.monto||0), 0); 
-            const saldoReal = parseFloat(p.total) - parseFloat(p.anticipo) - totalAbonado; 
-            
-            const ventana = window.open('', '_blank'); 
-            let htmlNota = `<html><body style="font-family:sans-serif; padding:20px; max-width:400px; margin:auto;"><h2 style="text-align:center;">Descanso Maya</h2><p><strong>Cliente:</strong> ${c.nombre}</p><p><strong>Producto:</strong> ${producto ? producto.nombre : 'Hamaca'}</p><p><strong>Total:</strong> $${p.total}</p><p><strong>Abonado:</strong> $${parseFloat(p.anticipo) + totalAbonado}</p><h3><strong>Saldo a pagar: $${saldoReal > 0 ? saldoReal : 0}</strong></h3><script>window.onload=function(){window.print();}</script></body></html>`; 
-            ventana.document.write(htmlNota); 
-            ventana.document.close(); 
-        },
 
-        async guardarAbono(datos) { App.ui.showLoader("Registrando..."); const nuevoAbono = { id: "ABO-" + Date.now(), pedido_id: datos.pedido_id, cliente_id: datos.cliente_id, monto: parseFloat(datos.monto) || 0, nota: datos.nota, fecha: new Date().toISOString() }; const res = await App.api.fetch("guardar_fila", { nombreHoja: "abonos_clientes", datos: nuevoAbono }); App.ui.hideLoader(); if (res.status === "success") { App.state.abonos.push(nuevoAbono); App.ui.toast("Pago registrado"); App.router.handleRoute(); } else App.ui.toast("Error"); },
-        async guardarNuevoGasto(datos) { App.ui.showLoader("Registrando..."); datos.id = "GAS-" + Date.now(); datos.monto = parseFloat(datos.monto) || 0; const res = await App.api.fetch("guardar_fila", { nombreHoja: "gastos", datos: datos }); App.ui.hideLoader(); if (res.status === "success") { App.state.gastos.push(datos); App.ui.toast("Gasto registrado"); App.router.handleRoute(); } else App.ui.toast("Error"); },
-        async guardarNuevoCliente(datos) { App.ui.showLoader("Guardando..."); datos.id = "CLI-" + Date.now(); datos.fecha_creacion = new Date().toISOString(); const res = await App.api.fetch("guardar_fila", { nombreHoja: "clientes", datos: datos }); App.ui.hideLoader(); if (res.status === "success") { App.ui.toast("Cliente guardado"); App.state.clientes.push(datos); App.router.handleRoute(); } else App.ui.toast("Error"); },
-        async guardarNuevoProducto(datos) { App.ui.showLoader("Guardando..."); datos.id = "PROD-" + Date.now(); datos.precio_venta = parseFloat(datos.precio_venta) || 0; datos.activo = "TRUE"; const res = await App.api.fetch("guardar_fila", { nombreHoja: "productos", datos: datos }); App.ui.hideLoader(); if (res.status === "success") { App.ui.toast("Producto creado"); App.state.productos.push(datos); App.router.handleRoute(); } else App.ui.toast("Error"); },
-        
         async guardarNuevoPedido(datosFormulario) { 
             App.ui.showLoader("Creando pedido..."); 
             const pedidoId = "PED-" + Date.now(); 
@@ -351,12 +402,10 @@ const App = {
                 await App.api.fetch("guardar_fila", { nombreHoja: "pedido_detalle", datos: datosDetalle }); 
                 App.state.pedidos.push(datosPedido); 
                 App.state.pedido_detalle.push(datosDetalle); 
-                App.ui.hideLoader(); 
-                App.ui.toast("Pedido registrado"); 
-                App.router.handleRoute(); 
-            } else App.ui.toast("Error"); 
+                App.ui.hideLoader(); App.ui.toast("Pedido registrado"); App.router.handleRoute(); 
+            } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
         },
-        
+
         async mandarAProduccion(pedidoId) { 
             App.ui.showLoader("Generando Orden..."); 
             const detalle = App.state.pedido_detalle.find(d => d.pedido_id === pedidoId); 
@@ -366,8 +415,7 @@ const App = {
             App.ui.hideLoader(); 
             if (res.status === "success") { 
                 App.state.ordenes_produccion.push(nuevaOrden); 
-                App.ui.toast("Enviado a producción"); 
-                App.router.navigate('produccion'); 
+                App.ui.toast("Enviado a producción"); App.router.navigate('produccion'); 
             } 
         }
     },
@@ -398,19 +446,12 @@ const App = {
                 </div>
             `; 
         },
-        
-        // --- NUEVA PANTALLA: NÓMINA ---
+
         nomina() {
             document.getElementById('bottom-nav').style.display = 'flex';
             let html = `<div class="card"><h3 class="card-title">Nómina de Artesanos</h3>`;
-            
-            // Agrupar cuánto se le debe a cada artesano
             const pagosPorArtesano = {};
-            
-            App.state.artesanos.forEach(a => {
-                pagosPorArtesano[a.id] = { nombre: a.nombre, totalPendiente: 0, trabajos: [] };
-            });
-
+            App.state.artesanos.forEach(a => { pagosPorArtesano[a.id] = { nombre: a.nombre, totalPendiente: 0, trabajos: [] }; });
             App.state.pago_artesanos.forEach(p => {
                 if (p.estado === 'pendiente' && pagosPorArtesano[p.artesano_id]) {
                     pagosPorArtesano[p.artesano_id].totalPendiente += parseFloat(p.total);
@@ -419,49 +460,21 @@ const App = {
             });
 
             let hayPendientes = false;
-
             for (const [id, data] of Object.entries(pagosPorArtesano)) {
                 if (data.totalPendiente > 0) {
                     hayPendientes = true;
                     html += `
                         <div class="card" style="border: 1px solid var(--border); box-shadow: none;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                                <strong>🧑‍🎨 ${data.nombre}</strong>
-                                <strong style="color: var(--danger); font-size: 1.1rem;">$${data.totalPendiente}</strong>
+                                <strong>🧑‍🎨 ${data.nombre}</strong><strong style="color: var(--danger); font-size: 1.1rem;">$${data.totalPendiente}</strong>
                             </div>
-                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 10px;">
-                                Trabajos terminados sin pagar: ${data.trabajos.length}
-                            </p>
-                            <button class="btn btn-primary" style="width: 100%; background: var(--success); border-color: var(--success);" onclick="if(confirm('¿Liquidar $${data.totalPendiente} a ${data.nombre}?')) App.logic.liquidarNomina('${id}')">
-                                💵 Registrar Pago / Liquidar
-                            </button>
+                            <button class="btn btn-primary" style="width: 100%; background: var(--success); border-color: var(--success);" onclick="if(confirm('¿Liquidar $${data.totalPendiente} a ${data.nombre}?')) App.logic.liquidarNomina('${id}')">💵 Registrar Pago / Liquidar</button>
                         </div>
                     `;
                 }
             }
-
-            if (!hayPendientes) {
-                html += `<p style="color: var(--text-muted);">No hay pagos pendientes a artesanos. Todo está al día. ✨</p>`;
-            }
-
-            html += `</div>`;
-            return html;
-        },
-
-        configuracion() { 
-            document.getElementById('bottom-nav').style.display = 'flex'; 
-            return `
-                <div class="card">
-                    <h3 class="card-title">Configuración</h3>
-                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">Administra tu información.</p>
-                    <button class="btn btn-primary" style="width: 100%; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 10px;" onclick="App.logic.descargarRespaldo()">
-                        <span>💾</span> Descargar Respaldo Total
-                    </button>
-                    <button class="btn btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; background: #FED7D7; color: var(--danger); border: none;" onclick="localStorage.removeItem('erp_pin'); location.reload();">
-                        <span>🔒</span> Bloquear Sistema
-                    </button>
-                </div>
-            `; 
+            if (!hayPendientes) html += `<p style="color: var(--text-muted);">No hay pagos pendientes. Todo está al día. ✨</p>`;
+            html += `</div>`; return html;
         },
 
         finanzas() { 
@@ -484,8 +497,7 @@ const App = {
                         <div class="card stat-card" style="background: #FED7D7;"><div class="label">Gastos</div><div class="value" style="color: #E53E3E; font-size: 1.2rem;">$${totalGastos}</div></div>
                     </div>
                     <div class="card stat-card" style="margin-top:10px; border: 2px solid ${balanceNeto >= 0 ? 'var(--success)' : 'var(--danger)'};">
-                        <div class="label">Flujo Neto Efectivo</div>
-                        <div class="value" style="color: ${balanceNeto >= 0 ? 'var(--success)' : 'var(--danger)'};">$${balanceNeto}</div>
+                        <div class="label">Flujo Neto Efectivo</div><div class="value" style="color: ${balanceNeto >= 0 ? 'var(--success)' : 'var(--danger)'};">$${balanceNeto}</div>
                     </div>
                 </div>
             `; 
@@ -494,16 +506,20 @@ const App = {
             if (App.state.gastos.length === 0) { 
                 html += `<p style="color: var(--text-muted); font-size: 0.9rem;">No hay gastos registrados.</p>`; 
             } else { 
-                [...App.state.gastos].reverse().slice(0, 15).forEach(g => { 
+                [...App.state.gastos].reverse().slice(0, 20).forEach(g => { 
                     html += `
                         <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 10px 0;">
-                            <div><strong style="font-size: 0.95rem;">${g.descripcion}</strong><br><small style="color: var(--text-muted);">${g.categoria} | ${g.fecha}</small></div>
+                            <div>
+                                <strong style="font-size: 0.95rem;">${g.descripcion}</strong>
+                                <span style="cursor:pointer; margin-left: 5px; font-size: 0.8rem;" onclick="App.views.formGasto('${g.id}')">✏️</span>
+                                <br><small style="color: var(--text-muted);">${g.categoria} | ${g.fecha}</small>
+                            </div>
                             <strong style="color: var(--danger); font-size: 1rem;">-$${g.monto}</strong>
                         </div>
                     `; 
                 }); 
             }
-            html += `</div><button class="fab" style="background: var(--danger);" onclick="App.views.formNuevoGasto()">+</button>`;
+            html += `</div><button class="fab" style="background: var(--danger);" onclick="App.views.formGasto()">+</button>`;
             return html;
         },
 
@@ -526,16 +542,19 @@ const App = {
                             ${estaPagado ? `<span class="badge" style="background: var(--success); color: white;">PAGADO</span>` : `<span class="badge ${p.estado || 'nuevo'}">${(p.estado || 'Nuevo').toUpperCase()}</span>`}
                         </div>
                         <p style="color: var(--primary); font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">${producto ? producto.nombre : 'Desconocido'}</p>
+                        
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);">
                             <div><strong style="color: ${estaPagado ? 'var(--success)' : 'var(--danger)'};">Saldo: $${saldoReal > 0 ? saldoReal : 0}</strong></div>
                             <div style="display: flex; gap: 8px;">
                                 ${!tieneOrden && detalle ? `<button class="btn btn-secondary" style="padding: 6px 10px;" onclick="App.logic.mandarAProduccion('${p.id}')">🔨</button>` : ''}
-                                ${!estaPagado ? `<button class="btn btn-primary" style="padding: 6px 10px; background: var(--success); border-color: var(--success);" onclick="App.views.formCobrar('${p.id}', '${c.id}', ${saldoReal})">💰</button>` : ''}
+                                ${!estaPagado ? `<button class="btn btn-primary" style="padding: 6px 10px; background: var(--success); border-color: var(--success);" onclick="App.views.formCobrar('${p.id}', '${c ? c.id : ''}', ${saldoReal})">💰</button>` : ''}
                             </div>
                         </div>
+                        
                         <div style="display: flex; gap: 10px; margin-top: 15px;">
                             <button class="btn" style="flex: 1; font-size: 0.8rem; border-color: #38A169; color: #38A169;" onclick="App.logic.enviarWhatsApp('${p.id}')">💬 WhatsApp</button>
-                            <button class="btn" style="flex: 1; font-size: 0.8rem; border-color: var(--primary); color: var(--primary);" onclick="App.logic.imprimirNota('${p.id}')">🖨️ PDF</button>
+                            <button class="btn" style="flex: 1; font-size: 0.8rem; border-color: var(--primary); color: var(--primary);" onclick="App.logic.imprimirNota('${p.id}')">🖨️ PDF/Nota</button>
+                            <button class="btn btn-secondary" style="font-size: 0.8rem; padding: 6px 10px;" onclick="App.views.formEditarPedido('${p.id}')">✏️</button>
                         </div>
                     </div>
                 `; 
@@ -575,23 +594,182 @@ const App = {
             return html; 
         },
 
+        // --- DIRECTORIOS (Con botones Editar) ---
+        clientes() { 
+            document.getElementById('bottom-nav').style.display = 'flex'; 
+            let html = `<div class="card"><h3 class="card-title">Directorio de Clientes</h3>`; 
+            App.state.clientes.forEach(c => { 
+                html += `<div class="card" style="border: 1px solid var(--border); padding: 10px; margin-bottom: 8px; display:flex; justify-content:space-between; align-items:center;">
+                            <div><strong>${c.nombre}</strong><br><small style="color: var(--text-muted);">📞 ${c.telefono || 'N/A'}</small></div>
+                            <button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem;" onclick="App.views.formCliente('${c.id}')">✏️</button>
+                         </div>`; 
+            }); 
+            html += `</div><button class="fab" onclick="App.views.formCliente()">+</button>`; 
+            return html; 
+        },
+        proveedores() { 
+            document.getElementById('bottom-nav').style.display = 'flex'; 
+            let html = `<div class="card"><h3 class="card-title">Proveedores</h3>`; 
+            App.state.proveedores.forEach(p => { 
+                html += `<div class="card" style="border: 1px solid var(--border); padding: 10px; margin-bottom: 8px; display:flex; justify-content:space-between; align-items:center;">
+                            <div><strong>${p.nombre}</strong><br><small style="color: var(--text-muted);">📞 ${p.telefono || 'N/A'}</small></div>
+                            <button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem;" onclick="App.views.formProveedor('${p.id}')">✏️</button>
+                         </div>`; 
+            }); 
+            html += `</div><button class="fab" onclick="App.views.formProveedor()">+</button>`; 
+            return html; 
+        },
+        artesanos() { 
+            document.getElementById('bottom-nav').style.display = 'flex'; 
+            let html = `<div class="card"><h3 class="card-title">Directorio de Artesanos</h3>`; 
+            App.state.artesanos.forEach(a => { 
+                html += `<div class="card" style="border: 1px solid var(--border); padding: 10px; margin-bottom: 8px; display:flex; justify-content:space-between; align-items:center;">
+                            <div><strong>${a.nombre}</strong><br><small style="color: var(--text-muted);">📞 ${a.telefono || 'N/A'}</small></div>
+                            <button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem;" onclick="App.views.formArtesano('${a.id}')">✏️</button>
+                         </div>`; 
+            }); 
+            html += `</div><button class="fab" onclick="App.views.formArtesano()">+</button>`; 
+            return html; 
+        },
+        compras() { 
+            document.getElementById('bottom-nav').style.display = 'flex'; 
+            let html = `<div class="card"><h3 class="card-title">Historial de Compras</h3>`; 
+            [...App.state.compras].reverse().forEach(c => { 
+                const p = App.state.proveedores.find(prv => prv.id === c.proveedor_id); 
+                html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none;"><div style="display: flex; justify-content: space-between; margin-bottom: 5px;"><strong>${c.id}</strong><span style="color: var(--danger); font-weight: bold;">$${c.total}</span></div><p style="color: var(--text-muted); font-size: 0.85rem;">Proveedor: ${p ? p.nombre : 'General'} | Fecha: ${c.fecha}</p></div>`; 
+            }); 
+            return html += `</div><button class="fab" onclick="App.views.formCompra()">+</button>`; 
+        },
+        productos() { 
+            document.getElementById('bottom-nav').style.display = 'flex'; 
+            let html = `<div class="card"><h3 class="card-title">Catálogo de Productos</h3>`; 
+            App.state.productos.forEach(p => { 
+                html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none; padding: 12px;"><div style="display: flex; justify-content: space-between;"><strong>${p.nombre}</strong><span style="color: var(--primary); font-weight: bold;">$${p.precio_venta}</span></div><small style="color: var(--text-muted);">Cat: ${p.categoria || 'General'}</small></div>`; 
+            }); 
+            html += `</div><button class="fab" onclick="App.views.formProducto()">+</button>`; 
+            return html; 
+        },
+		// --- FORMULARIOS INTELIGENTES (Crear y Editar) ---
+        
+        formCliente(id = null) { 
+            const obj = id ? App.state.clientes.find(c => c.id === id) : null;
+            const formHTML = `
+                <form id="dynamic-form">
+                    <div class="form-group"><label>Nombre</label><input type="text" name="nombre" value="${obj ? obj.nombre : ''}" required></div>
+                    <div class="form-group"><label>Teléfono</label><input type="tel" name="telefono" value="${obj ? obj.telefono : ''}"></div>
+                    <div class="form-group"><label>Dirección</label><input type="text" name="direccion" value="${obj ? obj.direccion : ''}"></div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">${obj ? 'Guardar Cambios' : 'Crear Cliente'}</button>
+                </form>
+            `; 
+            App.ui.openSheet(obj ? "Editar Cliente" : "Nuevo Cliente", formHTML, (data) => {
+                if (obj) App.logic.actualizarRegistroGenerico("clientes", id, data, "clientes");
+                else App.logic.guardarNuevoGenerico("clientes", data, "CLI", "clientes");
+            }); 
+        },
+
+        formProveedor(id = null) { 
+            const obj = id ? App.state.proveedores.find(p => p.id === id) : null;
+            const formHTML = `
+                <form id="dynamic-form">
+                    <div class="form-group"><label>Nombre del Proveedor</label><input type="text" name="nombre" value="${obj ? obj.nombre : ''}" required></div>
+                    <div class="form-group"><label>Teléfono</label><input type="tel" name="telefono" value="${obj ? obj.telefono : ''}"></div>
+                    <div class="form-group"><label>Dirección / Ubicación</label><input type="text" name="direccion" value="${obj ? obj.direccion : ''}"></div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">${obj ? 'Guardar Cambios' : 'Crear Proveedor'}</button>
+                </form>
+            `; 
+            App.ui.openSheet(obj ? "Editar Proveedor" : "Nuevo Proveedor", formHTML, (data) => {
+                if (obj) App.logic.actualizarRegistroGenerico("proveedores", id, data, "proveedores");
+                else App.logic.guardarNuevoGenerico("proveedores", data, "PRV", "proveedores");
+            }); 
+        },
+
+        formArtesano(id = null) { 
+            const obj = id ? App.state.artesanos.find(a => a.id === id) : null;
+            const formHTML = `
+                <form id="dynamic-form">
+                    <div class="form-group"><label>Nombre del Artesano</label><input type="text" name="nombre" value="${obj ? obj.nombre : ''}" required></div>
+                    <div class="form-group"><label>Teléfono</label><input type="tel" name="telefono" value="${obj ? obj.telefono : ''}"></div>
+                    <div class="form-group"><label>Especialidad / Zona</label><input type="text" name="especialidad" value="${obj ? obj.especialidad || '' : ''}"></div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">${obj ? 'Guardar Cambios' : 'Dar de Alta Artesano'}</button>
+                </form>
+            `; 
+            App.ui.openSheet(obj ? "Editar Artesano" : "Nuevo Artesano", formHTML, (data) => {
+                if (obj) App.logic.actualizarRegistroGenerico("artesanos", id, data, "artesanos");
+                else App.logic.guardarNuevoGenerico("artesanos", data, "ART", "artesanos");
+            }); 
+        },
+
+        formGasto(id = null) { 
+            const obj = id ? App.state.gastos.find(g => g.id === id) : null;
+            const formHTML = `
+                <form id="dynamic-form">
+                    <div class="form-group"><label>Descripción del Gasto</label><input type="text" name="descripcion" value="${obj ? obj.descripcion : ''}" required></div>
+                    <div class="form-group"><label>Categoría</label>
+                        <select name="categoria" required>
+                            <option value="materiales" ${obj && obj.categoria === 'materiales' ? 'selected' : ''}>Materiales</option>
+                            <option value="servicios" ${obj && obj.categoria === 'servicios' ? 'selected' : ''}>Servicios</option>
+                            <option value="nomina" ${obj && obj.categoria === 'nomina' ? 'selected' : ''}>Nómina</option>
+                            <option value="otro" ${obj && obj.categoria === 'otro' ? 'selected' : ''}>Otro</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>Monto ($)</label><input type="number" step="0.01" name="monto" value="${obj ? obj.monto : ''}" required></div>
+                    <div class="form-group"><label>Fecha</label><input type="date" name="fecha" value="${obj ? obj.fecha : new Date().toISOString().split('T')[0]}" required></div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%; background: var(--danger); border-color: var(--danger);">${obj ? 'Guardar Cambios' : 'Registrar Gasto'}</button>
+                </form>
+            `; 
+            App.ui.openSheet(obj ? "Editar Gasto" : "Nuevo Gasto", formHTML, (data) => {
+                if (obj) App.logic.actualizarRegistroGenerico("gastos", id, data, "gastos");
+                else App.logic.guardarNuevoGasto(data); // Se queda la vieja para mantener lógica original si quieres, o usas Generico
+            }); 
+        },
+
+        formEditarPedido(id) {
+            const p = App.state.pedidos.find(x => x.id === id);
+            const formHTML = `
+                <form id="dynamic-form">
+                    <div style="background: #EBF8FF; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem;">
+                        <strong>Nota:</strong> Para cambiar el producto o cliente de un pedido creado, es mejor crear uno nuevo por temas de inventario. Aquí puedes ajustar precios y notas.
+                    </div>
+                    <div class="form-group"><label>Precio Total ($)</label><input type="number" step="0.01" name="total" value="${p.total}" required></div>
+                    <div class="form-group"><label>Anticipo Registrado ($)</label><input type="number" step="0.01" name="anticipo" value="${p.anticipo}" required></div>
+                    <div class="form-group"><label>Fecha de Entrega</label><input type="date" name="fecha_entrega" value="${p.fecha_entrega || ''}"></div>
+                    <div class="form-group"><label>Notas / Instrucciones</label><textarea name="notas" rows="2">${p.notas || ''}</textarea></div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Guardar Cambios</button>
+                </form>
+            `;
+            App.ui.openSheet("Editar Pedido " + id, formHTML, (data) => {
+                App.logic.actualizarRegistroGenerico("pedidos", id, data, "pedidos");
+            });
+        },
+
+        formNuevoPedido() { 
+            const opcionesClientes = App.state.clientes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join(''); 
+            const opcionesProductos = App.state.productos.map(p => `<option value="${p.id}">${p.nombre} ($${p.precio_venta})</option>`).join(''); 
+            const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Cliente</label><select name="cliente_id" required><option value="">-- Elige un cliente --</option>${opcionesClientes}</select></div><div class="form-group"><label>Producto</label><select name="producto_id" required><option value="">-- Elige un producto --</option>${opcionesProductos}</select></div><div class="form-group"><label>Cantidad</label><input type="number" name="cantidad" value="1" min="1" required></div><div class="form-group"><label>Precio Total ($)</label><input type="number" name="total" required></div><div class="form-group"><label>Anticipo ($)</label><input type="number" name="anticipo" value="0" required></div><div class="form-group"><label>Notas</label><input type="text" name="notas" placeholder="Opcional"></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Crear Pedido</button></form>`; 
+            App.ui.openSheet("Nuevo Pedido", formHTML, (data) => App.logic.guardarNuevoPedido(data)); 
+        },
+
+        formCobrar(pedidoId, clienteId, saldoPendiente) { 
+            const formHTML = `<form id="dynamic-form"><input type="hidden" name="pedido_id" value="${pedidoId}"><input type="hidden" name="cliente_id" value="${clienteId}"><div class="form-group"><label>Abonar ($)</label><input type="number" name="monto" value="${saldoPendiente}" max="${saldoPendiente}" required></div><div class="form-group"><label>Nota/Método</label><input type="text" name="nota" value="Efectivo" required></div><button type="submit" class="btn btn-primary" style="width: 100%;">Confirmar Pago</button></form>`; 
+            App.ui.openSheet(`Pago ${pedidoId}`, formHTML, (data) => App.logic.guardarAbono(data)); 
+        },
+        
+        formProducto() { 
+            const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Nombre del Producto</label><input type="text" name="nombre" required></div><div class="form-group"><label>Categoría</label><select name="categoria"><option value="fabricacion">Fabricación</option><option value="reventa">Reventa</option></select></div><div class="form-group"><label>Precio de Venta ($)</label><input type="number" name="precio_venta" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Guardar Producto</button></form>`; 
+            App.ui.openSheet("Nuevo Producto", formHTML, (data) => App.logic.guardarNuevoProducto(data)); 
+        },
+
+        formCompra() { 
+            const opcProv = App.state.proveedores.map(p => `<option value="${p.id}">${p.nombre}</option>`).join(''); 
+            const opcMat = App.state.inventario.map(m => `<option value="${m.id}">${m.nombre} (Stock actual: ${m.stock_actual})</option>`).join(''); 
+            const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Proveedor</label><select name="proveedor_id" required><option value="">-- Elige Proveedor --</option>${opcProv}</select></div><div class="form-group"><label>Material a sumar al stock</label><select name="material_id" required><option value="">-- Elige Material --</option>${opcMat}</select></div><div class="form-group"><label>Cantidad Comprada</label><input type="number" name="cantidad" step="0.1" required></div><div class="form-group"><label>Fecha</label><input type="date" name="fecha" value="${new Date().toISOString().split('T')[0]}" required></div><div class="form-group"><label>Costo Total ($)</label><input type="number" name="total" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; background: var(--success); border-color: var(--success);">Sumar Stock</button></form>`; 
+            App.ui.openSheet("Comprar Material", formHTML, (data) => App.logic.guardarNuevaCompra(data)); 
+        },
+
         modalEditarOrden(ordenId) { 
             const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); 
             const opcionesArtesanos = App.state.artesanos.map(a => `<option value="${a.id}" ${orden.artesano_id === a.id ? 'selected' : ''}>${a.nombre}</option>`).join(''); 
-            const formHTML = `
-                <form id="dynamic-form">
-                    <div class="form-group"><label>Artesano Asignado</label><select name="artesano_id"><option value="">-- Sin asignar --</option>${opcionesArtesanos}</select></div>
-                    <div class="form-group">
-                        <label>Estado del Trabajo</label>
-                        <select name="estado">
-                            <option value="pendiente" ${orden.estado === 'pendiente' ? 'selected' : ''}>Pendiente de tejer</option>
-                            <option value="en_proceso" ${orden.estado === 'en_proceso' ? 'selected' : ''}>En Proceso (Tejiendo)</option>
-                            <option value="listo" ${orden.estado === 'listo' ? 'selected' : ''}>¡Terminada! (Pasar a cierre)</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Guardar Cambios</button>
-                </form>
-            `; 
+            const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Artesano Asignado</label><select name="artesano_id"><option value="">-- Sin asignar --</option>${opcionesArtesanos}</select></div><div class="form-group"><label>Estado del Trabajo</label><select name="estado"><option value="pendiente" ${orden.estado === 'pendiente' ? 'selected' : ''}>Pendiente de tejer</option><option value="en_proceso" ${orden.estado === 'en_proceso' ? 'selected' : ''}>En Proceso (Tejiendo)</option><option value="listo" ${orden.estado === 'listo' ? 'selected' : ''}>¡Terminada! (Pasar a cierre)</option></select></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Guardar Cambios</button></form>`; 
             App.ui.openSheet(`Actualizar Orden`, formHTML, (datos) => App.logic.procesarCambioOrden(ordenId, datos)); 
         },
 
@@ -614,7 +792,7 @@ const App = {
                     <div class="form-group">
                         <label>Consumo de Hilo/Material Reales</label>
                         <input type="number" step="0.1" name="consumo_real" value="${consumoTeorico}" required>
-                        <small style="color: var(--text-muted);">El sistema esperaba gastar ${consumoTeorico}. Puedes ajustar si gastó más o menos.</small>
+                        <small style="color: var(--text-muted);">Ajusta si se gastó más o menos.</small>
                     </div>
                     <div class="form-group">
                         <label>Monto a pagar al Artesano ($)</label>
@@ -626,37 +804,21 @@ const App = {
             App.ui.openSheet("Cerrar Orden", formHTML, (datos) => App.logic.cerrarOrdenProduccion(datos));
         },
 
-        // --- DIRECTORIOS Y TABLAS ---
-        reparaciones() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Módulo de Reparaciones</h3>`; if (App.state.reparaciones.length === 0) html += `<p style="color: var(--text-muted);">No hay reparaciones registradas.</p>`; else { [...App.state.reparaciones].reverse().forEach(r => { const c = App.state.clientes.find(cli => cli.id === r.cliente_id); html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><strong>${r.id} - ${c ? c.nombre : 'Cliente'}</strong><span class="badge ${r.estado}">${r.estado.toUpperCase()}</span></div><p style="color: var(--primary); font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">${r.descripcion}</p><p style="color: var(--text-muted); font-size: 0.85rem;">Precio: $${r.precio} | Anticipo: $${r.anticipo}</p></div>`; }); } return html += `</div><button class="fab" onclick="App.views.formNuevaReparacion()">+</button>`; },
-        compras() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Historial de Compras</h3>`; if (App.state.compras.length === 0) html += `<p style="color: var(--text-muted);">No hay compras registradas.</p>`; else { [...App.state.compras].reverse().forEach(c => { const p = App.state.proveedores.find(prv => prv.id === c.proveedor_id); html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none;"><div style="display: flex; justify-content: space-between; margin-bottom: 5px;"><strong>${c.id}</strong><span style="color: var(--danger); font-weight: bold;">$${c.total}</span></div><p style="color: var(--text-muted); font-size: 0.85rem;">Proveedor: ${p ? p.nombre : 'General'} | Fecha: ${c.fecha}</p></div>`; }); } return html += `</div><button class="fab" onclick="App.views.formNuevaCompra()">+</button>`; },
-        inventario() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Stock Actual</h3><table style="width:100%; border-collapse: collapse; font-size: 0.9rem;"><tr style="border-bottom: 2px solid var(--border);"><th style="text-align:left; padding:8px;">Material</th><th style="padding:8px;">Stock</th></tr>`; App.state.inventario.forEach(i => { html += `<tr style="border-bottom: 1px solid var(--border);"><td style="padding: 10px 5px;">${i.nombre}</td><td style="padding: 10px 5px; text-align:center; font-weight:bold; color:${i.stock_actual < 5 ? 'var(--danger)' : 'var(--text-main)'}">${i.stock_actual}</td></tr>`; }); html += `</table></div>`; return html; },
-        productos() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Catálogo de Productos</h3>`; if (App.state.productos.length === 0) { html += `<p style="color: var(--text-muted);">No hay productos registrados.</p>`; } else { App.state.productos.forEach(p => { html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none; padding: 12px;"><div style="display: flex; justify-content: space-between;"><strong>${p.nombre}</strong><span style="color: var(--primary); font-weight: bold;">$${p.precio_venta}</span></div><small style="color: var(--text-muted);">Cat: ${p.categoria || 'General'}</small></div>`; }); } html += `</div><button class="fab" onclick="App.views.formNuevoProducto()">+</button>`; return html; },
-        clientes() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Directorio de Clientes</h3>`; if (App.state.clientes.length === 0) { html += `<p style="color: var(--text-muted);">No hay clientes registrados.</p>`; } else { App.state.clientes.forEach(c => { html += `<div class="card" style="border: 1px solid var(--border); padding: 10px; margin-bottom: 8px;"><strong>${c.nombre}</strong><br><small style="color: var(--text-muted);">📞 ${c.telefono || 'Sin teléfono'} | 📍 ${c.direccion || 'Sin dirección'}</small></div>`; }); } html += `</div><button class="fab" onclick="App.views.formNuevoCliente()">+</button>`; return html; },
-        
-        // --- FORMULARIOS ---
-        formCobrar(pedidoId, clienteId, saldoPendiente) { const formHTML = `<form id="dynamic-form"><input type="hidden" name="pedido_id" value="${pedidoId}"><input type="hidden" name="cliente_id" value="${clienteId}"><div class="form-group"><label>Abonar ($)</label><input type="number" name="monto" value="${saldoPendiente}" max="${saldoPendiente}" required></div><button type="submit" class="btn btn-primary" style="width: 100%;">Confirmar Pago</button></form>`; App.ui.openSheet(`Pago ${pedidoId}`, formHTML, (data) => App.logic.guardarAbono(data)); },
-        formNuevoPedido() { const opcionesClientes = App.state.clientes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join(''); const opcionesProductos = App.state.productos.map(p => `<option value="${p.id}">${p.nombre} ($${p.precio_venta})</option>`).join(''); const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Cliente</label><select name="cliente_id" required><option value="">-- Elige un cliente --</option>${opcionesClientes}</select></div><div class="form-group"><label>Producto</label><select name="producto_id" required><option value="">-- Elige un producto --</option>${opcionesProductos}</select></div><div class="form-group"><label>Cantidad</label><input type="number" name="cantidad" value="1" min="1" required></div><div class="form-group"><label>Precio Total ($)</label><input type="number" name="total" required></div><div class="form-group"><label>Anticipo ($)</label><input type="number" name="anticipo" value="0" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Crear Pedido</button></form>`; App.ui.openSheet("Nuevo Pedido", formHTML, (data) => App.logic.guardarNuevoPedido(data)); },
-        formNuevoCliente() { const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Nombre</label><input type="text" name="nombre" required></div><div class="form-group"><label>Teléfono</label><input type="tel" name="telefono" placeholder="Ej. 9991234567" required></div><div class="form-group"><label>Dirección</label><input type="text" name="direccion"></div><button type="submit" class="btn btn-primary" style="width: 100%;">Guardar Cliente</button></form>`; App.ui.openSheet("Nuevo Cliente", formHTML, (data) => App.logic.guardarNuevoCliente(data)); },
-        formNuevoProducto() { const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Nombre del Producto</label><input type="text" name="nombre" required></div><div class="form-group"><label>Categoría</label><select name="categoria"><option value="fabricacion">Fabricación</option><option value="reventa">Reventa</option></select></div><div class="form-group"><label>Precio de Venta ($)</label><input type="number" name="precio_venta" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Guardar Producto</button></form>`; App.ui.openSheet("Nuevo Producto", formHTML, (data) => App.logic.guardarNuevoProducto(data)); },
-        formNuevoGasto() { const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Descripción del Gasto</label><input type="text" name="descripcion" required></div><div class="form-group"><label>Categoría</label><select name="categoria" required><option value="materiales">Materiales</option><option value="servicios">Servicios</option><option value="herramientas">Herramientas</option><option value="otro">Otro</option></select></div><div class="form-group"><label>Monto ($)</label><input type="number" name="monto" required></div><div class="form-group"><label>Fecha</label><input type="date" name="fecha" value="${new Date().toISOString().split('T')[0]}" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; background: var(--danger); border-color: var(--danger);">Registrar Gasto</button></form>`; App.ui.openSheet("Nuevo Gasto", formHTML, (data) => App.logic.guardarNuevoGasto(data)); },
-        formNuevaReparacion() { const opcionesClientes = App.state.clientes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join(''); const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Cliente</label><select name="cliente_id" required><option value="">-- Elige un cliente --</option>${opcionesClientes}</select></div><div class="form-group"><label>Descripción del Daño</label><input type="text" name="descripcion" required placeholder="Ej. Cambio de brazos"></div><div class="form-group"><label>Precio Acordado ($)</label><input type="number" name="precio" required></div><div class="form-group"><label>Anticipo Pagado ($)</label><input type="number" name="anticipo" value="0" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Registrar Reparación</button></form>`; App.ui.openSheet("Nueva Reparación", formHTML, (data) => App.logic.guardarNuevaReparacion(data)); },
-        formNuevaCompra() { const opcProv = App.state.proveedores.map(p => `<option value="${p.id}">${p.nombre}</option>`).join(''); const opcMat = App.state.inventario.map(m => `<option value="${m.id}">${m.nombre} (Stock actual: ${m.stock_actual})</option>`).join(''); const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Proveedor</label><select name="proveedor_id" required><option value="">-- Elige Proveedor --</option>${opcProv}</select></div><div class="form-group"><label>Material a sumar al stock</label><select name="material_id" required><option value="">-- Elige Material --</option>${opcMat}</select></div><div class="form-group"><label>Cantidad Comprada</label><input type="number" name="cantidad" step="0.1" required></div><div class="form-group"><label>Costo Total ($)</label><input type="number" name="total" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; background: var(--success); border-color: var(--success);">Sumar Stock</button></form>`; App.ui.openSheet("Comprar Material", formHTML, (data) => App.logic.guardarNuevaCompra(data)); },
-        
         mas() { 
             document.getElementById('bottom-nav').style.display = 'flex'; 
             return `
                 <div class="grid-2">
                     <div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('clientes')"><div class="label" style="margin-top:0;">👥 Clientes</div></div>
+                    <div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('proveedores')"><div class="label" style="margin-top:0;">🚚 Proveedores</div></div>
+                    <div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('artesanos')"><div class="label" style="margin-top:0;">🧑‍🎨 Artesanos</div></div>
                     <div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('productos')"><div class="label" style="margin-top:0;">🧶 Productos</div></div>
-                    <div class="card stat-card" style="cursor:pointer; background: #FFF5F5;" onclick="App.router.navigate('nomina')"><div class="label" style="margin-top:0; color:#E53E3E;">🧑‍🎨 Nómina (Pago a Artesanos)</div></div>
                     <div class="card stat-card" style="cursor:pointer; background: #EBF8FF;" onclick="App.router.navigate('compras')"><div class="label" style="margin-top:0; color:#3182CE;">📦 Compras</div></div>
-                    <div class="card stat-card" style="cursor:pointer; background: #FAF5FF;" onclick="App.router.navigate('reparaciones')"><div class="label" style="margin-top:0; color:#6B46C1;">🪡 Reparaciones</div></div>
                     <div class="card stat-card" style="cursor:pointer; background: #EDF2F7; grid-column: span 2;" onclick="App.router.navigate('configuracion')"><div class="label" style="margin-top:0; color: #4A5568;">⚙️ Configuración y Respaldos</div></div>
                 </div>
             `; 
         }
     },
-    router: { 
+	router: { 
         init() { 
             window.addEventListener('hashchange', () => this.handleRoute()); 
             this.handleRoute(); 
