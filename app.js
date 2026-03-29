@@ -1,9 +1,9 @@
 /**
- * DESCANSO MAYA ERP - Motor Principal v30
- * Múltiples Artesanos por Hamaca, Tarifas Dinámicas y Multi-Recetas
+ * DESCANSO MAYA ERP - Motor Principal v31
+ * Multi-Recetas (Cuerpo/Brazos), Hasta 5 insumos, y Costos Totales de Mano de Obra
  */
 
-// Funciones globales para que los formularios dinámicos funcionen sin romper el sistema
+// Funciones globales para cálculos dinámicos de formularios
 window.cargarTarifas = function(artesanoId) {
     const tarifas = App.state.tarifas_artesano.filter(t => t.artesano_id === artesanoId);
     const select = document.getElementById('select-tarifas');
@@ -87,7 +87,7 @@ const App = {
 
         descargarRespaldo() {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(App.state, null, 2));
-            const dlAnchorElem = document.createElement('a'); dlAnchorElem.setAttribute("href", dataStr); dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`); dlAnchorElem.click(); App.ui.toast("Respaldo descargado");
+            const dlAnchorElem = document.createElement('a'); dlAnchorElem.setAttribute("href", dataStr); dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`); dlAnchorElem.click(); App.ui.toast("Respaldo descargado exitosamente");
         },
 
         async eliminarRegistroGenerico(nombreHoja, idFila, nombreEstadoApp) {
@@ -99,14 +99,17 @@ const App = {
         async eliminarPedido(pedidoId) {
             if(!confirm("⚠️ ¿Eliminar este pedido? Se regresará el material apartado al inventario.")) return;
             App.ui.showLoader("Eliminando y restaurando inventario...");
-            const pedido = App.state.pedidos.find(p => p.id === pedidoId); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === pedidoId); const orden = App.state.ordenes_produccion.find(o => detalle && o.pedido_detalle_id === detalle.id);
+            const pedido = App.state.pedidos.find(p => p.id === pedidoId);
+            const detalle = App.state.pedido_detalle.find(d => d.pedido_id === pedidoId);
+            const orden = App.state.ordenes_produccion.find(o => detalle && o.pedido_detalle_id === detalle.id);
 
+            // Regresar inventario de los 5 posibles materiales
             if(detalle) {
                 const producto = App.state.productos.find(p => p.id === detalle.producto_id);
                 if(producto && (!orden || orden.estado !== 'listo')) {
-                    for(let i=1; i<=3; i++) {
-                        const matId = producto[`mat_${i}`] || (i===1 ? producto.material_hilo_id : null);
-                        const cant = parseFloat(producto[`cant_${i}`] || (i===1 ? producto.tubos_hilo : 0));
+                    for(let i=1; i<=5; i++) {
+                        const matId = producto[`mat_${i}`];
+                        const cant = parseFloat(producto[`cant_${i}`] || 0);
                         if(matId && cant > 0) {
                             const material = App.state.inventario.find(m => m.id === matId);
                             if(material) {
@@ -119,8 +122,13 @@ const App = {
                 }
             }
 
-            await App.api.fetch("eliminar_fila", { nombreHoja: "pedidos", idFila: pedidoId }); if(detalle) await App.api.fetch("eliminar_fila", { nombreHoja: "pedido_detalle", idFila: detalle.id }); if(orden) await App.api.fetch("eliminar_fila", { nombreHoja: "ordenes_produccion", idFila: orden.id });
-            App.state.pedidos = App.state.pedidos.filter(p => p.id !== pedidoId); if(detalle) App.state.pedido_detalle = App.state.pedido_detalle.filter(d => d.id !== detalle.id); if(orden) App.state.ordenes_produccion = App.state.ordenes_produccion.filter(o => o.id !== orden.id);
+            await App.api.fetch("eliminar_fila", { nombreHoja: "pedidos", idFila: pedidoId });
+            if(detalle) await App.api.fetch("eliminar_fila", { nombreHoja: "pedido_detalle", idFila: detalle.id });
+            if(orden) await App.api.fetch("eliminar_fila", { nombreHoja: "ordenes_produccion", idFila: orden.id });
+
+            App.state.pedidos = App.state.pedidos.filter(p => p.id !== pedidoId);
+            if(detalle) App.state.pedido_detalle = App.state.pedido_detalle.filter(d => d.id !== detalle.id);
+            if(orden) App.state.ordenes_produccion = App.state.ordenes_produccion.filter(o => o.id !== orden.id);
             App.ui.hideLoader(); App.ui.toast("Pedido eliminado y stock restaurado"); App.router.handleRoute();
         },
 
@@ -147,10 +155,11 @@ const App = {
             const producto = App.state.productos.find(p => p.id === datosFormulario.producto_id);
             const promesaMateriales = [];
             
+            // Descontar hasta 5 insumos de la receta
             if(producto) {
-                for(let i=1; i<=3; i++) {
-                    const matId = producto[`mat_${i}`] || (i===1 ? producto.material_hilo_id : null);
-                    const cantTeorica = parseFloat(producto[`cant_${i}`] || (i===1 ? producto.tubos_hilo : 0));
+                for(let i=1; i<=5; i++) {
+                    const matId = producto[`mat_${i}`];
+                    const cantTeorica = parseFloat(producto[`cant_${i}`] || 0);
                     if(matId && cantTeorica > 0) {
                         const material = App.state.inventario.find(m => m.id === matId);
                         if(material) {
@@ -170,28 +179,15 @@ const App = {
             } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
         },
 
-        // --- SISTEMA MULTI-ARTESANOS ---
         async guardarTrabajoOrden(ordenId, data) {
-            App.ui.showLoader("Registrando trabajo en la hamaca...");
+            App.ui.showLoader("Asignando trabajo...");
             const sanitizedTaskName = (data.tarea_nombre || "Trabajo").replace(/[^a-zA-Z0-9_ \-]/g, "");
-            const pagoObj = {
-                id: "PAGO-" + Date.now() + "-" + sanitizedTaskName,
-                artesano_id: data.artesano_id,
-                orden_id: ordenId,
-                monto_unitario: parseFloat(data.tarea_val),
-                total: parseFloat(data.total),
-                estado: "pendiente",
-                fecha: new Date().toISOString()
-            };
+            const pagoObj = { id: "PAGO-" + Date.now() + "-" + sanitizedTaskName, artesano_id: data.artesano_id, orden_id: ordenId, monto_unitario: parseFloat(data.tarea_val), total: parseFloat(data.total), estado: "pendiente", fecha: new Date().toISOString() };
             const res = await App.api.fetch("guardar_fila", { nombreHoja: "pago_artesanos", datos: pagoObj });
             App.ui.hideLoader();
             if(res.status === "success") {
-                App.state.pago_artesanos.push(pagoObj);
-                App.ui.toast("Trabajo asignado correctamente.");
-                App.views.modalEditarOrden(ordenId); // Vuelve a abrir la ventana de la orden automáticamente
-            } else {
-                App.ui.toast("Error al guardar trabajo."); App.router.handleRoute();
-            }
+                App.state.pago_artesanos.push(pagoObj); App.ui.toast("Trabajo asignado correctamente."); App.views.modalEditarOrden(ordenId); 
+            } else { App.ui.toast("Error al guardar trabajo."); App.router.handleRoute(); }
         },
 
         async cerrarOrdenProduccion(datosFormulario) {
@@ -199,7 +195,8 @@ const App = {
             const orden = App.state.ordenes_produccion.find(o => o.id === ordenId);
             await App.api.fetch("actualizar_fila", { nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: { estado: 'listo' } }); orden.estado = 'listo';
             
-            for(let i=1; i<=3; i++) {
+            // Ajustar los 5 posibles materiales
+            for(let i=1; i<=5; i++) {
                 const matId = datosFormulario[`mat_${i}_id`];
                 const consumoTeorico = parseFloat(datosFormulario[`mat_${i}_teorico`]);
                 const consumoReal = parseFloat(datosFormulario[`mat_${i}_real`]);
@@ -240,9 +237,9 @@ const App = {
                     await App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } }); material.stock_actual = nuevoStock; 
                     
                     if (material.tipo === 'reventa') {
-                        const existeProd = App.state.productos.find(p => p.mat_1 === material.id || p.material_hilo_id === material.id);
+                        const existeProd = App.state.productos.find(p => p.mat_1 === material.id);
                         if(!existeProd) {
-                            const nuevoProd = { id: "PROD-" + Date.now(), nombre: material.nombre + " (Reventa)", categoria: "reventa", clasificacion: "Reventa", precio_venta: 0, mat_1: material.id, cant_1: 1, activo: "TRUE", fecha_creacion: new Date().toISOString() };
+                            const nuevoProd = { id: "PROD-" + Date.now(), nombre: material.nombre + " (Reventa)", categoria: "reventa", clasificacion: "Reventa", precio_venta: 0, mat_1: material.id, cant_1: 1, uso_1: "Completo", activo: "TRUE", fecha_creacion: new Date().toISOString() };
                             await App.api.fetch("guardar_fila", { nombreHoja: "productos", datos: nuevoProd }); App.state.productos.push(nuevoProd);
                             App.ui.toast("Se auto-generó el producto para reventa.");
                         }
@@ -285,25 +282,38 @@ const App = {
         formProducto(id = null) { 
             const obj = id ? App.state.productos.find(p => p.id === id) : null; 
             const generarSelect = (name, val) => `<select name="${name}"><option value="">-- Ninguno --</option>` + App.state.inventario.map(m => `<option value="${m.id}" ${val === m.id ? 'selected' : ''}>${m.nombre} (${m.unidad})</option>`).join('') + `</select>`;
+            const generarUso = (name, val) => `<select name="${name}"><option value="">--</option><option value="cuerpo" ${val==='cuerpo'?'selected':''}>Cuerpo</option><option value="brazos" ${val==='brazos'?'selected':''}>Brazos</option><option value="adicional" ${val==='adicional'?'selected':''}>Otro</option></select>`;
             const clasif = obj ? obj.clasificacion : '';
-            const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Nombre del Producto a Vender</label><input type="text" name="nombre" value="${obj ? obj.nombre : ''}" required></div><div class="grid-2"><div class="form-group"><label>Categoría</label><select name="categoria"><option value="fabricacion" ${obj && obj.categoria === 'fabricacion' ? 'selected' : ''}>Fabricación</option><option value="reventa" ${obj && obj.categoria === 'reventa' ? 'selected' : ''}>Reventa</option></select></div><div class="form-group"><label>Clasificación</label><select name="clasificacion"><option value="Unicolor" ${clasif==='Unicolor'?'selected':''}>Unicolor</option><option value="Combinada" ${clasif==='Combinada'?'selected':''}>Combinada</option><option value="Especial" ${clasif==='Especial'?'selected':''}>Especial</option><option value="Reventa" ${clasif==='Reventa'?'selected':''}>Reventa</option><option value="Otro" ${clasif==='Otro'?'selected':''}>Otro</option></select></div></div><div class="form-group"><label>Precio de Venta ($)</label><input type="number" name="precio_venta" value="${obj ? obj.precio_venta : ''}" required></div><div style="background: #FFFBEB; padding: 10px; border-radius: 8px; margin-bottom: 15px;"><strong style="color: #D69E2E; font-size: 0.9rem;">📦 Receta de Inventario</strong><br><small style="color: var(--text-muted);">Puedes descontar hasta 3 insumos al vender.</small><div class="grid-2" style="margin-top:10px;"><div class="form-group"><label>Insumo 1</label>${generarSelect('mat_1', obj ? (obj.mat_1 || obj.material_hilo_id) : '')}</div><div class="form-group"><label>Cant 1</label><input type="number" step="0.1" name="cant_1" value="${obj ? (obj.cant_1 || obj.tubos_hilo || '0') : '0'}"></div></div><div class="grid-2"><div class="form-group"><label>Insumo 2</label>${generarSelect('mat_2', obj ? obj.mat_2 : '')}</div><div class="form-group"><label>Cant 2</label><input type="number" step="0.1" name="cant_2" value="${obj ? obj.cant_2 : '0'}"></div></div><div class="grid-2"><div class="form-group"><label>Insumo 3</label>${generarSelect('mat_3', obj ? obj.mat_3 : '')}</div><div class="form-group"><label>Cant 3</label><input type="number" step="0.1" name="cant_3" value="${obj ? obj.cant_3 : '0'}"></div></div></div><button type="submit" class="btn btn-primary" style="width: 100%;">${obj ? 'Guardar Cambios' : 'Crear Producto'}</button></form>`; 
+            
+            let recetaHTML = '';
+            for(let i=1; i<=5; i++) {
+                recetaHTML += `
+                    <div class="grid-3" style="margin-bottom: 5px;">
+                        <div class="form-group" style="margin:0;"><label>Insumo ${i}</label>${generarSelect(`mat_${i}`, obj ? obj[`mat_${i}`] : '')}</div>
+                        <div class="form-group" style="margin:0;"><label>Cant.</label><input type="number" step="0.1" name="cant_${i}" value="${obj ? obj[`cant_${i}`] || '' : ''}"></div>
+                        <div class="form-group" style="margin:0;"><label>Uso</label>${generarUso(`uso_${i}`, obj ? obj[`uso_${i}`] : '')}</div>
+                    </div>
+                `;
+            }
+
+            const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Nombre del Producto a Vender</label><input type="text" name="nombre" value="${obj ? obj.nombre : ''}" required></div><div class="grid-2"><div class="form-group"><label>Categoría</label><select name="categoria"><option value="fabricacion" ${obj && obj.categoria === 'fabricacion' ? 'selected' : ''}>Fabricación</option><option value="reventa" ${obj && obj.categoria === 'reventa' ? 'selected' : ''}>Reventa</option></select></div><div class="form-group"><label>Clasificación</label><select name="clasificacion"><option value="Unicolor" ${clasif==='Unicolor'?'selected':''}>Unicolor</option><option value="Combinada" ${clasif==='Combinada'?'selected':''}>Combinada</option><option value="Especial" ${clasif==='Especial'?'selected':''}>Especial</option><option value="Reventa" ${clasif==='Reventa'?'selected':''}>Reventa</option><option value="Otro" ${clasif==='Otro'?'selected':''}>Otro</option></select></div></div><div class="form-group"><label>Precio de Venta ($)</label><input type="number" name="precio_venta" value="${obj ? obj.precio_venta : ''}" required></div><div style="background: #FFFBEB; padding: 10px; border-radius: 8px; margin-bottom: 15px;"><strong style="color: #D69E2E; font-size: 0.9rem;">📦 Receta de Inventario</strong><br><small style="color: var(--text-muted);">Puedes descontar hasta 5 insumos al vender (Ej. Hilo Cuerpo, Hilo Brazos).</small><div style="margin-top:10px;">${recetaHTML}</div></div><button type="submit" class="btn btn-primary" style="width: 100%;">${obj ? 'Guardar Cambios' : 'Crear Producto'}</button></form>`; 
             App.ui.openSheet(obj ? "Editar Producto" : "Nuevo Producto", formHTML, (data) => { if (obj) App.logic.actualizarRegistroGenerico("productos", id, data, "productos"); else App.logic.guardarNuevoGenerico("productos", data, "PROD", "productos"); }); 
         },
 
-        formTarifa(artesanoId) { const formHTML = `<form id="dynamic-form"><input type="hidden" name="artesano_id" value="${artesanoId}"><div class="form-group"><label>Tarea a Realizar (Ej. Cuerpo, Brazos, Especial)</label><input type="text" name="clasificacion" required placeholder="Nombre de la tarea"></div><div class="form-group"><label>Monto a Pagar ($)</label><input type="number" step="0.01" name="monto" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Guardar Tarea</button></form>`; App.ui.openSheet("Nueva Tarea para Artesano", formHTML, (data) => App.logic.guardarNuevoGenerico("tarifas_artesano", data, "TAR", "tarifas_artesano")); },
+        formTarifa(artesanoId) { const formHTML = `<form id="dynamic-form"><input type="hidden" name="artesano_id" value="${artesanoId}"><div class="form-group"><label>Tarea a Realizar (Ej. Tejer Cuerpo por hilo, Poner Brazos)</label><input type="text" name="clasificacion" required placeholder="Nombre de la tarea"></div><div class="form-group"><label>Monto a Pagar ($)</label><input type="number" step="0.01" name="monto" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Guardar Tarea</button></form>`; App.ui.openSheet("Nueva Tarea para Artesano", formHTML, (data) => App.logic.guardarNuevoGenerico("tarifas_artesano", data, "TAR", "tarifas_artesano")); },
         formEditarPedido(id) { const p = App.state.pedidos.find(x => x.id === id); const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Precio Total ($)</label><input type="number" step="0.01" name="total" value="${p.total}" required></div><div class="form-group"><label>Anticipo Registrado ($)</label><input type="number" step="0.01" name="anticipo" value="${p.anticipo}" required></div><div class="form-group"><label>Fecha de Entrega</label><input type="date" name="fecha_entrega" value="${p.fecha_entrega || ''}"></div><div class="form-group"><label>Notas / Instrucciones</label><textarea name="notas" rows="2">${p.notas || ''}</textarea></div><button type="submit" class="btn btn-primary" style="width: 100%;">Guardar Cambios</button></form>`; App.ui.openSheet("Editar Pedido", formHTML, (data) => { App.logic.actualizarRegistroGenerico("pedidos", id, data, "pedidos"); }); },
         formCliente(id = null) { const obj = id ? App.state.clientes.find(c => c.id === id) : null; const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Nombre</label><input type="text" name="nombre" value="${obj ? obj.nombre : ''}" required></div><div class="form-group"><label>Teléfono</label><input type="tel" name="telefono" value="${obj ? obj.telefono : ''}"></div><div class="form-group"><label>Dirección</label><input type="text" name="direccion" value="${obj ? obj.direccion : ''}"></div><button type="submit" class="btn btn-primary" style="width: 100%;">${obj ? 'Guardar Cambios' : 'Crear Cliente'}</button></form>`; App.ui.openSheet(obj ? "Editar Cliente" : "Nuevo Cliente", formHTML, (data) => { if (obj) App.logic.actualizarRegistroGenerico("clientes", id, data, "clientes"); else App.logic.guardarNuevoGenerico("clientes", data, "CLI", "clientes"); }); },
         formProveedor(id = null) { const obj = id ? App.state.proveedores.find(p => p.id === id) : null; const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Nombre del Proveedor</label><input type="text" name="nombre" value="${obj ? obj.nombre : ''}" required></div><div class="form-group"><label>Teléfono</label><input type="tel" name="telefono" value="${obj ? obj.telefono : ''}"></div><button type="submit" class="btn btn-primary" style="width: 100%;">${obj ? 'Guardar Cambios' : 'Crear Proveedor'}</button></form>`; App.ui.openSheet(obj ? "Editar Proveedor" : "Nuevo Proveedor", formHTML, (data) => { if (obj) App.logic.actualizarRegistroGenerico("proveedores", id, data, "proveedores"); else App.logic.guardarNuevoGenerico("proveedores", data, "PRV", "proveedores"); }); },
         formArtesano(id = null) { const obj = id ? App.state.artesanos.find(a => a.id === id) : null; const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Nombre del Artesano</label><input type="text" name="nombre" value="${obj ? obj.nombre : ''}" required></div><div class="form-group"><label>Teléfono</label><input type="tel" name="telefono" value="${obj ? obj.telefono : ''}"></div><button type="submit" class="btn btn-primary" style="width: 100%;">${obj ? 'Guardar Cambios' : 'Crear Artesano'}</button></form>`; App.ui.openSheet(obj ? "Editar Artesano" : "Nuevo Artesano", formHTML, (data) => { if (obj) App.logic.actualizarRegistroGenerico("artesanos", id, data, "artesanos"); else App.logic.guardarNuevoGenerico("artesanos", data, "ART", "artesanos"); }); },
         formGasto(id = null) { const obj = id ? App.state.gastos.find(g => g.id === id) : null; const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Descripción del Gasto</label><input type="text" name="descripcion" value="${obj ? obj.descripcion : ''}" required></div><div class="form-group"><label>Categoría</label><select name="categoria" required><option value="materiales" ${obj && obj.categoria === 'materiales' ? 'selected' : ''}>Materiales</option><option value="servicios" ${obj && obj.categoria === 'servicios' ? 'selected' : ''}>Servicios</option><option value="nomina" ${obj && obj.categoria === 'nomina' ? 'selected' : ''}>Nómina</option><option value="otro" ${obj && obj.categoria === 'otro' ? 'selected' : ''}>Otro</option></select></div><div class="form-group"><label>Monto ($)</label><input type="number" step="0.01" name="monto" value="${obj ? obj.monto : ''}" required></div><div class="form-group"><label>Fecha</label><input type="date" name="fecha" value="${obj ? obj.fecha : new Date().toISOString().split('T')[0]}" required></div><button type="submit" class="btn btn-primary" style="width: 100%; background: var(--danger); border-color: var(--danger);">${obj ? 'Guardar Cambios' : 'Registrar Gasto'}</button></form>`; App.ui.openSheet(obj ? "Editar Gasto" : "Nuevo Gasto", formHTML, (data) => { if (obj) App.logic.actualizarRegistroGenerico("gastos", id, data, "gastos"); else App.logic.guardarNuevoGenerico("gastos", data, "GAS", "gastos"); }); },
-        formNuevoPedido() { const opcionesClientes = App.state.clientes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join(''); const opcionesProductos = App.state.productos.map(p => `<option value="${p.id}">${p.nombre} ($${p.precio_venta})</option>`).join(''); const formHTML = `<form id="dynamic-form"><div style="background: #EBF8FF; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8rem;"><strong>Aviso:</strong> Al crear este pedido, el inventario se descontará automáticamente de tu bodega.</div><div class="form-group"><label>Cliente</label><select name="cliente_id" required><option value="">-- Elige un cliente --</option>${opcionesClientes}</select></div><div class="form-group"><label>Producto</label><select name="producto_id" required><option value="">-- Elige un producto --</option>${opcionesProductos}</select></div><div class="form-group"><label>Cantidad</label><input type="number" name="cantidad" value="1" min="1" required></div><div class="form-group"><label>Precio Total ($)</label><input type="number" name="total" required></div><div class="form-group"><label>Anticipo ($)</label><input type="number" name="anticipo" value="0" required></div><div class="form-group"><label>Notas</label><input type="text" name="notas" placeholder="Opcional"></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Crear Pedido</button></form>`; App.ui.openSheet("Nuevo Pedido", formHTML, (data) => App.logic.guardarNuevoPedido(data)); },
+        formNuevoPedido() { const opcionesClientes = App.state.clientes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join(''); const opcionesProductos = App.state.productos.map(p => `<option value="${p.id}">${p.nombre} ($${p.precio_venta})</option>`).join(''); const formHTML = `<form id="dynamic-form"><div style="background: #EBF8FF; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8rem;"><strong>Aviso:</strong> Al crear este pedido, el inventario se descontará de tu bodega.</div><div class="form-group"><label>Cliente</label><select name="cliente_id" required><option value="">-- Elige un cliente --</option>${opcionesClientes}</select></div><div class="form-group"><label>Producto</label><select name="producto_id" required><option value="">-- Elige un producto --</option>${opcionesProductos}</select></div><div class="form-group"><label>Cantidad</label><input type="number" name="cantidad" value="1" min="1" required></div><div class="form-group"><label>Precio Total ($)</label><input type="number" name="total" required></div><div class="form-group"><label>Anticipo ($)</label><input type="number" name="anticipo" value="0" required></div><div class="form-group"><label>Notas</label><input type="text" name="notas" placeholder="Opcional"></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Crear Pedido</button></form>`; App.ui.openSheet("Nuevo Pedido", formHTML, (data) => App.logic.guardarNuevoPedido(data)); },
         formCobrar(pedidoId, clienteId, saldoPendiente) { const formHTML = `<form id="dynamic-form"><input type="hidden" name="pedido_id" value="${pedidoId}"><input type="hidden" name="cliente_id" value="${clienteId}"><div class="form-group"><label>Abonar ($)</label><input type="number" name="monto" value="${saldoPendiente}" max="${saldoPendiente}" required></div><div class="form-group"><label>Nota/Método</label><input type="text" name="nota" value="Efectivo" required></div><button type="submit" class="btn btn-primary" style="width: 100%;">Confirmar Pago</button></form>`; App.ui.openSheet(`Pago ${pedidoId}`, formHTML, (data) => App.logic.guardarAbono(data)); },
         formCompra() { const opcProv = App.state.proveedores.map(p => `<option value="${p.id}">${p.nombre}</option>`).join(''); const opcMat = App.state.inventario.map(m => `<option value="${m.id}">${m.nombre} (Stock actual: ${m.stock_actual})</option>`).join(''); const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Proveedor</label><select name="proveedor_id" required><option value="">-- Elige Proveedor --</option>${opcProv}</select></div><div class="form-group"><label style="display:flex; justify-content:space-between; align-items:center;">Insumo Comprado <span style="color:var(--primary); cursor:pointer; font-weight:bold; font-size:0.8rem;" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formMaterial(), 400);">+ Crear Insumo</span></label><select name="material_id" required><option value="">-- Elige Material --</option>${opcMat}</select></div><div class="form-group"><label>Cantidad a Sumar</label><input type="number" name="cantidad" step="0.1" required></div><div class="form-group"><label>Fecha</label><input type="date" name="fecha" value="${new Date().toISOString().split('T')[0]}" required></div><div class="form-group"><label>Costo Total Pagado ($)</label><input type="number" name="total" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; background: var(--success); border-color: var(--success);">Confirmar Compra y Sumar Stock</button></form>`; App.ui.openSheet("Ingresar Compra", formHTML, (data) => App.logic.guardarNuevaCompra(data)); },
         
-        // --- EL NUEVO MODAL KANBAN (Multi-Artesano) ---
         modalEditarOrden(ordenId) { 
             const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); 
             const pagos = App.state.pago_artesanos.filter(p => p.orden_id === ordenId);
+            const costoManoObra = pagos.reduce((sum, p) => sum + parseFloat(p.total), 0);
             
             let pagosHTML = '<div style="margin-bottom:15px;"><strong>🛠️ Trabajos Asignados a esta Hamaca:</strong><br>';
             if(pagos.length === 0) pagosHTML += '<small style="color:var(--text-muted)">Nadie ha trabajado en esta orden aún.</small>';
@@ -312,7 +322,7 @@ const App = {
                 const partesID = p.id.split('-'); const nombreTarea = partesID.length > 2 ? partesID.slice(2).join(' ') : 'Trabajo general';
                 pagosHTML += `<div style="display:flex; justify-content:space-between; background:#F7FAFC; padding:8px; margin-top:5px; border-radius:4px; font-size:0.85rem; border:1px solid #E2E8F0;"><span>🧑‍🎨 <strong>${art ? art.nombre : 'Desc'}</strong> - <em>${nombreTarea}</em></span><span><strong style="color:var(--success); margin-right:8px;">$${p.total}</strong> <span style="cursor:pointer; color:red;" onclick="App.logic.eliminarRegistroGenerico('pago_artesanos', '${p.id}', 'pago_artesanos'); App.ui.closeSheet();">🗑️</span></span></div>`;
             });
-            pagosHTML += `</div><button type="button" class="btn btn-secondary" style="width:100%; margin-bottom:15px; border-style:dashed;" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formAgregarTrabajo('${ordenId}'), 300);">+ Asignar Tarea / Artesano</button>`;
+            pagosHTML += `<div style="margin-top: 10px; text-align: right; font-weight: bold; color: var(--primary);">Costo Producción: $${costoManoObra.toFixed(2)}</div></div><button type="button" class="btn btn-secondary" style="width:100%; margin-bottom:15px; border-style:dashed;" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formAgregarTrabajo('${ordenId}'), 300);">+ Asignar Tarea / Artesano</button>`;
 
             const formHTML = `<form id="dynamic-form">${pagosHTML}<div class="form-group"><label>Estado del Pedido en Taller</label><select name="estado"><option value="pendiente" ${orden.estado === 'pendiente' ? 'selected' : ''}>Pendiente de tejer</option><option value="en_proceso" ${orden.estado === 'en_proceso' ? 'selected' : ''}>En Proceso (Tejiendo)</option><option value="listo" ${orden.estado === 'listo' ? 'selected' : ''}>¡Terminada! (Pasar a cierre)</option></select></div><button type="submit" class="btn btn-primary" style="width: 100%;">Actualizar Estado</button></form>`; 
             App.ui.openSheet(`Orden ${ordenId}`, formHTML, (datos) => App.logic.procesarCambioOrden(ordenId, datos)); 
@@ -320,22 +330,20 @@ const App = {
 
         formAgregarTrabajo(ordenId) {
             const opcArt = App.state.artesanos.map(a => `<option value="${a.id}">${a.nombre}</option>`).join('');
-            const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Artesano</label><select name="artesano_id" required onchange="window.cargarTarifas(this.value)"><option value="">-- Selecciona --</option>${opcArt}</select></div><div class="form-group"><label>Tarea a Realizar</label><select name="tarea_val" id="select-tarifas" required onchange="window.calcTotalTrabajo()"><option value="">-- Elige un artesano primero --</option></select></div><input type="hidden" name="tarea_nombre" id="tarea_nombre"><div class="form-group"><label>Cantidad (Ej. 1 cuerpo, o 4 tubos)</label><input type="number" step="0.1" name="cantidad" id="cant-trabajo" value="1" required oninput="window.calcTotalTrabajo()"></div><div class="form-group"><label>Total a Pagar ($)</label><input type="number" step="0.01" name="total" id="total-trabajo" required readonly style="background:#f0f0f0;"></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Guardar Trabajo</button></form>`;
+            const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Artesano</label><select name="artesano_id" required onchange="window.cargarTarifas(this.value)"><option value="">-- Selecciona --</option>${opcArt}</select></div><div class="form-group"><label>Tarea a Realizar</label><select name="tarea_val" id="select-tarifas" required onchange="window.calcTotalTrabajo()"><option value="">-- Elige un artesano primero --</option></select></div><input type="hidden" name="tarea_nombre" id="tarea_nombre"><div class="form-group"><label>Cantidad (Ej. 7 hilos cuerpo, o 1 pza brazos)</label><input type="number" step="0.1" name="cantidad" id="cant-trabajo" value="1" required oninput="window.calcTotalTrabajo()"></div><div class="form-group"><label>Total a Pagar ($)</label><input type="number" step="0.01" name="total" id="total-trabajo" required readonly style="background:#f0f0f0;"></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Guardar Trabajo</button></form>`;
             App.ui.openSheet("Añadir Tarea a Orden", formHTML, (data) => App.logic.guardarTrabajoOrden(ordenId, data));
         },
 
-        // --- CIERRE DE ORDEN SIMPLIFICADO (Solo Mermas) ---
         formCerrarOrden(ordenId) { 
-            const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === orden.pedido_detalle_id); const producto = detalle ? App.state.productos.find(p => p.id === detalle.producto_id) : { nombre: 'Hamaca', tubos_hilo: 0 }; 
+            const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === orden.pedido_detalle_id); const producto = detalle ? App.state.productos.find(p => p.id === detalle.producto_id) : { nombre: 'Hamaca' }; 
             
             let materialesHTML = '';
-            for(let i=1; i<=3; i++){
-                const matId = producto[`mat_${i}`] || (i===1 ? producto.material_hilo_id : null);
-                const cant = parseFloat(producto[`cant_${i}`] || (i===1 ? producto.tubos_hilo : 0));
+            for(let i=1; i<=5; i++){
+                const matId = producto[`mat_${i}`]; const cant = parseFloat(producto[`cant_${i}`]); const uso = producto[`uso_${i}`] || 'General';
                 if(matId && cant > 0) {
                     const material = App.state.inventario.find(m => m.id === matId);
                     const consumoTeorico = cant * parseInt(detalle ? detalle.cantidad : 1);
-                    materialesHTML += `<div class="form-group" style="margin-bottom:8px;"><label>${material ? material.nombre : 'Insumo'} (Apartado: ${consumoTeorico})</label><input type="hidden" name="mat_${i}_id" value="${matId}"><input type="hidden" name="mat_${i}_teorico" value="${consumoTeorico}"><input type="number" step="0.1" name="mat_${i}_real" value="${consumoTeorico}" required></div>`;
+                    materialesHTML += `<div class="form-group" style="margin-bottom:8px; background: white; padding: 8px; border-radius: 4px; border: 1px solid #e2e8f0;"><label>${material ? material.nombre : 'Insumo'} <strong>[${uso.toUpperCase()}]</strong> (Apartado: ${consumoTeorico})</label><input type="hidden" name="mat_${i}_id" value="${matId}"><input type="hidden" name="mat_${i}_teorico" value="${consumoTeorico}"><div style="display:flex; align-items:center; gap: 10px;"><span style="font-size:0.8rem;">Consumo Real:</span><input type="number" step="0.1" name="mat_${i}_real" value="${consumoTeorico}" required style="flex:1;"></div></div>`;
                 }
             }
             if(materialesHTML === '') materialesHTML = '<p style="color:var(--text-muted); font-size:0.8rem;">No hay insumos a descontar para este producto.</p>';
