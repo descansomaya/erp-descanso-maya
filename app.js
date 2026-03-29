@@ -1,6 +1,6 @@
 /**
- * DESCANSO MAYA ERP - Motor Principal v17 (Limpieza y Corrección Maestro)
- * Nómina, Consumos Reales, Mermas y Respaldos Unificados
+ * DESCANSO MAYA ERP - Motor Principal v18
+ * Corrección Definitiva: Cierre de Orden y Mermas
  */
 
 const App = {
@@ -71,20 +71,16 @@ const App = {
 
         descargarRespaldo() {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(App.state, null, 2));
-            const dlAnchorElem = document.createElement('a');
-            dlAnchorElem.setAttribute("href", dataStr);
-            dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`);
-            dlAnchorElem.click();
-            App.ui.toast("Respaldo descargado exitosamente");
+            const dlAnchorElem = document.createElement('a'); dlAnchorElem.setAttribute("href", dataStr); dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`); dlAnchorElem.click(); App.ui.toast("Respaldo descargado exitosamente");
         },
 
+        // --- LA MAGIA ESTÁ AQUÍ ---
         async procesarCambioOrden(ordenId, datos) {
-            // Si elige "Listo", abre la ventana de cierre para la nómina y el hilo real
+            // Si eligen LISTO, abrimos el modal de cierre
             if (datos.estado === 'listo') {
                 App.ui.closeSheet(); 
                 App.views.formCerrarOrden(ordenId, datos.artesano_id); 
             } else {
-                // Si es otro estado, solo actualiza
                 App.ui.showLoader("Actualizando orden...");
                 const res = await App.api.fetch("actualizar_fila", { nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: datos }); 
                 App.ui.hideLoader();
@@ -104,13 +100,13 @@ const App = {
             const orden = App.state.ordenes_produccion.find(o => o.id === ordenId);
             const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id);
             const producto = App.state.productos.find(p => p.id === detalle.producto_id);
-            const material = App.state.inventario.find(m => m.id === producto.material_hilo_id);
+            const material = producto ? App.state.inventario.find(m => m.id === producto.material_hilo_id) : null;
 
             // 1. Marca como listo
             await App.api.fetch("actualizar_fila", { nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: { estado: 'listo' } });
             orden.estado = 'listo';
 
-            // 2. Descuenta inventario si aplica
+            // 2. Descuenta inventario real si aplica
             if (material && consumoReal > 0) {
                 const nuevoStock = parseFloat(material.stock_actual) - consumoReal;
                 await App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } });
@@ -130,6 +126,7 @@ const App = {
             App.ui.hideLoader(); App.ui.toast("¡Orden finalizada con éxito!"); App.router.handleRoute();
         },
 
+        // --- RESTO DE FUNCIONES ---
         async guardarNuevaCompra(datos) { App.ui.showLoader("Registrando..."); const compra = { id: "COM-" + Date.now(), proveedor_id: datos.proveedor_id, fecha: new Date().toISOString().split('T')[0], total: parseFloat(datos.total), monto_pagado: parseFloat(datos.total), estado: "pagado", fecha_creacion: new Date().toISOString() }; const res = await App.api.fetch("guardar_fila", { nombreHoja: "compras", datos: compra }); if (res.status === "success") { App.state.compras.push(compra); const material = App.state.inventario.find(m => m.id === datos.material_id); if(material) { const nuevoStock = parseFloat(material.stock_actual) + parseFloat(datos.cantidad); await App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } }); material.stock_actual = nuevoStock; } App.ui.hideLoader(); App.ui.toast("Compra y stock actualizados"); App.router.handleRoute(); } else { App.ui.hideLoader(); App.ui.toast("Error"); } },
         async guardarNuevaReparacion(datos) { App.ui.showLoader("Registrando..."); datos.id = "REP-" + Date.now(); datos.estado = "recibida"; datos.fecha_creacion = new Date().toISOString(); const res = await App.api.fetch("guardar_fila", { nombreHoja: "reparaciones", datos: datos }); App.ui.hideLoader(); if (res.status === "success") { App.state.reparaciones.push(datos); App.ui.toast("Reparación registrada"); App.router.handleRoute(); } else { App.ui.toast("Error"); } },
         enviarWhatsApp(pedidoId) { const p = App.state.pedidos.find(x => x.id === pedidoId); const c = App.state.clientes.find(cli => cli.id === p.cliente_id); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id); const producto = detalle ? App.state.productos.find(prod => prod.id === detalle.producto_id) : null; const abonos = App.state.abonos.filter(a => a.pedido_id === p.id).reduce((s, a) => s + parseFloat(a.monto||0), 0); const saldoReal = parseFloat(p.total) - parseFloat(p.anticipo) - abonos; if(!c || !c.telefono) return; let texto = `Hola *${c.nombre}* 👋,\nTe compartimos el detalle de tu pedido:\n📦 *Producto:* ${producto ? producto.nombre : 'Hamaca'}\n💰 *Total:* $${p.total}\n✅ *Abonado:* $${parseFloat(p.anticipo) + abonos}\n⚠️ *Saldo Pendiente:* $${saldoReal > 0 ? saldoReal : 0}\n¡Gracias por tu compra!`; let tel = String(c.telefono).replace(/\D/g,''); if(tel.length === 10) tel = '52' + tel; window.location.href = `https://wa.me/${tel}?text=${encodeURIComponent(texto)}`; },
@@ -146,73 +143,37 @@ const App = {
         login() { document.getElementById('bottom-nav').style.display = 'none'; return `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:80vh; text-align:center;"><div style="background:var(--primary); color:white; width:80px; height:80px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:2rem; margin-bottom:20px;">🔒</div><h2 style="margin-bottom:10px; color:var(--primary-dark);">Descanso Maya</h2><p style="color:var(--text-muted); margin-bottom:30px;">Ingresa el PIN</p><div class="card" style="width:100%; max-width:320px;"><input type="password" id="pin-input" placeholder="PIN" style="width:100%; padding:12px; font-size:1.2rem; text-align:center; border:1px solid var(--border); border-radius:8px; margin-bottom:15px;"><button class="btn btn-primary" style="width:100%; padding:12px; font-size:1rem;" onclick="App.logic.verificarPIN(document.getElementById('pin-input').value)">Entrar</button></div></div>`; },
         inicio() { document.getElementById('bottom-nav').style.display = 'flex'; return `<div class="grid-2"><div class="card stat-card"><div class="label">Pedidos</div><div class="value">${App.state.pedidos.length}</div></div><div class="card stat-card"><div class="label">Producción</div><div class="value">${App.state.ordenes_produccion.filter(o => o.estado !== 'listo').length}</div></div><div class="card stat-card" onclick="App.router.navigate('reparaciones')" style="cursor:pointer; background:#FAF5FF;"><div class="label" style="color:#6B46C1;">Reparaciones</div><div class="value">🪡 ${App.state.reparaciones.length}</div></div><div class="card stat-card" onclick="App.router.navigate('finanzas')" style="cursor:pointer; background:#EBF8FF;"><div class="label" style="color:#3182CE;">Ver Finanzas</div><div class="value">📊</div></div></div>`; },
         
-        // --- EL CEREBRO DEL CIERRE DE ORDEN ---
-        formCerrarOrden(ordenId, artesanoAsignadoId) {
-            const orden = App.state.ordenes_produccion.find(o => o.id === ordenId);
-            const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id);
-            const producto = detalle ? App.state.productos.find(p => p.id === detalle.producto_id) : { nombre: 'Hamaca Gral.', tubos_hilo: 0 };
-            
-            const consumoTeorico = parseFloat(producto.tubos_hilo || 0) * parseInt(detalle ? detalle.cantidad : 1);
-            const artesano = App.state.artesanos.find(a => a.id === artesanoAsignadoId);
-            const tarifa = App.state.tarifas_artesano.find(t => t.artesano_id === artesanoAsignadoId);
-            const pagoSugerido = tarifa ? tarifa.monto : 0;
-
-            const formHTML = `
-                <div style="background: #FEFCBF; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem;">
-                    <strong>Cierre de Producción</strong><br>
-                    Producto: ${producto.nombre}<br>
-                    Artesano: ${artesano ? artesano.nombre : 'General'}
-                </div>
-                <form id="dynamic-form">
-                    <input type="hidden" name="orden_id" value="${ordenId}">
-                    <input type="hidden" name="consumo_teorico" value="${consumoTeorico}">
-                    
-                    <div class="form-group">
-                        <label>Consumo de Hilo/Material Reales</label>
-                        <input type="number" step="0.1" name="consumo_real" value="${consumoTeorico}" required>
-                        <small style="color: var(--text-muted);">El sistema esperaba gastar ${consumoTeorico}. Puedes ajustar si gastó más o menos.</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Monto a pagar al Artesano ($)</label>
-                        <input type="number" name="pago_artesano" value="${pagoSugerido}" required>
-                    </div>
-
-                    <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; background: var(--success); border-color: var(--success);">Finalizar y Descontar Stock</button>
-                </form>
-            `;
-            App.ui.openSheet("Cerrar Orden", formHTML, (datos) => App.logic.cerrarOrdenProduccion(datos));
-        },
-
-        // --- ACTUALIZACIÓN DE ESTA FUNCIÓN PARA ABRIR EL CIERRE ---
-        modalEditarOrden(ordenId) {
-            const orden = App.state.ordenes_produccion.find(o => o.id === ordenId);
-            const opcionesArtesanos = App.state.artesanos.map(a => `<option value="${a.id}" ${orden.artesano_id === a.id ? 'selected' : ''}>${a.nombre}</option>`).join('');
-            const formHTML = `
-                <form id="dynamic-form">
-                    <div class="form-group"><label>Asignar Artesano</label><select name="artesano_id"><option value="">-- Sin asignar --</option>${opcionesArtesanos}</select></div>
-                    <div class="form-group"><label>Estado del Trabajo</label>
-                        <select name="estado">
-                            <option value="pendiente" ${orden.estado === 'pendiente' ? 'selected' : ''}>Pendiente de tejer</option>
-                            <option value="en_proceso" ${orden.estado === 'en_proceso' ? 'selected' : ''}>En Proceso (Tejiendo)</option>
-                            <option value="listo" ${orden.estado === 'listo' ? 'selected' : ''}>¡Terminada! (Descuenta hilo y paga)</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Guardar Cambios</button>
-                </form>
-            `;
-            App.ui.openSheet(`Actualizar Orden`, formHTML, (datos) => App.logic.procesarCambioOrden(ordenId, datos));
-        },
-
         configuracion() { document.getElementById('bottom-nav').style.display = 'flex'; return `<div class="card"><h3 class="card-title">Configuración</h3><p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">Administra tu información.</p><button class="btn btn-primary" style="width: 100%; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 10px;" onclick="App.logic.descargarRespaldo()"><span>💾</span> Descargar Respaldo Total</button><button class="btn btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; background: #FED7D7; color: var(--danger); border: none;" onclick="localStorage.removeItem('erp_pin'); location.reload();"><span>🔒</span> Bloquear Sistema</button></div>`; },
-        
         reparaciones() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Módulo de Reparaciones</h3>`; if (App.state.reparaciones.length === 0) html += `<p style="color: var(--text-muted);">No hay reparaciones registradas.</p>`; else { [...App.state.reparaciones].reverse().forEach(r => { const c = App.state.clientes.find(cli => cli.id === r.cliente_id); html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><strong>${r.id} - ${c ? c.nombre : 'Cliente'}</strong><span class="badge ${r.estado}">${r.estado.toUpperCase()}</span></div><p style="color: var(--primary); font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">${r.descripcion}</p><p style="color: var(--text-muted); font-size: 0.85rem;">Precio: $${r.precio} | Anticipo: $${r.anticipo}</p></div>`; }); } return html += `</div><button class="fab" onclick="App.views.formNuevaReparacion()">+</button>`; },
         compras() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Historial de Compras</h3>`; if (App.state.compras.length === 0) html += `<p style="color: var(--text-muted);">No hay compras registradas.</p>`; else { [...App.state.compras].reverse().forEach(c => { const p = App.state.proveedores.find(prv => prv.id === c.proveedor_id); html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none;"><div style="display: flex; justify-content: space-between; margin-bottom: 5px;"><strong>${c.id}</strong><span style="color: var(--danger); font-weight: bold;">$${c.total}</span></div><p style="color: var(--text-muted); font-size: 0.85rem;">Proveedor: ${p ? p.nombre : 'General'} | Fecha: ${c.fecha}</p></div>`; }); } return html += `</div><button class="fab" onclick="App.views.formNuevaCompra()">+</button>`; },
+        
         formNuevaReparacion() { const opcionesClientes = App.state.clientes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join(''); const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Cliente</label><select name="cliente_id" required><option value="">-- Elige un cliente --</option>${opcionesClientes}</select></div><div class="form-group"><label>Descripción del Daño</label><input type="text" name="descripcion" required placeholder="Ej. Cambio de brazos"></div><div class="form-group"><label>Precio Acordado ($)</label><input type="number" name="precio" required></div><div class="form-group"><label>Anticipo Pagado ($)</label><input type="number" name="anticipo" value="0" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Registrar Reparación</button></form>`; App.ui.openSheet("Nueva Reparación", formHTML, (data) => App.logic.guardarNuevaReparacion(data)); },
         formNuevaCompra() { const opcProv = App.state.proveedores.map(p => `<option value="${p.id}">${p.nombre}</option>`).join(''); const opcMat = App.state.inventario.map(m => `<option value="${m.id}">${m.nombre} (Stock actual: ${m.stock_actual})</option>`).join(''); const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Proveedor</label><select name="proveedor_id" required><option value="">-- Elige Proveedor --</option>${opcProv}</select></div><div class="form-group"><label>Material a sumar al stock</label><select name="material_id" required><option value="">-- Elige Material --</option>${opcMat}</select></div><div class="form-group"><label>Cantidad Comprada</label><input type="number" name="cantidad" step="0.1" required></div><div class="form-group"><label>Costo Total ($)</label><input type="number" name="total" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; background: var(--success); border-color: var(--success);">Sumar Stock</button></form>`; App.ui.openSheet("Comprar Material", formHTML, (data) => App.logic.guardarNuevaCompra(data)); },
         finanzas() { const totalVentas = App.state.pedidos.reduce((acc, p) => acc + (parseFloat(p.total) || 0), 0); const totalAnticipos = App.state.pedidos.reduce((acc, p) => acc + (parseFloat(p.anticipo) || 0), 0); const totalAbonos = App.state.abonos.reduce((acc, a) => acc + (parseFloat(a.monto) || 0), 0); const ingresosReales = totalAnticipos + totalAbonos; const porCobrar = totalVentas - ingresosReales; const totalGastos = App.state.gastos.reduce((acc, g) => acc + (parseFloat(g.monto) || 0), 0); const balanceNeto = ingresosReales - totalGastos; let html = `<div class="card"><h3 class="card-title">Dashboard Financiero</h3><div class="grid-2"><div class="card stat-card" style="background: #EBF8FF;"><div class="label">Ventas</div><div class="value" style="color: #3182CE; font-size: 1.2rem;">$${totalVentas}</div></div><div class="card stat-card" style="background: #C6F6D5;"><div class="label">Ingresos</div><div class="value" style="color: #38A169; font-size: 1.2rem;">$${ingresosReales}</div></div><div class="card stat-card" style="background: #FEFCBF;"><div class="label">Por Cobrar</div><div class="value" style="color: #D69E2E; font-size: 1.2rem;">$${porCobrar}</div></div><div class="card stat-card" style="background: #FED7D7;"><div class="label">Gastos</div><div class="value" style="color: #E53E3E; font-size: 1.2rem;">$${totalGastos}</div></div></div><div class="card stat-card" style="margin-top:10px; border: 2px solid ${balanceNeto >= 0 ? 'var(--success)' : 'var(--danger)'};"><div class="label">Flujo Neto Efectivo</div><div class="value" style="color: ${balanceNeto >= 0 ? 'var(--success)' : 'var(--danger)'};">$${balanceNeto}</div></div></div>`; return html; },
         pedidos() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Historial de Pedidos</h3>`; [...App.state.pedidos].reverse().slice(0, 50).forEach(p => { const c = App.state.clientes.find(cli => cli.id === p.cliente_id); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id); const producto = detalle ? App.state.productos.find(prod => prod.id === detalle.producto_id) : null; const tieneOrden = detalle ? App.state.ordenes_produccion.some(o => o.pedido_detalle_id === detalle.id) : false; const abonos = App.state.abonos.filter(a => a.pedido_id === p.id).reduce((sum, a) => sum + parseFloat(a.monto || 0), 0); const saldoReal = parseFloat(p.total || 0) - parseFloat(p.anticipo || 0) - abonos; const estaPagado = saldoReal <= 0; html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><strong>${p.id} - ${c ? c.nombre : 'Cliente'}</strong>${estaPagado ? `<span class="badge" style="background: var(--success); color: white;">PAGADO</span>` : `<span class="badge ${p.estado || 'nuevo'}">${(p.estado || 'Nuevo').toUpperCase()}</span>`}</div><p style="color: var(--primary); font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">${producto ? producto.nombre : 'Desconocido'}</p><div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);"><div><strong style="color: ${estaPagado ? 'var(--success)' : 'var(--danger)'};">Saldo: $${saldoReal > 0 ? saldoReal : 0}</strong></div><div style="display: flex; gap: 8px;">${!tieneOrden && detalle ? `<button class="btn btn-secondary" style="padding: 6px 10px;" onclick="App.logic.mandarAProduccion('${p.id}')">🔨</button>` : ''}${!estaPagado ? `<button class="btn btn-primary" style="padding: 6px 10px; background: var(--success); border-color: var(--success);" onclick="App.views.formCobrar('${p.id}', '${c.id}', ${saldoReal})">💰</button>` : ''}</div></div></div>`; }); return html += `</div><button class="fab" onclick="App.views.formNuevoPedido()">+</button>`; },
+        
         produccion() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Tablero Kanban</h3></div>`; const pendientes = App.state.ordenes_produccion.filter(o => o.estado === 'pendiente' || !o.estado); const enProceso = App.state.ordenes_produccion.filter(o => o.estado === 'en_proceso'); const listas = App.state.ordenes_produccion.filter(o => o.estado === 'listo'); const dibujarTarjeta = (orden) => { const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id); const producto = detalle ? App.state.productos.find(p => p.id === detalle.producto_id) : null; return `<div class="kanban-card" onclick="App.views.modalEditarOrden('${orden.id}')"><strong>${orden.id}</strong><br><small style="color: var(--primary); font-weight: 600;">${producto ? producto.nombre : 'Producto interno'}</small></div>`; }; html += `<div class="kanban-board"><div class="kanban-column"><div class="kanban-header">Pendientes <span>${pendientes.length}</span></div>${pendientes.map(dibujarTarjeta).join('')}</div><div class="kanban-column"><div class="kanban-header">En Proceso <span>${enProceso.length}</span></div>${enProceso.map(dibujarTarjeta).join('')}</div><div class="kanban-column"><div class="kanban-header">Listas <span>${listas.length}</span></div>${listas.map(dibujarTarjeta).join('')}</div></div>`; return html; },
+        
+        // --- AQUÍ ESTÁN LAS VISTAS DEL KANBAN ---
+        modalEditarOrden(ordenId) { 
+            const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); 
+            const opcionesArtesanos = App.state.artesanos.map(a => `<option value="${a.id}" ${orden.artesano_id === a.id ? 'selected' : ''}>${a.nombre}</option>`).join(''); 
+            const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Artesano Asignado</label><select name="artesano_id"><option value="">-- Sin asignar --</option>${opcionesArtesanos}</select></div><div class="form-group"><label>Estado del Trabajo</label><select name="estado"><option value="pendiente" ${orden.estado === 'pendiente' ? 'selected' : ''}>Pendiente de tejer</option><option value="en_proceso" ${orden.estado === 'en_proceso' ? 'selected' : ''}>En Proceso (Tejiendo)</option><option value="listo" ${orden.estado === 'listo' ? 'selected' : ''}>¡Terminada! (Pasar a cierre)</option></select></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Guardar Cambios</button></form>`; 
+            App.ui.openSheet(`Actualizar Orden`, formHTML, (datos) => App.logic.procesarCambioOrden(ordenId, datos)); 
+        },
+
+        formCerrarOrden(ordenId, artesanoAsignadoId) {
+            const orden = App.state.ordenes_produccion.find(o => o.id === ordenId);
+            const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id);
+            const producto = detalle ? App.state.productos.find(p => p.id === detalle.producto_id) : { nombre: 'Hamaca Gral.', tubos_hilo: 0 };
+            const consumoTeorico = parseFloat(producto.tubos_hilo || 0) * parseInt(detalle ? detalle.cantidad : 1);
+            const artesano = App.state.artesanos.find(a => a.id === artesanoAsignadoId);
+            const tarifa = App.state.tarifas_artesano.find(t => t.artesano_id === artesanoAsignadoId);
+            const pagoSugerido = tarifa ? tarifa.monto : 0;
+            const formHTML = `<div style="background: #FEFCBF; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem;"><strong>Cierre de Producción</strong><br>Producto: ${producto.nombre}<br>Artesano: ${artesano ? artesano.nombre : 'General'}</div><form id="dynamic-form"><input type="hidden" name="orden_id" value="${ordenId}"><input type="hidden" name="consumo_teorico" value="${consumoTeorico}"><div class="form-group"><label>Consumo de Hilo/Material Reales</label><input type="number" step="0.1" name="consumo_real" value="${consumoTeorico}" required><small style="color: var(--text-muted);">El sistema esperaba gastar ${consumoTeorico}. Puedes ajustar si gastó más o menos.</small></div><div class="form-group"><label>Monto a pagar al Artesano ($)</label><input type="number" name="pago_artesano" value="${pagoSugerido}" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; background: var(--success); border-color: var(--success);">Finalizar y Descontar Stock</button></form>`;
+            App.ui.openSheet("Cerrar Orden", formHTML, (datos) => App.logic.cerrarOrdenProduccion(datos));
+        },
+
         formCobrar(pedidoId, clienteId, saldoPendiente) { const formHTML = `<form id="dynamic-form"><input type="hidden" name="pedido_id" value="${pedidoId}"><input type="hidden" name="cliente_id" value="${clienteId}"><div class="form-group"><label>Abonar ($)</label><input type="number" name="monto" value="${saldoPendiente}" max="${saldoPendiente}" required></div><button type="submit" class="btn btn-primary" style="width: 100%;">Confirmar Pago</button></form>`; App.ui.openSheet(`Pago ${pedidoId}`, formHTML, (data) => App.logic.guardarAbono(data)); },
         formNuevoPedido() { const opcionesClientes = App.state.clientes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join(''); const opcionesProductos = App.state.productos.map(p => `<option value="${p.id}">${p.nombre} ($${p.precio_venta})</option>`).join(''); const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Cliente</label><select name="cliente_id" required><option value="">-- Elige un cliente --</option>${opcionesClientes}</select></div><div class="form-group"><label>Producto</label><select name="producto_id" required><option value="">-- Elige un producto --</option>${opcionesProductos}</select></div><div class="form-group"><label>Cantidad</label><input type="number" name="cantidad" value="1" min="1" required></div><div class="form-group"><label>Precio Total ($)</label><input type="number" name="total" required></div><div class="form-group"><label>Anticipo ($)</label><input type="number" name="anticipo" value="0" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Crear Pedido</button></form>`; App.ui.openSheet("Nuevo Pedido", formHTML, (data) => App.logic.guardarNuevoPedido(data)); },
         inventario() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Stock Actual</h3><table style="width:100%; border-collapse: collapse; font-size: 0.9rem;"><tr style="border-bottom: 2px solid var(--border);"><th style="text-align:left; padding:8px;">Material</th><th style="padding:8px;">Stock</th></tr>`; App.state.inventario.forEach(i => { html += `<tr style="border-bottom: 1px solid var(--border);"><td style="padding: 10px 5px;">${i.nombre}</td><td style="padding: 10px 5px; text-align:center; font-weight:bold; color:${i.stock_actual < 5 ? 'var(--danger)' : 'var(--text-main)'}">${i.stock_actual}</td></tr>`; }); html += `</table></div>`; return html; },
