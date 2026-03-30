@@ -1,8 +1,13 @@
-/**
- * DESCANSO MAYA ERP - Motor Principal v36 (VERSIÓN FINAL SEGURA)
- * Cotizaciones, PDF Personalizado, Compras Múltiples, Reparaciones, Kanban
+/* * DESCANSO MAYA ERP - Motor Principal v37 (ANTI-PANTALLA BLANCA)
+ * Todo en un solo bloque. Formato expandido y seguro.
  */
 
+// Detector de Errores (Evita la pantalla blanca silenciosa)
+window.onerror = function(message, source, lineno, colno, error) {
+    alert("Hubo un error al cargar: \n" + message + "\nLínea: " + lineno);
+};
+
+// Funciones globales
 window.cargarTarifas = function(artesanoId) {
     const tarifas = App.state.tarifas_artesano.filter(t => t.artesano_id === artesanoId);
     const select = document.getElementById('select-tarifas');
@@ -20,543 +25,540 @@ window.calcTotalTrabajo = function() {
     }
 };
 
-const App = {};
-
-App.state = {
-    config: { 
-        empresa: "Descanso Maya", 
-        moneda: "MXN",
-        logoUrl: "https://ibb.co/F4rXSH5p"><img src="https://i.ibb.co/5h0kNKrZ/DESCANSO-MAYA.png", // <-- LÍNEA 17: PEGA AQUÍ EL LINK DE TU LOGO
-        redesSociales: "@descansomaya.mx"           // <-- LÍNEA 18: TUS REDES SOCIALES
-    },
-    pinAcceso: localStorage.getItem('erp_pin') || null, 
-    cotizaciones: JSON.parse(localStorage.getItem('erp_cotizaciones')) || [], 
-    pedidos: [], pedido_detalle: [], ordenes_produccion: [], artesanos: [], 
-    inventario: [], productos: [], clientes: [], abonos: [], gastos: [], 
-    compras: [], proveedores: [], reparaciones: [], 
-    tarifas_artesano: [], pago_artesanos: [], consumos_produccion: []
-};
-
-App.api = {
-    gasUrl: "https://script.google.com/macros/s/AKfycbxL3KzjesyZIfiC-Dyr0SwwzwNnPsv5FgHpt-JhyscNpN1eTvRwAh_rdgoxdVnKTAwu/exec", // <-- LÍNEA 26: ¡PEGA TU URL DE GOOGLE SCRIPT AQUÍ!
-    
-    async fetch(action, payload = {}) {
-        try { 
-            const response = await fetch(this.gasUrl, { 
-                method: 'POST', 
-                body: JSON.stringify({ action: action, payload: payload, pin: App.state.pinAcceso }) 
-            }); 
-            const data = await response.json(); 
-            if (data.message === "Acceso Denegado. PIN incorrecto.") { 
-                localStorage.removeItem('erp_pin'); 
-                App.state.pinAcceso = null; 
-                App.router.handleRoute(); 
-            } 
-            return data; 
-        } catch (error) { 
-            return { status: "error", message: "Fallo de conexión." }; 
-        }
-    }
-};
-
-App.ui = {
-    container: null,
-    init() { 
-        this.container = document.getElementById('overlays'); 
-        const toastCont = document.createElement('div'); 
-        toastCont.className = 'toast-container'; 
-        toastCont.id = 'toast-container'; 
-        document.body.appendChild(toastCont); 
-        const loader = document.createElement('div'); 
-        loader.id = 'global-loader'; 
-        loader.innerHTML = `<div class="spinner"></div><h2 style="margin: 0; font-weight: 600;">Descanso Maya</h2><p id="loader-text" style="margin-top: 10px; opacity: 0.8; font-size: 0.9rem;">Sincronizando módulos...</p><button id="btn-reintentar" class="btn btn-secondary hidden" style="margin-top: 20px;" onclick="location.reload()">Reintentar</button>`; 
-        document.body.appendChild(loader); 
-    },
-    toast(message) { 
-        const cont = document.getElementById('toast-container'); 
-        const t = document.createElement('div'); 
-        t.className = 'toast'; 
-        t.textContent = message; 
-        cont.appendChild(t); 
-        setTimeout(() => t.remove(), 4000); 
-    },
-    showLoader(mensaje = "Procesando...") { 
-        const loader = document.getElementById('global-loader'); 
-        if(loader) { 
-            document.getElementById('loader-text').textContent = mensaje; 
-            loader.classList.remove('hidden'); 
-        } 
-    },
-    hideLoader() { 
-        const loader = document.getElementById('global-loader'); 
-        if(loader) loader.classList.add('hidden'); 
-    },
-    openSheet(title, contentHTML, onSaveCallback) { 
-        this.container.innerHTML = `<div class="overlay-bg active" id="sheet-bg"></div><div class="bottom-sheet active" id="sheet-content"><div class="sheet-header"><h3>${title}</h3><button class="sheet-close" id="sheet-close">&times;</button></div><div class="sheet-body">${contentHTML}</div></div>`; 
-        document.getElementById('sheet-close').onclick = this.closeSheet.bind(this); 
-        document.getElementById('sheet-bg').onclick = this.closeSheet.bind(this); 
-        const form = document.getElementById('dynamic-form'); 
-        if(form && onSaveCallback) { 
-            form.onsubmit = (e) => { 
-                e.preventDefault(); 
-                const data = Object.fromEntries(new FormData(form).entries()); 
-                this.closeSheet(); 
-                onSaveCallback(data); 
-            }; 
-        } 
-    },
-    closeSheet() { 
-        this.container.innerHTML = ''; 
-    }
-};
-App.logic = {
-    async verificarPIN(pin) { 
-        App.ui.showLoader("Verificando acceso..."); 
-        App.state.pinAcceso = pin; 
-        const res = await App.api.fetch("ping"); 
-        if (res.status === "success") { 
-            localStorage.setItem('erp_pin', pin); 
-            App.ui.toast("¡Acceso concedido!"); 
-            this.cargarDatosIniciales(); 
-        } else { 
-            App.state.pinAcceso = null; 
-            App.ui.hideLoader(); 
-            App.ui.toast("PIN Incorrecto."); 
-        } 
-    },
-    async cargarDatosIniciales() { 
-        App.ui.showLoader("Descargando bases de datos..."); 
-        try { 
-            const hojas = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "consumos_produccion"]; 
-            const promesas = hojas.map(h => App.api.fetch("leer_hoja", { nombreHoja: h })); 
-            const resultados = await Promise.all(promesas); 
-            if (resultados[0].status === "error") throw new Error(resultados[0].message); 
-            
-            App.state.inventario = resultados[0].data || []; 
-            App.state.clientes = resultados[1].data || []; 
-            App.state.productos = resultados[2].data || []; 
-            App.state.pedidos = resultados[3].data || []; 
-            App.state.pedido_detalle = resultados[4].data || []; 
-            App.state.ordenes_produccion = resultados[5].data || []; 
-            App.state.artesanos = resultados[6].data || []; 
-            App.state.abonos = resultados[7].data || []; 
-            App.state.gastos = resultados[8].data || []; 
-            App.state.compras = resultados[9].data || []; 
-            App.state.proveedores = resultados[10].data || []; 
-            App.state.reparaciones = resultados[11].data || []; 
-            App.state.tarifas_artesano = resultados[12].data || []; 
-            App.state.pago_artesanos = resultados[13].data || []; 
-            App.state.consumos_produccion = resultados[14].data || []; 
-            App.ui.hideLoader(); 
-            App.router.init(); 
-        } catch (error) { 
-            App.ui.toast("Error de red."); 
-            document.getElementById('btn-reintentar').classList.remove('hidden'); 
-        } 
-    },
-    descargarRespaldo() { 
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(App.state, null, 2)); 
-        const dlAnchorElem = document.createElement('a'); 
-        dlAnchorElem.setAttribute("href", dataStr); 
-        dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`); 
-        dlAnchorElem.click(); 
-        App.ui.toast("Respaldo descargado exitosamente"); 
+const App = {
+    state: {
+        config: { 
+            empresa: "Descanso Maya", 
+            moneda: "MXN",
+            logoUrl: "https://i.ibb.co/5h0kNKrZ/DESCANSO-MAYA.png", /* <-- LÍNEA 24: URL DE TU LOGO */
+            redesSociales: "@descansomaya.mx"           /* <-- LÍNEA 25: TUS REDES */
+        },
+        pinAcceso: localStorage.getItem('erp_pin') || null, 
+        cotizaciones: JSON.parse(localStorage.getItem('erp_cotizaciones')) || [], 
+        pedidos: [], pedido_detalle: [], ordenes_produccion: [], artesanos: [], 
+        inventario: [], productos: [], clientes: [], abonos: [], gastos: [], 
+        compras: [], proveedores: [], reparaciones: [], 
+        tarifas_artesano: [], pago_artesanos: [], consumos_produccion: []
     },
 
-    async eliminarRegistroGenerico(hoja, id, estado) { 
-        if(!confirm("⚠️ ¿Eliminar registro permanentemente?")) return; 
-        App.ui.showLoader("Eliminando..."); 
-        const res = await App.api.fetch("eliminar_fila", { nombreHoja: hoja, idFila: id }); 
-        App.ui.hideLoader(); 
-        if(res.status === "success") { 
-            App.state[estado] = App.state[estado].filter(item => item.id !== id); 
-            App.ui.toast("Eliminado"); 
-            App.router.handleRoute(); 
-        } else { App.ui.toast("Error al eliminar"); } 
-    },
-    async eliminarPedido(id) { 
-        if(!confirm("⚠️ ¿Eliminar pedido? Se restaurará el inventario.")) return; 
-        App.ui.showLoader("Procesando..."); 
-        const pedido = App.state.pedidos.find(p => p.id === id); 
-        const detalle = App.state.pedido_detalle.find(d => d.pedido_id === id); 
-        const orden = App.state.ordenes_produccion.find(o => detalle && o.pedido_detalle_id === detalle.id); 
+    api: {
+        gasUrl: "https://script.google.com/macros/s/AKfycbxL3KzjesyZIfiC-Dyr0SwwzwNnPsv5FgHpt-JhyscNpN1eTvRwAh_rdgoxdVnKTAwu/exec", /* <-- LÍNEA 35: PEGA TU URL DE GOOGLE AQUÍ */
         
-        if(detalle) { 
-            const producto = App.state.productos.find(p => p.id === detalle.producto_id); 
-            if(producto && (!orden || orden.estado !== 'listo')) { 
-                for(let i=1; i<=5; i++) { 
-                    const matId = producto[`mat_${i}`]; 
-                    const cant = parseFloat(producto[`cant_${i}`] || 0); 
-                    if(matId && cant > 0) { 
-                        const material = App.state.inventario.find(m => m.id === matId); 
-                        if(material) { 
-                            const nuevoStock = parseFloat(material.stock_actual) + (cant * parseInt(detalle.cantidad || 1)); 
-                            await App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } }); 
-                            material.stock_actual = nuevoStock; 
-                        } 
-                    } 
+        async fetch(action, payload = {}) {
+            try { 
+                const response = await fetch(this.gasUrl, { 
+                    method: 'POST', 
+                    body: JSON.stringify({ action: action, payload: payload, pin: App.state.pinAcceso }) 
+                }); 
+                const data = await response.json(); 
+                if (data.message === "Acceso Denegado. PIN incorrecto.") { 
+                    localStorage.removeItem('erp_pin'); 
+                    App.state.pinAcceso = null; 
+                    App.router.handleRoute(); 
                 } 
-            } 
-        } 
-        await App.api.fetch("eliminar_fila", { nombreHoja: "pedidos", idFila: id }); 
-        if(detalle) await App.api.fetch("eliminar_fila", { nombreHoja: "pedido_detalle", idFila: detalle.id }); 
-        if(orden) await App.api.fetch("eliminar_fila", { nombreHoja: "ordenes_produccion", idFila: orden.id }); 
-        
-        App.state.pedidos = App.state.pedidos.filter(p => p.id !== id); 
-        if(detalle) App.state.pedido_detalle = App.state.pedido_detalle.filter(d => d.id !== detalle.id); 
-        if(orden) App.state.ordenes_produccion = App.state.ordenes_produccion.filter(o => o.id !== orden.id); 
-        App.ui.hideLoader(); App.ui.toast("Eliminado y stock restaurado"); App.router.handleRoute(); 
-    },
-    async eliminarCompra(id) { 
-        if(!confirm("⚠️ ¿Eliminar compra? Ajusta manualmente tu inventario restando lo que habías sumado.")) return; 
-        App.ui.showLoader("Eliminando..."); 
-        const res = await App.api.fetch("eliminar_fila", { nombreHoja: "compras", idFila: id }); 
-        App.ui.hideLoader(); 
-        if(res.status === "success") { 
-            App.state.compras = App.state.compras.filter(c => c.id !== id); 
-            App.ui.toast("Compra eliminada."); 
-            App.router.handleRoute(); 
-        } else { App.ui.toast("Error"); } 
-    },
-
-    async actualizarRegistroGenerico(hoja, id, datos, estado) { 
-        App.ui.showLoader("Guardando..."); 
-        const res = await App.api.fetch("actualizar_fila", { nombreHoja: hoja, idFila: id, datosNuevos: datos }); 
-        App.ui.hideLoader(); 
-        if (res.status === "success") { 
-            const index = App.state[estado].findIndex(item => item.id === id); 
-            if (index !== -1) App.state[estado][index] = { ...App.state[estado][index], ...datos }; 
-            App.ui.toast("Actualizado"); App.router.handleRoute(); 
-        } else { App.ui.toast("Error"); } 
-    },
-    async guardarNuevoGenerico(hoja, datos, prefijo, estado) { 
-        App.ui.showLoader("Registrando..."); 
-        datos.id = prefijo + "-" + Date.now(); 
-        if(!datos.fecha_creacion) datos.fecha_creacion = new Date().toISOString(); 
-        const res = await App.api.fetch("guardar_fila", { nombreHoja: hoja, datos: datos }); 
-        App.ui.hideLoader(); 
-        if (res.status === "success") { 
-            App.state[estado].push(datos); 
-            App.ui.toast("Guardado"); App.router.handleRoute(); 
-        } else { App.ui.toast("Error"); } 
-    },
-    
-    // Cotizaciones
-    guardarCotizacion(datos) { 
-        datos.id = "COT-" + Date.now(); 
-        datos.fecha_creacion = new Date().toISOString(); 
-        App.state.cotizaciones.push(datos); 
-        localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); 
-        App.ui.toast("Cotización generada"); 
-        App.router.handleRoute(); 
-        App.logic.imprimirCotizacion(datos.id); 
-    },
-    eliminarCotizacion(id) { 
-        if(!confirm("⚠️ ¿Eliminar cotización?")) return; 
-        App.state.cotizaciones = App.state.cotizaciones.filter(c => c.id !== id); 
-        localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); 
-        App.ui.toast("Eliminada"); App.router.handleRoute(); 
-    },
-
-    async guardarOrdenStock(datosFormulario) { 
-        App.ui.showLoader("Procesando Stock..."); 
-        const pedidoId = "PED-STOCK-" + Date.now(); 
-        const cantidadNum = parseInt(datosFormulario.cantidad) || 1;
-        const datosPedido = { id: pedidoId, cliente_id: "STOCK_INTERNO", estado: "nuevo", total: 0, anticipo: 0, notas: "Producción Interna", fecha_entrega: "", fecha_creacion: new Date().toISOString() }; 
-        const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datosFormulario.producto_id, cantidad: cantidadNum, precio_unitario: 0 }; 
-        
-        const producto = App.state.productos.find(p => p.id === datosFormulario.producto_id); 
-        const promesaMateriales = [];
-        if(producto) {
-            for(let i=1; i<=5; i++) {
-                const matId = producto[`mat_${i}`]; 
-                const cantTeorica = parseFloat(producto[`cant_${i}`] || 0);
-                if(matId && cantTeorica > 0) { 
-                    const material = App.state.inventario.find(m => m.id === matId); 
-                    if(material) { 
-                        const nuevoStock = parseFloat(material.stock_actual) - (cantTeorica * cantidadNum); 
-                        promesaMateriales.push( App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } }).then(()=> material.stock_actual = nuevoStock) ); 
-                    } 
-                }
+                return data; 
+            } catch (error) { 
+                return { status: "error", message: "Fallo de conexión." }; 
             }
         }
-        const resPedido = await App.api.fetch("guardar_fila", { nombreHoja: "pedidos", datos: datosPedido }); 
-        if (resPedido.status === "success") { 
-            await App.api.fetch("guardar_fila", { nombreHoja: "pedido_detalle", datos: datosDetalle }); 
-            const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datosDetalle.id, estado: "pendiente", fecha_creacion: new Date().toISOString() }; 
-            await App.api.fetch("guardar_fila", { nombreHoja: "ordenes_produccion", datos: nuevaOrden });
-            await Promise.all(promesaMateriales); 
-            App.state.pedidos.push(datosPedido); 
-            App.state.pedido_detalle.push(datosDetalle); 
-            App.state.ordenes_produccion.push(nuevaOrden);
-            App.ui.hideLoader(); App.ui.toast("Orden creada"); App.router.handleRoute(); 
-        } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
     },
-    
-    async guardarNuevoPedido(datosFormulario) { 
-        App.ui.showLoader("Creando pedido..."); 
-        const pedidoId = "PED-" + Date.now(); 
-        const totalNum = parseFloat(datosFormulario.total) || 0; 
-        const anticipoNum = parseFloat(datosFormulario.anticipo) || 0; 
-        const cantidadNum = parseInt(datosFormulario.cantidad) || 1; 
-        const datosPedido = { id: pedidoId, cliente_id: datosFormulario.cliente_id, estado: "nuevo", total: totalNum, anticipo: anticipoNum, notas: datosFormulario.notas, fecha_entrega: datosFormulario.fecha_entrega, fecha_creacion: new Date().toISOString() }; 
-        const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datosFormulario.producto_id, cantidad: cantidadNum, precio_unitario: totalNum / cantidadNum }; 
-        
-        const producto = App.state.productos.find(p => p.id === datosFormulario.producto_id); 
-        const promesaMateriales = [];
-        if(producto) {
-            for(let i=1; i<=5; i++) {
-                const matId = producto[`mat_${i}`]; 
-                const cantTeorica = parseFloat(producto[`cant_${i}`] || 0);
-                if(matId && cantTeorica > 0) { 
-                    const material = App.state.inventario.find(m => m.id === matId); 
-                    if(material) { 
-                        const nuevoStock = parseFloat(material.stock_actual) - (cantTeorica * cantidadNum); 
-                        promesaMateriales.push( App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } }).then(()=> material.stock_actual = nuevoStock) ); 
-                    } 
-                }
-            }
+
+    ui: {
+        container: null,
+        init() { 
+            this.container = document.getElementById('overlays'); 
+            const toastCont = document.createElement('div'); 
+            toastCont.className = 'toast-container'; 
+            toastCont.id = 'toast-container'; 
+            document.body.appendChild(toastCont); 
+            const loader = document.createElement('div'); 
+            loader.id = 'global-loader'; 
+            loader.innerHTML = `<div class="spinner"></div><h2 style="margin: 0; font-weight: 600;">Descanso Maya</h2><p id="loader-text" style="margin-top: 10px; opacity: 0.8; font-size: 0.9rem;">Sincronizando módulos...</p><button id="btn-reintentar" class="btn btn-secondary hidden" style="margin-top: 20px;" onclick="location.reload()">Reintentar</button>`; 
+            document.body.appendChild(loader); 
+        },
+        toast(message) { 
+            const cont = document.getElementById('toast-container'); 
+            const t = document.createElement('div'); 
+            t.className = 'toast'; 
+            t.textContent = message; 
+            cont.appendChild(t); 
+            setTimeout(() => t.remove(), 4000); 
+        },
+        showLoader(mensaje = "Procesando...") { 
+            const loader = document.getElementById('global-loader'); 
+            if(loader) { 
+                document.getElementById('loader-text').textContent = mensaje; 
+                loader.classList.remove('hidden'); 
+            } 
+        },
+        hideLoader() { 
+            const loader = document.getElementById('global-loader'); 
+            if(loader) loader.classList.add('hidden'); 
+        },
+        openSheet(title, contentHTML, onSaveCallback) { 
+            this.container.innerHTML = `<div class="overlay-bg active" id="sheet-bg"></div><div class="bottom-sheet active" id="sheet-content"><div class="sheet-header"><h3>${title}</h3><button class="sheet-close" id="sheet-close">&times;</button></div><div class="sheet-body">${contentHTML}</div></div>`; 
+            document.getElementById('sheet-close').onclick = this.closeSheet.bind(this); 
+            document.getElementById('sheet-bg').onclick = this.closeSheet.bind(this); 
+            const form = document.getElementById('dynamic-form'); 
+            if(form && onSaveCallback) { 
+                form.onsubmit = (e) => { 
+                    e.preventDefault(); 
+                    const data = Object.fromEntries(new FormData(form).entries()); 
+                    this.closeSheet(); 
+                    onSaveCallback(data); 
+                }; 
+            } 
+        },
+        closeSheet() { 
+            this.container.innerHTML = ''; 
         }
-        const resPedido = await App.api.fetch("guardar_fila", { nombreHoja: "pedidos", datos: datosPedido }); 
-        if (resPedido.status === "success") { 
-            await App.api.fetch("guardar_fila", { nombreHoja: "pedido_detalle", datos: datosDetalle }); 
-            await Promise.all(promesaMateriales); 
-            App.state.pedidos.push(datosPedido); 
-            App.state.pedido_detalle.push(datosDetalle); 
-            App.ui.hideLoader(); App.ui.toast("Registrado y descontado"); App.router.handleRoute(); 
-        } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
-    },
-    
-    async mandarAProduccion(pedidoId) { 
-        App.ui.showLoader("Generando..."); 
-        const detalle = App.state.pedido_detalle.find(d => d.pedido_id === pedidoId); 
-        if (!detalle) return; 
-        const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: detalle.id, estado: "pendiente", fecha_creacion: new Date().toISOString() }; 
-        const res = await App.api.fetch("guardar_fila", { nombreHoja: "ordenes_produccion", datos: nuevaOrden }); 
-        App.ui.hideLoader(); 
-        if (res.status === "success") { 
-            App.state.ordenes_produccion.push(nuevaOrden); 
-            App.ui.toast("Enviado a producción"); App.router.navigate('produccion'); 
-        } 
     },
 
-    async guardarTrabajoOrden(ordenId, data, esReparacion = false) { 
-        App.ui.showLoader("Asignando..."); 
-        const sanitizedTaskName = (data.tarea_nombre || "Trabajo").replace(/[^a-zA-Z0-9_ \-]/g, ""); 
-        const pagoObj = { id: "PAGO-" + Date.now() + "-" + sanitizedTaskName, artesano_id: data.artesano_id, orden_id: ordenId, monto_unitario: parseFloat(data.tarea_val), total: parseFloat(data.total), estado: "pendiente", fecha: new Date().toISOString() }; 
-        const res = await App.api.fetch("guardar_fila", { nombreHoja: "pago_artesanos", datos: pagoObj }); 
-        App.ui.hideLoader(); 
-        if(res.status === "success") { 
-            App.state.pago_artesanos.push(pagoObj); 
-            App.ui.toast("Asignado"); 
-            if(esReparacion) { App.router.handleRoute(); } 
-            else { App.views.modalEditarOrden(ordenId); } 
-        } else { App.ui.toast("Error"); App.router.handleRoute(); } 
-    },
-
-    async cerrarOrdenProduccion(datosFormulario) { 
-        App.ui.showLoader("Finalizando..."); 
-        const ordenId = datosFormulario.orden_id; 
-        const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); 
-        const detalle = App.state.pedido_detalle.find(d => d.pedido_id === orden.pedido_detalle_id); 
-        const producto = App.state.productos.find(p => p.id === detalle.producto_id); 
-        
-        await App.api.fetch("actualizar_fila", { nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: { estado: 'listo' } }); 
-        orden.estado = 'listo'; 
-        
-        for(let i=1; i<=5; i++) { 
-            const matId = datosFormulario[`mat_${i}_id`]; 
-            const consumoTeorico = parseFloat(datosFormulario[`mat_${i}_teorico`]); 
-            const consumoReal = parseFloat(datosFormulario[`mat_${i}_real`]); 
-            if(matId && !isNaN(consumoTeorico) && !isNaN(consumoReal)) { 
-                const material = App.state.inventario.find(m => m.id === matId); 
-                if(material) { 
-                    const diferencia = consumoReal - consumoTeorico; 
-                    if(diferencia !== 0) { 
-                        const stockAjustado = parseFloat(material.stock_actual) - diferencia; 
-                        await App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: stockAjustado } }); 
-                        material.stock_actual = stockAjustado; 
-                    } 
-                    const consumoObj = { id: "CONS-" + Date.now() + i, orden_id: ordenId, material_id: material.id, cantidad_teorica: consumoTeorico, cantidad_real: consumoReal, fecha: new Date().toISOString() }; 
-                    await App.api.fetch("guardar_fila", { nombreHoja: "consumos_produccion", datos: consumoObj }); 
-                    App.state.consumos_produccion.push(consumoObj); 
-                } 
-            } 
-        } 
-        
-        if (datosFormulario.sumar_stock === "1" && producto) { 
-            let matHamaca = App.state.inventario.find(m => m.nombre === producto.nombre && m.tipo === 'reventa'); 
-            if(matHamaca) { 
-                let nStock = parseFloat(matHamaca.stock_actual) + 1; 
-                await App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: matHamaca.id, datosNuevos: { stock_actual: nStock } }); 
-                matHamaca.stock_actual = nStock; 
-            } else { 
-                let nMat = { id: "MAT-" + Date.now() + "REV", nombre: producto.nombre, tipo: "reventa", unidad: "Pzas", stock_actual: 1, fecha_creacion: new Date().toISOString() }; 
-                await App.api.fetch("guardar_fila", { nombreHoja: "materiales", datos: nMat }); 
-                App.state.inventario.push(nMat); 
-            } 
-            App.ui.toast("Guardado en Bodega"); 
-        } 
-        App.ui.hideLoader(); App.ui.toast("¡Terminado!"); App.router.handleRoute(); 
-    },
-
-    async procesarCambioOrden(ordenId, datos) { 
-        if (datos.estado === 'listo') { 
-            App.views.formCerrarOrden(ordenId); 
-        } else { 
-            App.ui.showLoader("Actualizando..."); 
-            const res = await App.api.fetch("actualizar_fila", { nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: datos }); 
-            App.ui.hideLoader(); 
+    logic: {
+        async verificarPIN(pin) { 
+            App.ui.showLoader("Verificando acceso..."); 
+            App.state.pinAcceso = pin; 
+            const res = await App.api.fetch("ping"); 
             if (res.status === "success") { 
-                const ordenIndex = App.state.ordenes_produccion.findIndex(o => o.id === ordenId); 
-                App.state.ordenes_produccion[ordenIndex] = { ...App.state.ordenes_produccion[ordenIndex], ...datos }; 
-                App.ui.toast("Actualizado"); App.router.handleRoute(); 
-            } else { App.ui.toast("Error"); } 
-        } 
-    },
-
-    async liquidarNomina(artesanoId) { 
-        App.ui.showLoader("Liquidando..."); 
-        const pagosPendientes = App.state.pago_artesanos.filter(p => p.artesano_id === artesanoId && p.estado === 'pendiente'); 
-        let totalPagado = 0; 
-        const promesasDePago = []; 
-        for (let pago of pagosPendientes) { 
-            promesasDePago.push( App.api.fetch("actualizar_fila", { nombreHoja: "pago_artesanos", idFila: pago.id, datosNuevos: { estado: 'pagado' } }).then(res => { if(res.status === "success") { pago.estado = 'pagado'; totalPagado += parseFloat(pago.total || 0); } }) ); 
-        } 
-        await Promise.all(promesasDePago); 
-        
-        if (totalPagado > 0) { 
-            const artesano = App.state.artesanos.find(a => a.id === artesanoId); 
-            const gastoObj = { id: "GAS-" + Date.now(), descripcion: "Nómina - " + (artesano ? artesano.nombre : 'Artesano'), categoria: "nomina", monto: totalPagado, fecha: new Date().toISOString().split('T')[0] }; 
-            await App.api.fetch("guardar_fila", { nombreHoja: "gastos", datos: gastoObj }); 
-            App.state.gastos.push(gastoObj); 
-        } 
-        App.ui.hideLoader(); App.ui.toast(`Liquidados $${totalPagado}`); App.router.handleRoute(); 
-    },
-    
-    async guardarNuevaCompra(datos) { 
-        App.ui.showLoader("Registrando compra..."); 
-        const compraId = "COM-" + Date.now(); 
-        const compra = { id: compraId, proveedor_id: datos.proveedor_id, fecha: datos.fecha, total: parseFloat(datos.total), monto_pagado: parseFloat(datos.total), estado: "pagado", fecha_creacion: new Date().toISOString() }; 
-        const promesasMateriales = []; 
-        for(let i=1; i<=5; i++) { 
-            const matId = datos[`mat_${i}`]; 
-            const cant = parseFloat(datos[`cant_${i}`] || 0); 
-            if(matId && cant > 0) { 
-                const material = App.state.inventario.find(m => m.id === matId); 
-                if(material) { 
-                    const nuevoStock = parseFloat(material.stock_actual) + cant; 
-                    promesasMateriales.push( App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } }).then(()=> { 
-                        material.stock_actual = nuevoStock; 
-                        if (material.tipo === 'reventa') { 
-                            const existeProd = App.state.productos.find(p => p.mat_1 === material.id); 
-                            if(!existeProd) { 
-                                const nuevoProd = { id: "PROD-" + Date.now() + i, nombre: material.nombre, categoria: "reventa", clasificacion: "Reventa", precio_venta: 0, mat_1: material.id, cant_1: 1, uso_1: "Completo", activo: "TRUE", fecha_creacion: new Date().toISOString() }; 
-                                App.api.fetch("guardar_fila", { nombreHoja: "productos", datos: nuevoProd }).then(()=> App.state.productos.push(nuevoProd)); 
+                localStorage.setItem('erp_pin', pin); 
+                App.ui.toast("¡Acceso concedido!"); 
+                this.cargarDatosIniciales(); 
+            } else { 
+                App.state.pinAcceso = null; 
+                App.ui.hideLoader(); 
+                App.ui.toast("PIN Incorrecto."); 
+            } 
+        },
+        async cargarDatosIniciales() { 
+            App.ui.showLoader("Descargando bases de datos..."); 
+            try { 
+                const hojas = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "consumos_produccion"]; 
+                const promesas = hojas.map(h => App.api.fetch("leer_hoja", { nombreHoja: h })); 
+                const resultados = await Promise.all(promesas); 
+                if (resultados[0].status === "error") throw new Error(resultados[0].message); 
+                
+                App.state.inventario = resultados[0].data || []; 
+                App.state.clientes = resultados[1].data || []; 
+                App.state.productos = resultados[2].data || []; 
+                App.state.pedidos = resultados[3].data || []; 
+                App.state.pedido_detalle = resultados[4].data || []; 
+                App.state.ordenes_produccion = resultados[5].data || []; 
+                App.state.artesanos = resultados[6].data || []; 
+                App.state.abonos = resultados[7].data || []; 
+                App.state.gastos = resultados[8].data || []; 
+                App.state.compras = resultados[9].data || []; 
+                App.state.proveedores = resultados[10].data || []; 
+                App.state.reparaciones = resultados[11].data || []; 
+                App.state.tarifas_artesano = resultados[12].data || []; 
+                App.state.pago_artesanos = resultados[13].data || []; 
+                App.state.consumos_produccion = resultados[14].data || []; 
+                
+                App.ui.hideLoader(); 
+                App.router.init(); 
+            } catch (error) { 
+                App.ui.toast("Error de red."); 
+                document.getElementById('btn-reintentar').classList.remove('hidden'); 
+            } 
+        },
+        descargarRespaldo() { 
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(App.state, null, 2)); 
+            const dlAnchorElem = document.createElement('a'); 
+            dlAnchorElem.setAttribute("href", dataStr); 
+            dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`); 
+            dlAnchorElem.click(); 
+            App.ui.toast("Respaldo descargado exitosamente"); 
+        },
+        async eliminarRegistroGenerico(hoja, id, estado) { 
+            if(!confirm("⚠️ ¿Eliminar registro permanentemente?")) return; 
+            App.ui.showLoader("Eliminando..."); 
+            const res = await App.api.fetch("eliminar_fila", { nombreHoja: hoja, idFila: id }); 
+            App.ui.hideLoader(); 
+            if(res.status === "success") { 
+                App.state[estado] = App.state[estado].filter(item => item.id !== id); 
+                App.ui.toast("Eliminado"); 
+                App.router.handleRoute(); 
+            } else { App.ui.toast("Error al eliminar"); } 
+        },
+        async eliminarPedido(id) { 
+            if(!confirm("⚠️ ¿Eliminar pedido? Se restaurará el inventario.")) return; 
+            App.ui.showLoader("Procesando..."); 
+            const pedido = App.state.pedidos.find(p => p.id === id); 
+            const detalle = App.state.pedido_detalle.find(d => d.pedido_id === id); 
+            const orden = App.state.ordenes_produccion.find(o => detalle && o.pedido_detalle_id === detalle.id); 
+            
+            if(detalle) { 
+                const producto = App.state.productos.find(p => p.id === detalle.producto_id); 
+                if(producto && (!orden || orden.estado !== 'listo')) { 
+                    for(let i=1; i<=5; i++) { 
+                        const matId = producto[`mat_${i}`]; 
+                        const cant = parseFloat(producto[`cant_${i}`] || 0); 
+                        if(matId && cant > 0) { 
+                            const material = App.state.inventario.find(m => m.id === matId); 
+                            if(material) { 
+                                const nuevoStock = parseFloat(material.stock_actual) + (cant * parseInt(detalle.cantidad || 1)); 
+                                await App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } }); 
+                                material.stock_actual = nuevoStock; 
                             } 
                         } 
-                    })); 
+                    } 
                 } 
             } 
-        } 
-        const res = await App.api.fetch("guardar_fila", { nombreHoja: "compras", datos: compra }); 
-        if (res.status === "success") { 
-            await Promise.all(promesasMateriales); 
-            App.state.compras.push(compra); 
-            App.ui.hideLoader(); App.ui.toast("Compra registrada"); App.router.handleRoute(); 
-        } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
-    },
-
-    async guardarNuevaReparacion(datos) { 
-        App.ui.showLoader("Registrando reparación..."); 
-        datos.id = "REP-" + Date.now(); 
-        datos.estado = "recibida"; 
-        datos.fecha_creacion = new Date().toISOString(); 
-        const res = await App.api.fetch("guardar_fila", { nombreHoja: "reparaciones", datos: datos }); 
-        App.ui.hideLoader(); 
-        if (res.status === "success") { 
-            App.state.reparaciones.push(datos); 
-            App.ui.toast("Reparación registrada"); App.router.handleRoute(); 
-        } else { App.ui.toast("Error en hoja 'reparaciones'."); } 
-    },
-    
-    async actualizarReparacion(repId, estado) { 
-        App.ui.showLoader("Actualizando..."); 
-        await App.api.fetch("actualizar_fila", { nombreHoja: "reparaciones", idFila: repId, datosNuevos: { estado: estado } }); 
-        const rep = App.state.reparaciones.find(r => r.id === repId); 
-        if(rep) rep.estado = estado; 
-        App.ui.hideLoader(); App.ui.toast("Actualizado"); App.router.handleRoute(); 
-    },
-    
-    async guardarAbono(datos) { 
-        App.ui.showLoader("Registrando..."); 
-        const nuevoAbono = { id: "ABO-" + Date.now(), pedido_id: datos.pedido_id, cliente_id: datos.cliente_id, monto: parseFloat(datos.monto) || 0, nota: datos.nota, fecha: new Date().toISOString() }; 
-        const res = await App.api.fetch("guardar_fila", { nombreHoja: "abonos_clientes", datos: nuevoAbono }); 
-        App.ui.hideLoader(); 
-        if (res.status === "success") { 
-            App.state.abonos.push(nuevoAbono); 
-            App.ui.toast("Pago registrado"); App.router.handleRoute(); 
-        } else App.ui.toast("Error"); 
-    },
-
-    // --- IMPRESIONES DE PDF ---
-    imprimirNota(pedidoId) { 
-        const p = App.state.pedidos.find(x => x.id === pedidoId); 
-        const c = App.state.clientes.find(cli => cli.id === p.cliente_id); 
-        const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id); 
-        const producto = detalle ? App.state.productos.find(prod => prod.id === detalle.producto_id) : null; 
-        const abonosDelPedido = App.state.abonos.filter(a => a.pedido_id === p.id); 
-        const totalAbonado = abonosDelPedido.reduce((s, a) => s + parseFloat(a.monto||0), 0); 
-        const saldoReal = parseFloat(p.total) - parseFloat(p.anticipo) - totalAbonado; 
+            await App.api.fetch("eliminar_fila", { nombreHoja: "pedidos", idFila: id }); 
+            if(detalle) await App.api.fetch("eliminar_fila", { nombreHoja: "pedido_detalle", idFila: detalle.id }); 
+            if(orden) await App.api.fetch("eliminar_fila", { nombreHoja: "ordenes_produccion", idFila: orden.id }); 
+            
+            App.state.pedidos = App.state.pedidos.filter(p => p.id !== id); 
+            if(detalle) App.state.pedido_detalle = App.state.pedido_detalle.filter(d => d.id !== detalle.id); 
+            if(orden) App.state.ordenes_produccion = App.state.ordenes_produccion.filter(o => o.id !== orden.id); 
+            App.ui.hideLoader(); App.ui.toast("Eliminado y stock restaurado"); App.router.handleRoute(); 
+        },
+        async eliminarCompra(id) { 
+            if(!confirm("⚠️ ¿Eliminar compra? Ajusta manualmente tu inventario restando lo que habías sumado.")) return; 
+            App.ui.showLoader("Eliminando..."); 
+            const res = await App.api.fetch("eliminar_fila", { nombreHoja: "compras", idFila: id }); 
+            App.ui.hideLoader(); 
+            if(res.status === "success") { 
+                App.state.compras = App.state.compras.filter(c => c.id !== id); 
+                App.ui.toast("Compra eliminada."); 
+                App.router.handleRoute(); 
+            } else { App.ui.toast("Error"); } 
+        },
+        async actualizarRegistroGenerico(hoja, id, datos, estado) { 
+            App.ui.showLoader("Guardando..."); 
+            const res = await App.api.fetch("actualizar_fila", { nombreHoja: hoja, idFila: id, datosNuevos: datos }); 
+            App.ui.hideLoader(); 
+            if (res.status === "success") { 
+                const index = App.state[estado].findIndex(item => item.id === id); 
+                if (index !== -1) App.state[estado][index] = { ...App.state[estado][index], ...datos }; 
+                App.ui.toast("Actualizado"); App.router.handleRoute(); 
+            } else { App.ui.toast("Error"); } 
+        },
+        async guardarNuevoGenerico(hoja, datos, prefijo, estado) { 
+            App.ui.showLoader("Registrando..."); 
+            datos.id = prefijo + "-" + Date.now(); 
+            if(!datos.fecha_creacion) datos.fecha_creacion = new Date().toISOString(); 
+            const res = await App.api.fetch("guardar_fila", { nombreHoja: hoja, datos: datos }); 
+            App.ui.hideLoader(); 
+            if (res.status === "success") { 
+                App.state[estado].push(datos); 
+                App.ui.toast("Guardado"); App.router.handleRoute(); 
+            } else { App.ui.toast("Error"); } 
+        },
         
-        const ventana = window.open('', '_blank'); 
-        let htmlNota = `
-        <html><head><title>Nota de Remisión</title>
-        <style>
-            body{font-family:'Arial',sans-serif;background:#f9f9f9;padding:20px;color:#333;}
-            .ticket{background:white;max-width:380px;margin:0 auto;padding:25px;border-radius:8px;box-shadow:0 4px 15px rgba(0,0,0,0.05);}
-            .header{text-align:center;border-bottom:2px dashed #cbd5e0;padding-bottom:15px;margin-bottom:15px;}
-            .header img{max-height:80px;margin-bottom:10px;display:block;margin-left:auto;margin-right:auto;}
-            .header h1{margin:0;color:#2d3748;font-size:24px;text-transform:uppercase;letter-spacing:1px;}
-            .info-p{margin:4px 0;font-size:14px;color:#4a5568;}
-            table{width:100%;border-collapse:collapse;margin-top:15px;margin-bottom:15px;}
-            th{border-bottom:1px solid #e2e8f0;padding:8px 0;text-align:left;font-size:13px;color:#718096;}
-            td{padding:8px 0;font-size:14px;color:#2d3748;}
-            .totales{border-top:2px solid #cbd5e0;padding-top:15px;}
-            .totales-row{display:flex;justify-content:space-between;margin-bottom:5px;font-size:14px;}
-            .saldo-final{display:flex;justify-content:space-between;margin-top:10px;font-size:18px;font-weight:bold;color:#2d3748;background:${saldoReal<=0?'#f0fff4':'#fff5f5'};padding:10px;border-radius:6px;}
-            .footer{text-align:center;margin-top:30px;font-size:12px;color:#a0aec0;}
-            .social{margin-top:10px;font-weight:bold;color:#4A5568;font-size:13px;}
-            @media print{body{background:white;padding:0;}.ticket{box-shadow:none;border:none;max-width:100%;}}
-        </style></head><body>
-        <div class="ticket">
-            <div class="header">
-                <img src="${App.state.config.logoUrl}" alt="Logo" onerror="this.style.display='none'">
-                <h1>${App.state.config.empresa}</h1>
+        guardarCotizacion(datos) { 
+            datos.id = "COT-" + Date.now(); 
+            datos.fecha_creacion = new Date().toISOString(); 
+            App.state.cotizaciones.push(datos); 
+            localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); 
+            App.ui.toast("Cotización generada"); 
+            App.router.handleRoute(); 
+            App.logic.imprimirCotizacion(datos.id); 
+        },
+        eliminarCotizacion(id) { 
+            if(!confirm("⚠️ ¿Eliminar cotización?")) return; 
+            App.state.cotizaciones = App.state.cotizaciones.filter(c => c.id !== id); 
+            localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); 
+            App.ui.toast("Eliminada"); App.router.handleRoute(); 
+        },
+
+        async guardarOrdenStock(datosFormulario) { 
+            App.ui.showLoader("Procesando Stock..."); 
+            const pedidoId = "PED-STOCK-" + Date.now(); 
+            const cantidadNum = parseInt(datosFormulario.cantidad) || 1;
+            const datosPedido = { id: pedidoId, cliente_id: "STOCK_INTERNO", estado: "nuevo", total: 0, anticipo: 0, notas: "Producción Interna", fecha_entrega: "", fecha_creacion: new Date().toISOString() }; 
+            const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datosFormulario.producto_id, cantidad: cantidadNum, precio_unitario: 0 }; 
+            
+            const producto = App.state.productos.find(p => p.id === datosFormulario.producto_id); 
+            const promesaMateriales = [];
+            if(producto) {
+                for(let i=1; i<=5; i++) {
+                    const matId = producto[`mat_${i}`]; 
+                    const cantTeorica = parseFloat(producto[`cant_${i}`] || 0);
+                    if(matId && cantTeorica > 0) { 
+                        const material = App.state.inventario.find(m => m.id === matId); 
+                        if(material) { 
+                            const nuevoStock = parseFloat(material.stock_actual) - (cantTeorica * cantidadNum); 
+                            promesaMateriales.push( App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } }).then(()=> material.stock_actual = nuevoStock) ); 
+                        } 
+                    }
+                }
+            }
+            const resPedido = await App.api.fetch("guardar_fila", { nombreHoja: "pedidos", datos: datosPedido }); 
+            if (resPedido.status === "success") { 
+                await App.api.fetch("guardar_fila", { nombreHoja: "pedido_detalle", datos: datosDetalle }); 
+                const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datosDetalle.id, estado: "pendiente", fecha_creacion: new Date().toISOString() }; 
+                await App.api.fetch("guardar_fila", { nombreHoja: "ordenes_produccion", datos: nuevaOrden });
+                await Promise.all(promesaMateriales); 
+                App.state.pedidos.push(datosPedido); 
+                App.state.pedido_detalle.push(datosDetalle); 
+                App.state.ordenes_produccion.push(nuevaOrden);
+                App.ui.hideLoader(); App.ui.toast("Orden creada"); App.router.handleRoute(); 
+            } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
+        },
+        
+        async guardarNuevoPedido(datosFormulario) { 
+            App.ui.showLoader("Creando pedido..."); 
+            const pedidoId = "PED-" + Date.now(); 
+            const totalNum = parseFloat(datosFormulario.total) || 0; 
+            const anticipoNum = parseFloat(datosFormulario.anticipo) || 0; 
+            const cantidadNum = parseInt(datosFormulario.cantidad) || 1; 
+            const datosPedido = { id: pedidoId, cliente_id: datosFormulario.cliente_id, estado: "nuevo", total: totalNum, anticipo: anticipoNum, notas: datosFormulario.notas, fecha_entrega: datosFormulario.fecha_entrega, fecha_creacion: new Date().toISOString() }; 
+            const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datosFormulario.producto_id, cantidad: cantidadNum, precio_unitario: totalNum / cantidadNum }; 
+            
+            const producto = App.state.productos.find(p => p.id === datosFormulario.producto_id); 
+            const promesaMateriales = [];
+            if(producto) {
+                for(let i=1; i<=5; i++) {
+                    const matId = producto[`mat_${i}`]; 
+                    const cantTeorica = parseFloat(producto[`cant_${i}`] || 0);
+                    if(matId && cantTeorica > 0) { 
+                        const material = App.state.inventario.find(m => m.id === matId); 
+                        if(material) { 
+                            const nuevoStock = parseFloat(material.stock_actual) - (cantTeorica * cantidadNum); 
+                            promesaMateriales.push( App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } }).then(()=> material.stock_actual = nuevoStock) ); 
+                        } 
+                    }
+                }
+            }
+            const resPedido = await App.api.fetch("guardar_fila", { nombreHoja: "pedidos", datos: datosPedido }); 
+            if (resPedido.status === "success") { 
+                await App.api.fetch("guardar_fila", { nombreHoja: "pedido_detalle", datos: datosDetalle }); 
+                await Promise.all(promesaMateriales); 
+                App.state.pedidos.push(datosPedido); 
+                App.state.pedido_detalle.push(datosDetalle); 
+                App.ui.hideLoader(); App.ui.toast("Registrado y descontado"); App.router.handleRoute(); 
+            } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
+        },
+        
+        async mandarAProduccion(pedidoId) { 
+            App.ui.showLoader("Generando..."); 
+            const detalle = App.state.pedido_detalle.find(d => d.pedido_id === pedidoId); 
+            if (!detalle) return; 
+            const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: detalle.id, estado: "pendiente", fecha_creacion: new Date().toISOString() }; 
+            const res = await App.api.fetch("guardar_fila", { nombreHoja: "ordenes_produccion", datos: nuevaOrden }); 
+            App.ui.hideLoader(); 
+            if (res.status === "success") { 
+                App.state.ordenes_produccion.push(nuevaOrden); 
+                App.ui.toast("Enviado a producción"); App.router.navigate('produccion'); 
+            } 
+        },
+
+        async guardarTrabajoOrden(ordenId, data, esReparacion = false) { 
+            App.ui.showLoader("Asignando..."); 
+            const sanitizedTaskName = (data.tarea_nombre || "Trabajo").replace(/[^a-zA-Z0-9_ \-]/g, ""); 
+            const pagoObj = { id: "PAGO-" + Date.now() + "-" + sanitizedTaskName, artesano_id: data.artesano_id, orden_id: ordenId, monto_unitario: parseFloat(data.tarea_val), total: parseFloat(data.total), estado: "pendiente", fecha: new Date().toISOString() }; 
+            const res = await App.api.fetch("guardar_fila", { nombreHoja: "pago_artesanos", datos: pagoObj }); 
+            App.ui.hideLoader(); 
+            if(res.status === "success") { 
+                App.state.pago_artesanos.push(pagoObj); 
+                App.ui.toast("Asignado"); 
+                if(esReparacion) { App.router.handleRoute(); } 
+                else { App.views.modalEditarOrden(ordenId); } 
+            } else { App.ui.toast("Error"); App.router.handleRoute(); } 
+        },
+
+        async cerrarOrdenProduccion(datosFormulario) { 
+            App.ui.showLoader("Finalizando..."); 
+            const ordenId = datosFormulario.orden_id; 
+            const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); 
+            const detalle = App.state.pedido_detalle.find(d => d.pedido_id === orden.pedido_detalle_id); 
+            const producto = App.state.productos.find(p => p.id === detalle.producto_id); 
+            
+            await App.api.fetch("actualizar_fila", { nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: { estado: 'listo' } }); 
+            orden.estado = 'listo'; 
+            
+            for(let i=1; i<=5; i++) { 
+                const matId = datosFormulario[`mat_${i}_id`]; 
+                const consumoTeorico = parseFloat(datosFormulario[`mat_${i}_teorico`]); 
+                const consumoReal = parseFloat(datosFormulario[`mat_${i}_real`]); 
+                if(matId && !isNaN(consumoTeorico) && !isNaN(consumoReal)) { 
+                    const material = App.state.inventario.find(m => m.id === matId); 
+                    if(material) { 
+                        const diferencia = consumoReal - consumoTeorico; 
+                        if(diferencia !== 0) { 
+                            const stockAjustado = parseFloat(material.stock_actual) - diferencia; 
+                            await App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: stockAjustado } }); 
+                            material.stock_actual = stockAjustado; 
+                        } 
+                        const consumoObj = { id: "CONS-" + Date.now() + i, orden_id: ordenId, material_id: material.id, cantidad_teorica: consumoTeorico, cantidad_real: consumoReal, fecha: new Date().toISOString() }; 
+                        await App.api.fetch("guardar_fila", { nombreHoja: "consumos_produccion", datos: consumoObj }); 
+                        App.state.consumos_produccion.push(consumoObj); 
+                    } 
+                } 
+            } 
+            
+            if (datosFormulario.sumar_stock === "1" && producto) { 
+                let matHamaca = App.state.inventario.find(m => m.nombre === producto.nombre && m.tipo === 'reventa'); 
+                if(matHamaca) { 
+                    let nStock = parseFloat(matHamaca.stock_actual) + 1; 
+                    await App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: matHamaca.id, datosNuevos: { stock_actual: nStock } }); 
+                    matHamaca.stock_actual = nStock; 
+                } else { 
+                    let nMat = { id: "MAT-" + Date.now() + "REV", nombre: producto.nombre, tipo: "reventa", unidad: "Pzas", stock_actual: 1, fecha_creacion: new Date().toISOString() }; 
+                    await App.api.fetch("guardar_fila", { nombreHoja: "materiales", datos: nMat }); 
+                    App.state.inventario.push(nMat); 
+                } 
+                App.ui.toast("Guardado en Bodega"); 
+            } 
+            App.ui.hideLoader(); App.ui.toast("¡Terminado!"); App.router.handleRoute(); 
+        },
+
+        async procesarCambioOrden(ordenId, datos) { 
+            if (datos.estado === 'listo') { 
+                App.views.formCerrarOrden(ordenId); 
+            } else { 
+                App.ui.showLoader("Actualizando..."); 
+                const res = await App.api.fetch("actualizar_fila", { nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: datos }); 
+                App.ui.hideLoader(); 
+                if (res.status === "success") { 
+                    const ordenIndex = App.state.ordenes_produccion.findIndex(o => o.id === ordenId); 
+                    App.state.ordenes_produccion[ordenIndex] = { ...App.state.ordenes_produccion[ordenIndex], ...datos }; 
+                    App.ui.toast("Actualizado"); App.router.handleRoute(); 
+                } else { App.ui.toast("Error"); } 
+            } 
+        },
+
+        async liquidarNomina(artesanoId) { 
+            App.ui.showLoader("Liquidando..."); 
+            const pagosPendientes = App.state.pago_artesanos.filter(p => p.artesano_id === artesanoId && p.estado === 'pendiente'); 
+            let totalPagado = 0; 
+            const promesasDePago = []; 
+            for (let pago of pagosPendientes) { 
+                promesasDePago.push( App.api.fetch("actualizar_fila", { nombreHoja: "pago_artesanos", idFila: pago.id, datosNuevos: { estado: 'pagado' } }).then(res => { if(res.status === "success") { pago.estado = 'pagado'; totalPagado += parseFloat(pago.total || 0); } }) ); 
+            } 
+            await Promise.all(promesasDePago); 
+            
+            if (totalPagado > 0) { 
+                const artesano = App.state.artesanos.find(a => a.id === artesanoId); 
+                const gastoObj = { id: "GAS-" + Date.now(), descripcion: "Nómina - " + (artesano ? artesano.nombre : 'Artesano'), categoria: "nomina", monto: totalPagado, fecha: new Date().toISOString().split('T')[0] }; 
+                await App.api.fetch("guardar_fila", { nombreHoja: "gastos", datos: gastoObj }); 
+                App.state.gastos.push(gastoObj); 
+            } 
+            App.ui.hideLoader(); App.ui.toast(`Liquidados $${totalPagado}`); App.router.handleRoute(); 
+        },
+        
+        async guardarNuevaCompra(datos) { 
+            App.ui.showLoader("Registrando compra..."); 
+            const compraId = "COM-" + Date.now(); 
+            const compra = { id: compraId, proveedor_id: datos.proveedor_id, fecha: datos.fecha, total: parseFloat(datos.total), monto_pagado: parseFloat(datos.total), estado: "pagado", fecha_creacion: new Date().toISOString() }; 
+            const promesasMateriales = []; 
+            for(let i=1; i<=5; i++) { 
+                const matId = datos[`mat_${i}`]; 
+                const cant = parseFloat(datos[`cant_${i}`] || 0); 
+                if(matId && cant > 0) { 
+                    const material = App.state.inventario.find(m => m.id === matId); 
+                    if(material) { 
+                        const nuevoStock = parseFloat(material.stock_actual) + cant; 
+                        promesasMateriales.push( App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } }).then(()=> { 
+                            material.stock_actual = nuevoStock; 
+                            if (material.tipo === 'reventa') { 
+                                const existeProd = App.state.productos.find(p => p.mat_1 === material.id); 
+                                if(!existeProd) { 
+                                    const nuevoProd = { id: "PROD-" + Date.now() + i, nombre: material.nombre, categoria: "reventa", clasificacion: "Reventa", precio_venta: 0, mat_1: material.id, cant_1: 1, uso_1: "Completo", activo: "TRUE", fecha_creacion: new Date().toISOString() }; 
+                                    App.api.fetch("guardar_fila", { nombreHoja: "productos", datos: nuevoProd }).then(()=> App.state.productos.push(nuevoProd)); 
+                                } 
+                            } 
+                        })); 
+                    } 
+                } 
+            } 
+            const res = await App.api.fetch("guardar_fila", { nombreHoja: "compras", datos: compra }); 
+            if (res.status === "success") { 
+                await Promise.all(promesasMateriales); 
+                App.state.compras.push(compra); 
+                App.ui.hideLoader(); App.ui.toast("Compra registrada"); App.router.handleRoute(); 
+            } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
+        },
+
+        async guardarNuevaReparacion(datos) { 
+            App.ui.showLoader("Registrando reparación..."); 
+            datos.id = "REP-" + Date.now(); 
+            datos.estado = "recibida"; 
+            datos.fecha_creacion = new Date().toISOString(); 
+            const res = await App.api.fetch("guardar_fila", { nombreHoja: "reparaciones", datos: datos }); 
+            App.ui.hideLoader(); 
+            if (res.status === "success") { 
+                App.state.reparaciones.push(datos); 
+                App.ui.toast("Reparación registrada"); App.router.handleRoute(); 
+            } else { App.ui.toast("Error: Verifica tu hoja en Sheets."); } 
+        },
+        
+        async actualizarReparacion(repId, estado) { 
+            App.ui.showLoader("Actualizando..."); 
+            await App.api.fetch("actualizar_fila", { nombreHoja: "reparaciones", idFila: repId, datosNuevos: { estado: estado } }); 
+            const rep = App.state.reparaciones.find(r => r.id === repId); 
+            if(rep) rep.estado = estado; 
+            App.ui.hideLoader(); App.ui.toast("Actualizado"); App.router.handleRoute(); 
+        },
+        
+        async guardarAbono(datos) { 
+            App.ui.showLoader("Registrando..."); 
+            const nuevoAbono = { id: "ABO-" + Date.now(), pedido_id: datos.pedido_id, cliente_id: datos.cliente_id, monto: parseFloat(datos.monto) || 0, nota: datos.nota, fecha: new Date().toISOString() }; 
+            const res = await App.api.fetch("guardar_fila", { nombreHoja: "abonos_clientes", datos: nuevoAbono }); 
+            App.ui.hideLoader(); 
+            if (res.status === "success") { 
+                App.state.abonos.push(nuevoAbono); 
+                App.ui.toast("Pago registrado"); App.router.handleRoute(); 
+            } else App.ui.toast("Error"); 
+        },
+
+        imprimirNota(pedidoId) { 
+            const p = App.state.pedidos.find(x => x.id === pedidoId); 
+            const c = App.state.clientes.find(cli => cli.id === p.cliente_id); 
+            const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id); 
+            const producto = detalle ? App.state.productos.find(prod => prod.id === detalle.producto_id) : null; 
+            const abonosDelPedido = App.state.abonos.filter(a => a.pedido_id === p.id); 
+            const totalAbonado = abonosDelPedido.reduce((s, a) => s + parseFloat(a.monto||0), 0); 
+            const saldoReal = parseFloat(p.total) - parseFloat(p.anticipo) - totalAbonado; 
+            
+            const ventana = window.open('', '_blank'); 
+            let htmlNota = `
+            <html><head><title>Nota de Remisión</title>
+            <style>
+                body{font-family:'Arial',sans-serif;background:#f9f9f9;padding:20px;color:#333;}
+                .ticket{background:white;max-width:380px;margin:0 auto;padding:25px;border-radius:8px;box-shadow:0 4px 15px rgba(0,0,0,0.05);}
+                .header{text-align:center;border-bottom:2px dashed #cbd5e0;padding-bottom:15px;margin-bottom:15px;}
+                .header img{max-height:80px;margin-bottom:10px;display:block;margin-left:auto;margin-right:auto;}
+                .header h1{margin:0;color:#2d3748;font-size:24px;text-transform:uppercase;letter-spacing:1px;}
+                .info-p{margin:4px 0;font-size:14px;color:#4a5568;}
+                table{width:100%;border-collapse:collapse;margin-top:15px;margin-bottom:15px;}
+                th{border-bottom:1px solid #e2e8f0;padding:8px 0;text-align:left;font-size:13px;color:#718096;}
+                td{padding:8px 0;font-size:14px;color:#2d3748;}
+                .totales{border-top:2px solid #cbd5e0;padding-top:15px;}
+                .totales-row{display:flex;justify-content:space-between;margin-bottom:5px;font-size:14px;}
+                .saldo-final{display:flex;justify-content:space-between;margin-top:10px;font-size:18px;font-weight:bold;color:#2d3748;background:${saldoReal<=0?'#f0fff4':'#fff5f5'};padding:10px;border-radius:6px;}
+                .footer{text-align:center;margin-top:30px;font-size:12px;color:#a0aec0;}
+                .social{margin-top:10px;font-weight:bold;color:#4A5568;font-size:13px;}
+                @media print{body{background:white;padding:0;}.ticket{box-shadow:none;border:none;max-width:100%;}}
+            </style></head><body>
+            <div class="ticket">
+                <div class="header">
+                    <img src="${App.state.config.logoUrl}" alt="Logo" onerror="this.style.display='none'">
+                    <h1>${App.state.config.empresa}</h1>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <p class="info-p"><strong>Folio:</strong> ${p.id.replace('PED-', '')}</p>
+                    <p class="info-p"><strong>Fecha:</strong> ${new Date(p.fecha_creacion).toLocaleDateString()}</p>
+                    <p class="info-p"><strong>Cliente:</strong> ${c ? c.nombre : 'Mostrador'}</p>
+                </div>
+                <table>
+                    <tr><th>Cant</th><th>Desc</th><th style="text-align: right;">Importe</th></tr>
+                    <tr><td>${detalle ? detalle.cantidad : 1}</td><td>${producto ? producto.nombre : 'Artículo'}<br><small style="color:#718096; font-size:11px;">${p.notas || ''}</small></td><td style="text-align: right;">$${p.total}</td></tr>
+                </table>
+                <div class="totales">
+                    <div class="totales-row"><span>Subtotal:</span> <span>$${p.total}</span></div>
+                    <div class="totales-row"><span>Anticipo:</span> <span style="color:#e53e3e;">-$${p.anticipo}</span></div>
+                    ${totalAbonado > 0 ? `<div class="totales-row"><span>Abonos:</span> <span style="color:#e53e3e;">-$${totalAbonado}</span></div>` : ''}
+                    <div class="saldo-final"><span>SALDO:</span><span>$${saldoReal > 0 ? saldoReal : 0}</span></div>
+                </div>
+                <div class="footer">
+                    <p style="font-size:14px; font-weight:bold; color:#E53E3E;">¡Gracias por comprar lo hecho con amor! ❤️</p>
+                    <p class="social">👉 Síguenos en nuestras redes sociales:<br>${App.state.config.redesSociales}</p>
+                    <p style="margin-top: 15px;">Conserva tu recibo para aclaraciones</p>
+                </div>
             </div>
-            <div style="margin-bottom: 20px;">
-                <p class="info-p"><strong>Folio:</strong> ${p.id.replace('PED-', '')}</p>
-                <p class="info-p"><strong>Fecha:</strong> ${new Date(p.fecha_creacion).toLocaleDateString()}</p>
-                <p class="info-p"><strong>Cliente:</strong> ${c ? c.nombre : 'Mostrador'}</p>
-            </div>
-            <table>
-                <tr><th>Cant</th><th>Desc</th><th style="text-align: right;">Importe</th></tr>
-                <tr><td>${detalle ? detalle.cantidad : 1}</td><td>${producto ? producto.nombre : 'Artículo'}<br><small style="color:#718096; font-size:11px;">${p.notas || ''}</small></td><td style="text-align: right;">$${p.total}</td></tr>
-            </table>
-            <div class="totales">
-                <div class="totales-row"><span>Subtotal:</span> <span>$${p.total}</span></div>
-                <div class="totales-row"><span>Anticipo:</span> <span style="color:#e53e3e;">-$${p.anticipo}</span></div>
-                ${totalAbonado > 0 ? `<div class="totales-row"><span>Abonos:</span> <span style="color:#e53e3e;">-$${totalAbonado}</span></div>` : ''}
-                <div class="saldo-final"><span>SALDO:</span><span>$${saldoReal > 0 ? saldoReal : 0}</span></div>
-            </div>
-            <div class="footer">
-                <p style="font-size:14px; font-weight:bold; color:#E53E3E;">¡Gracias por comprar lo hecho con amor! ❤️</p>
-                <p class="social">👉 Siguenos en nuestras redes sociales:<br>${App.state.config.redesSociales}</p>
-                <p style="margin-top: 15px;">Conserva tu recibo para aclaraciones</p>
-            </div>
-        </div>
-        <script>setTimeout(()=>{window.print();},500);</script>
-        </body></html>`; 
+            <script>setTimeout(()=>{window.print();},500);</script>
+            </body></html>`; 
         ventana.document.write(htmlNota); 
         ventana.document.close(); 
     },
@@ -630,7 +632,7 @@ App.views = {
         let html = `<div class="card"><h3 class="card-title">Historial de Pedidos</h3>`; 
         [...(App.state.pedidos||[])].reverse().slice(0, 50).forEach(p => { 
             const c = App.state.clientes.find(cli => cli.id === p.cliente_id); 
-            const nombreC = p.cliente_id === "STOCK_INTERNO" ? "📦 BODEGA (Stock)" : (c ? c.nombre : 'Mostrador'); 
+            const nombreC = p.cliente_id === "STOCK_INTERNO" ? "📦 BODEGA" : (c ? c.nombre : 'Mostrador'); 
             const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id); 
             const producto = detalle ? App.state.productos.find(prod => prod.id === detalle.producto_id) : null; 
             const tieneOrden = detalle ? App.state.ordenes_produccion.some(o => o.pedido_detalle_id === detalle.id) : false; 
@@ -655,11 +657,13 @@ App.views = {
             const producto = detalle ? App.state.productos.find(p => p.id === detalle.producto_id) : null; 
             const pedido = detalle ? App.state.pedidos.find(p => p.id === detalle.pedido_id) : null; 
             
-            let clienteObj = null;
-            if(pedido && pedido.cliente_id !== "STOCK_INTERNO") {
-                clienteObj = App.state.clientes.find(c => c.id === pedido.cliente_id);
+            let nombreCliente = 'Sin Cliente';
+            if(pedido && pedido.cliente_id === "STOCK_INTERNO") {
+                nombreCliente = "📦 BODEGA";
+            } else if (pedido) {
+                const clienteObj = App.state.clientes.find(c => c.id === pedido.cliente_id);
+                if(clienteObj) nombreCliente = clienteObj.nombre;
             }
-            const nombreCliente = (pedido && pedido.cliente_id === "STOCK_INTERNO") ? "📦 BODEGA" : (clienteObj ? clienteObj.nombre : 'Sin Cliente'); 
             
             const pagos = App.state.pago_artesanos.filter(p => p.orden_id === orden.id); 
             let infoArtesanos = pagos.length > 0 ? `🛠️ ${pagos.length} Trabajos asignados` : '👤 Sin asignar'; 
@@ -770,13 +774,8 @@ App.views = {
         const artesano = App.state.artesanos.find(a => a.id === artesanoId); 
         const tarifas = App.state.tarifas_artesano.filter(t => t.artesano_id === artesanoId); 
         let html = `<div style="margin-bottom: 15px;">Gestiona cuánto cobra <strong>${artesano.nombre}</strong> por cada tipo de tarea.</div><table style="width:100%; border-collapse: collapse; font-size: 0.9rem; margin-bottom:15px;"><tr style="border-bottom: 2px solid var(--border);"><th style="text-align:left; padding:8px;">Tipo de Trabajo</th><th style="padding:8px;">Monto</th><th></th></tr>`; 
-        if(tarifas.length === 0) { 
-            html += `<tr><td colspan="3" style="padding:10px; color:#aaa; text-align:center;">Sin tareas configuradas</td></tr>`; 
-        } else { 
-            tarifas.forEach(t => { 
-                html += `<tr style="border-bottom: 1px solid var(--border);"><td style="padding: 10px 5px;">${t.clasificacion}</td><td style="padding: 10px 5px; text-align:center; font-weight:bold; color:var(--success)">$${t.monto}</td><td style="text-align:right;"><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; color:red; border:color:red;" onclick="App.logic.eliminarRegistroGenerico('tarifas_artesano', '${t.id}', 'tarifas_artesano'); App.ui.closeSheet();">🗑️</button></td></tr>`; 
-            }); 
-        } 
+        if(tarifas.length === 0) { html += `<tr><td colspan="3" style="padding:10px; color:#aaa; text-align:center;">Sin tareas configuradas</td></tr>`; } 
+        else { tarifas.forEach(t => { html += `<tr style="border-bottom: 1px solid var(--border);"><td style="padding: 10px 5px;">${t.clasificacion}</td><td style="padding: 10px 5px; text-align:center; font-weight:bold; color:var(--success)">$${t.monto}</td><td style="text-align:right;"><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; color:red; border:color:red;" onclick="App.logic.eliminarRegistroGenerico('tarifas_artesano', '${t.id}', 'tarifas_artesano'); App.ui.closeSheet();">🗑️</button></td></tr>`; }); } 
         html += `</table><button class="btn btn-primary" style="width:100%;" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formTarifa('${artesanoId}'), 400);">+ Agregar Tarea</button>`; 
         App.ui.openSheet(`Tarifas de ${artesano.nombre}`, html); 
     },
@@ -801,7 +800,14 @@ App.views = {
     }
 };
 App.views.formNuevaCotizacion = function() { 
-    const formHTML = `<form id="dynamic-form"><div style="background: #FFFBEB; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem; color:#D69E2E;">📝 Las cotizaciones no restan inventario ni se suman a las finanzas.</div><div class="form-group"><label>Nombre del Cliente</label><input type="text" name="cliente_nombre" required></div><div class="form-group"><label>Descripción (Ej. Hamaca Matrimonial)</label><input type="text" name="descripcion" required></div><div class="form-group"><label>Precio Cotizado ($)</label><input type="number" step="0.01" name="total" required></div><button type="submit" class="btn btn-primary" style="width: 100%;">Generar Cotización y PDF</button></form>`; 
+    const formHTML = `
+        <form id="dynamic-form">
+            <div style="background: #FFFBEB; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem; color:#D69E2E;">📝 Las cotizaciones no restan inventario ni se suman a las finanzas.</div>
+            <div class="form-group"><label>Nombre del Cliente</label><input type="text" name="cliente_nombre" required></div>
+            <div class="form-group"><label>Descripción (Ej. Hamaca Matrimonial)</label><input type="text" name="descripcion" required></div>
+            <div class="form-group"><label>Precio Cotizado ($)</label><input type="number" step="0.01" name="total" required></div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Generar Cotización y PDF</button>
+        </form>`; 
     App.ui.openSheet("Nueva Cotización", formHTML, (data) => App.logic.guardarCotizacion(data)); 
 };
 
@@ -890,7 +896,7 @@ App.views.formCompra = function() {
             <div style="background: #EBF8FF; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
                 <strong style="font-size: 0.9rem; color: var(--primary);">📥 Artículos Comprados</strong><br>
                 <div style="margin-top:10px; margin-bottom:10px; text-align:center;">
-                    <button type="button" class="btn btn-secondary" style="border: 2px dashed var(--primary); color: var(--primary); padding: 8px;" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formMaterial(), 400);">+ Crear Insumo Nuevo (Si no existe en la lista)</button>
+                    <button type="button" class="btn btn-secondary" style="border: 2px dashed var(--primary); color: var(--primary); padding: 8px; width: 100%;" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formMaterial(), 400);">+ Crear Insumo Nuevo</button>
                 </div>
                 <div>${itemsHTML}</div>
             </div>
