@@ -1,6 +1,6 @@
 /**
- * DESCANSO MAYA ERP - Motor Principal v55
- * Sistema ensamblado (Lotes, QRs, Diagnóstico, Atajos y Utilidad)
+ * DESCANSO MAYA ERP - Motor Principal v56 (CÓDIGO COMPLETO Y DEPURADO)
+ * Incluye QRs, Kardex, Lotes Seguros, Utilidad, Excel y Limpieza de BD
  */
 
 window.onerror = function(message, source, lineno) { alert("Hubo un error al cargar: \n" + message + "\nLínea: " + lineno); };
@@ -39,7 +39,7 @@ const App = {};
 App.state = {
     config: { empresa: "Descanso Maya", moneda: "MXN", logoUrl: "https://i.ibb.co/5h0kNKrZ/DESCANSO-MAYA.png", redesSociales: "@descansomaya.mx" },
     pinAcceso: localStorage.getItem('erp_pin') || null, cotizaciones: JSON.parse(localStorage.getItem('erp_cotizaciones')) || [], 
-    pedidos: [], pedido_detalle: [], ordenes_produccion: [], artesanos: [], inventario: [], productos: [], clientes: [], abonos: [], gastos: [], compras: [], proveedores: [], reparaciones: [], tarifas_artesano: [], pago_artesanos: [], consumos_produccion: [], movimientos_inventario: []
+    pedidos: [], pedido_detalle: [], ordenes_produccion: [], artesanos: [], inventario: [], productos: [], clientes: [], abonos: [], gastos: [], compras: [], proveedores: [], reparaciones: [], tarifas_artesano: [], pago_artesanos: [], movimientos_inventario: [] // <- Eliminado consumos_produccion
 };
 
 App.api = {
@@ -81,12 +81,12 @@ App.ui = {
 
 App.logic = {
     async verificarPIN(pin) { App.ui.showLoader("Verificando..."); App.state.pinAcceso = pin; const res = await App.api.fetch("ping"); if (res.status === "success") { localStorage.setItem('erp_pin', pin); App.ui.toast("¡Acceso concedido!"); this.cargarDatosIniciales(); } else { App.state.pinAcceso = null; App.ui.hideLoader(); App.ui.toast("PIN Incorrecto."); } },
+    
     async cargarDatosIniciales() { 
         App.ui.showLoader("Sincronizando Base de Datos..."); 
         try { 
-            const hojasA_Descargar = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "consumos_produccion", "movimientos_inventario"]; 
-            
-            // Pedimos TODO en 1 sola llamada (Super rápido y seguro)
+            // Eliminada la tabla consumos_produccion de aquí para acelerar
+            const hojasA_Descargar = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "movimientos_inventario"]; 
             const res = await App.api.fetch("leer_todo", { hojas: hojasA_Descargar }); 
             if (res.status === "error") throw new Error(res.message); 
             
@@ -105,7 +105,6 @@ App.logic = {
             App.state.reparaciones = bd["reparaciones"] || []; 
             App.state.tarifas_artesano = bd["tarifas_artesano"] || []; 
             App.state.pago_artesanos = bd["pago_artesanos"] || []; 
-            App.state.consumos_produccion = bd["consumos_produccion"] || []; 
             App.state.movimientos_inventario = bd["movimientos_inventario"] || []; 
             
             App.ui.hideLoader(); 
@@ -113,10 +112,12 @@ App.logic = {
         } catch (error) { 
             console.error("Fallo de conexión:", error);
             App.ui.toast("Señal débil. Reintentando..."); 
-            // Si el internet falla, lo vuelve a intentar automáticamente en 3 segundos
             setTimeout(() => App.logic.cargarDatosIniciales(), 3000);
         } 
     },
+
+    descargarRespaldo() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(App.state, null, 2)); const dlAnchorElem = document.createElement('a'); dlAnchorElem.setAttribute("href", dataStr); dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`); dlAnchorElem.click(); App.ui.toast("Respaldo descargado"); },
+
     async eliminarRegistroGenerico(hoja, id, estado) { if(!confirm("⚠️ ¿Eliminar permanentemente?")) return; App.ui.showLoader("Eliminando..."); const res = await App.api.fetch("eliminar_fila", { nombreHoja: hoja, idFila: id }); App.ui.hideLoader(); if(res.status === "success") { App.state[estado] = App.state[estado].filter(item => item.id !== id); App.ui.toast("Eliminado"); App.router.handleRoute(); } else { App.ui.toast("Error"); } },
     
     async eliminarPedido(id) { 
@@ -371,10 +372,8 @@ App.logic = {
         ventana.document.write(htmlNota); ventana.document.close();
     }
 };
-App.views = {};
 
 App.views.login = function() { return `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:80vh; text-align:center;"><div style="background:var(--primary); color:white; width:80px; height:80px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:2rem; margin-bottom:20px;">🔒</div><h2 style="margin-bottom:10px; color:var(--primary-dark);">Descanso Maya</h2><p style="color:var(--text-muted); margin-bottom:30px;">Ingresa el PIN</p><div class="card" style="width:100%; max-width:320px;"><input type="password" id="pin-input" placeholder="PIN" style="width:100%; padding:12px; font-size:1.2rem; text-align:center; border:1px solid var(--border); border-radius:8px; margin-bottom:15px;"><button class="btn btn-primary" style="width:100%; padding:12px; font-size:1rem;" onclick="App.logic.verificarPIN(document.getElementById('pin-input').value)">Entrar</button></div></div>`; };
-
 App.views.inicio = function() { 
     document.getElementById('bottom-nav').style.display = 'flex'; 
     const pedidosCount = App.state.pedidos ? App.state.pedidos.length : 0; 
@@ -388,13 +387,11 @@ App.views.inicio = function() {
     }
     return `${alertasHTML}<div class="grid-2"><div class="card stat-card"><div class="label">Pedidos</div><div class="value">${pedidosCount}</div></div><div class="card stat-card"><div class="label">Producción</div><div class="value">${prodCount}</div></div><div class="card stat-card" onclick="App.router.navigate('nomina')" style="cursor:pointer; background:#FFF5F5;"><div class="label" style="color:#E53E3E;">Nómina</div><div class="value">🧑‍🎨</div></div><div class="card stat-card" onclick="App.router.navigate('finanzas')" style="cursor:pointer; background:#EBF8FF;"><div class="label" style="color:#3182CE;">Ver Finanzas</div><div class="value">📊</div></div></div>`; 
 };
-
 App.views.inventario = function() { 
     document.getElementById('bottom-nav').style.display = 'flex'; 
     let html = `<div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3 class="card-title" style="margin:0;">Bodega / Inventario</h3><button class="btn btn-secondary" style="padding:6px 10px; font-size:0.8rem; border-color:var(--primary); color:var(--primary); background:transparent;" onclick="App.views.modalEstadisticas()">📊 Reportes</button></div><button class="btn btn-secondary" style="width:100%; margin-bottom:15px; border-color:#38A169; color:#38A169; background:transparent;" onclick="window.exportarAExcel(App.state.inventario, 'Inventario_DescansoMaya')">📥 Descargar Tabla en Excel</button><input type="text" id="bus-inv" onkeyup="window.filtrarLista('bus-inv', 'fila-inv')" placeholder="🔍 Buscar insumo..." style="width:100%; padding:8px; margin-bottom:15px; border-radius:6px; border:1px solid var(--border);">`; 
     if (!App.state.inventario || App.state.inventario.length === 0) { html += `<p>No hay insumos.</p>`; } else { html += `<table style="width:100%; border-collapse: collapse; font-size: 0.9rem;"><tr style="border-bottom: 2px solid var(--border);"><th style="text-align:left; padding:8px;">Artículo / Tipo</th><th style="padding:8px;">Stock</th><th></th></tr>`; App.state.inventario.forEach(i => { html += `<tr class="fila-inv" style="border-bottom: 1px solid var(--border);"><td style="padding: 10px 5px;"><strong>${i.nombre}</strong><br><small style="color:var(--primary); text-transform:uppercase; font-size:0.75rem;">[${i.tipo || 'OTRO'}]</small> <small style="color:var(--text-muted)">${i.unidad}</small></td><td style="padding: 10px 5px; text-align:center; font-weight:bold; font-size:1.1rem; color:${parseFloat(i.stock_minimo)>0 && parseFloat(i.stock_actual)<=parseFloat(i.stock_minimo) ? 'var(--danger)' : 'var(--text-main)'}">${i.stock_actual}</td><td style="text-align:right;"><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; margin-right:4px;" onclick="App.views.modalKardex('${i.id}')">📋 Historial</button><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; margin-right:4px;" onclick="App.views.formMaterial('${i.id}')">✏️</button><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; color:red; border-color:red;" onclick="App.logic.eliminarRegistroGenerico('materiales', '${i.id}', 'inventario')">🗑️</button></td></tr>`; }); html += `</table>`; } html += `</div><button class="fab" onclick="App.views.formMaterial()">+</button>`; return html; 
 };
-
 App.views.modalEstadisticas = function() {
     const valorTotal = App.state.inventario.reduce((sum, item) => sum + (parseFloat(item.stock_actual||0) * parseFloat(item.costo_unitario||0)), 0);
     let consumos = {}; (App.state.movimientos_inventario||[]).forEach(m => { if(m.tipo_movimiento.includes('salida')) { consumos[m.ref_id] = (consumos[m.ref_id] || 0) + Math.abs(parseFloat(m.cantidad)); } });
@@ -408,9 +405,7 @@ App.views.modalEstadisticas = function() {
     let html = `<div class="grid-2" style="margin-bottom:15px;"><div class="card stat-card" style="background:#EBF8FF;"><div class="label" style="color:#2B6CB0;">Valor del Inventario</div><div class="value" style="color:#2B6CB0; font-size:1.2rem;">$${valorTotal.toFixed(2)}</div></div></div><div style="background:#F7FAFC; padding:10px; border-radius:8px; margin-bottom:10px; border:1px solid var(--border);"><strong style="color:var(--primary);">🧵 Top 3 Insumos más usados</strong><ul style="margin-top:5px; margin-left:20px; font-size:0.85rem;">${topHtml}</ul></div><div style="background:#F7FAFC; padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid var(--border);"><strong style="color:var(--primary);">🏆 Top 3 Productos estrella</strong><ul style="margin-top:5px; margin-left:20px; font-size:0.85rem;">${topProdHtml}</ul></div><button class="btn btn-primary" style="width:100%;" onclick="App.ui.closeSheet()">Cerrar</button>`;
     App.ui.openSheet("Reporte de Producción", html);
 };
-
 App.views.modalKardex = function(matId) { const material = App.state.inventario.find(m => m.id === matId); const movs = (App.state.movimientos_inventario || []).filter(m => m.ref_id === matId).reverse(); let html = `<div style="margin-bottom:15px; font-size:0.9rem;">Movimientos de <strong>${material.nombre}</strong></div>`; html += `<table style="width:100%; font-size:0.8rem; border-collapse:collapse;"><tr style="border-bottom:1px solid #ccc;"><th style="text-align:left;">Fecha</th><th>Mov</th><th>Cant.</th><th>Notas</th></tr>`; if(movs.length===0) html += `<tr><td colspan="4" style="padding:10px;text-align:center;">Sin movimientos</td></tr>`; movs.forEach(m => { const color = parseFloat(m.cantidad) > 0 ? 'var(--success)' : 'var(--danger)'; const signo = parseFloat(m.cantidad) > 0 ? '+' : ''; html += `<tr style="border-bottom:1px dashed #eee;"><td style="padding:5px 0;">${m.fecha.split('T')[0]}</td><td><small>${m.tipo_movimiento.replace('_',' ')}</small></td><td style="text-align:center; font-weight:bold; color:${color};">${signo}${m.cantidad}</td><td><small>${m.notas||''}</small></td></tr>`; }); html += `</table><button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="App.ui.closeSheet()">Cerrar</button>`; App.ui.openSheet(`Kardex (Auditoría)`, html); };
-
 App.views.productos = function() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Catálogo de Productos</h3><input type="text" id="bus-prod" onkeyup="window.filtrarLista('bus-prod', 'tarj-prod')" placeholder="🔍 Buscar producto..." style="width:100%; padding:8px; margin-bottom:15px; border-radius:6px; border:1px solid var(--border);">`; if (!App.state.productos || App.state.productos.length === 0) { html += `<p style="color: var(--text-muted);">No hay productos registrados.</p>`; } else { App.state.productos.forEach(p => { html += `<div class="card tarj-prod" style="border: 1px solid var(--border); box-shadow: none; padding: 12px; display:flex; justify-content:space-between; align-items:center;"><div style="flex:1;"><strong>${p.nombre}</strong><br><small style="color: var(--text-muted);">Cat: ${p.categoria || 'General'} | Clasif: ${p.clasificacion || 'Normal'}<br>Tamaño: ${p.tamano || '-'} | Color: ${p.color || '-'}</small></div><div style="text-align:right;"><span style="color: var(--primary); font-weight: bold; display:block; margin-bottom:5px;">$${p.precio_venta} <br><small style="color:var(--text-muted);">Mayoreo: $${p.precio_mayoreo||'N/A'}</small></span><div><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; margin-right:4px;" onclick="App.views.formProducto('${p.id}')">✏️</button><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; color:red; border-color:red;" onclick="App.logic.eliminarRegistroGenerico('productos', '${p.id}', 'productos')">🗑️</button></div></div></div>`; }); } html += `</div><button class="fab" onclick="App.views.formProducto()">+</button>`; return html; };
 
 App.views.pedidos = function() { 
@@ -462,10 +457,7 @@ App.views.modalOpcionesWhatsApp = function(pedidoId) {
     App.ui.openSheet("Enviar WhatsApp", html);
 };
 
-App.views.produccion = function() { 
-    document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Tablero Kanban</h3><button class="btn btn-secondary" style="width:100%; margin-top:10px; border: 2px dashed var(--primary); color: var(--primary); background: transparent; font-weight: bold;" onclick="App.views.formOrdenStock()">+ 🔨 Fabricar para Bodega</button></div>`; const pendientes = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'pendiente' || !o.estado); const enProceso = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'en_proceso'); const listas = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'listo'); const dibujarTarjeta = (orden) => { const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id); const producto = detalle ? App.state.productos.find(p => p.id === detalle.producto_id) : null; const pedido = detalle ? App.state.pedidos.find(p => p.id === detalle.pedido_id) : null; let nombreCliente = 'Sin Cliente'; if(pedido && pedido.cliente_id === "STOCK_INTERNO") { nombreCliente = "📦 BODEGA"; } else if (pedido) { const clienteObj = App.state.clientes.find(c => c.id === pedido.cliente_id); if(clienteObj) nombreCliente = clienteObj.nombre; } const pagos = App.state.pago_artesanos.filter(p => p.orden_id === orden.id); let infoArtesanos = pagos.length > 0 ? `🛠️ ${pagos.length} Trabajos` : '👤 Sin asignar'; let semaforo = ''; if(pedido && pedido.fecha_entrega && orden.estado !== 'listo') { const fEnt = new Date(pedido.fecha_entrega+'T00:00:00'); const hoy = new Date(); hoy.setHours(0,0,0,0); const d = Math.ceil((fEnt - hoy)/(1000*60*60*24)); if(d < 0) semaforo = '<span style="background:red; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🔴 Atrasado</span>'; else if(d <= 1) semaforo = '<span style="background:orange; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🟡 Urgente</span>'; else semaforo = '<span style="background:green; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🟢 A tiempo</span>'; } return `<div class="kanban-card" onclick="App.views.modalEditarOrden('${orden.id}')"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${orden.id}</strong><div><span style="font-size:0.75rem; color:#718096; font-weight:bold;">${pedido ? pedido.id.replace('PED-','') : ''}</span>${semaforo}</div></div><small style="color: var(--primary); font-weight: 600; display:block;">${producto ? producto.nombre : 'Producto interno'}</small><small style="color: #4A5568; display:block; margin-bottom:5px; font-weight:bold;">👤 ${nombreCliente}</small><div style="margin-top: 8px; font-size: 0.8rem; color: var(--text-muted); display:flex; justify-content: space-between; border-top: 1px dashed #E2E8F0; padding-top: 5px;"><span>${infoArtesanos}</span></div></div>`; }; html += `<div class="kanban-board"><div class="kanban-column"><div class="kanban-header">Pendientes <span>${pendientes.length}</span></div>${pendientes.map(dibujarTarjeta).join('')}</div><div class="kanban-column"><div class="kanban-header">En Proceso <span>${enProceso.length}</span></div>${enProceso.map(dibujarTarjeta).join('')}</div><div class="kanban-column"><div class="kanban-header">Listas <span>${listas.length}</span></div>${listas.map(dibujarTarjeta).join('')}</div></div>`; return html; 
-};
-
+App.views.produccion = function() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Tablero Kanban</h3><button class="btn btn-secondary" style="width:100%; margin-top:10px; border: 2px dashed var(--primary); color: var(--primary); background: transparent; font-weight: bold;" onclick="App.views.formOrdenStock()">+ 🔨 Fabricar para Bodega</button></div>`; const pendientes = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'pendiente' || !o.estado); const enProceso = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'en_proceso'); const listas = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'listo'); const dibujarTarjeta = (orden) => { const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id); const producto = detalle ? App.state.productos.find(p => p.id === detalle.producto_id) : null; const pedido = detalle ? App.state.pedidos.find(p => p.id === detalle.pedido_id) : null; let nombreCliente = 'Sin Cliente'; if(pedido && pedido.cliente_id === "STOCK_INTERNO") { nombreCliente = "📦 BODEGA"; } else if (pedido) { const clienteObj = App.state.clientes.find(c => c.id === pedido.cliente_id); if(clienteObj) nombreCliente = clienteObj.nombre; } const pagos = App.state.pago_artesanos.filter(p => p.orden_id === orden.id); let infoArtesanos = pagos.length > 0 ? `🛠️ ${pagos.length} Trabajos` : '👤 Sin asignar'; let semaforo = ''; if(pedido && pedido.fecha_entrega && orden.estado !== 'listo') { const fEnt = new Date(pedido.fecha_entrega+'T00:00:00'); const hoy = new Date(); hoy.setHours(0,0,0,0); const d = Math.ceil((fEnt - hoy)/(1000*60*60*24)); if(d < 0) semaforo = '<span style="background:red; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🔴 Atrasado</span>'; else if(d <= 1) semaforo = '<span style="background:orange; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🟡 Urgente</span>'; else semaforo = '<span style="background:green; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🟢 A tiempo</span>'; } return `<div class="kanban-card" onclick="App.views.modalEditarOrden('${orden.id}')"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${orden.id}</strong><div><span style="font-size:0.75rem; color:#718096; font-weight:bold;">${pedido ? pedido.id.replace('PED-','') : ''}</span>${semaforo}</div></div><small style="color: var(--primary); font-weight: 600; display:block;">${producto ? producto.nombre : 'Producto interno'}</small><small style="color: #4A5568; display:block; margin-bottom:5px; font-weight:bold;">👤 ${nombreCliente}</small><div style="margin-top: 8px; font-size: 0.8rem; color: var(--text-muted); display:flex; justify-content: space-between; border-top: 1px dashed #E2E8F0; padding-top: 5px;"><span>${infoArtesanos}</span></div></div>`; }; html += `<div class="kanban-board"><div class="kanban-column"><div class="kanban-header">Pendientes <span>${pendientes.length}</span></div>${pendientes.map(dibujarTarjeta).join('')}</div><div class="kanban-column"><div class="kanban-header">En Proceso <span>${enProceso.length}</span></div>${enProceso.map(dibujarTarjeta).join('')}</div><div class="kanban-column"><div class="kanban-header">Listas <span>${listas.length}</span></div>${listas.map(dibujarTarjeta).join('')}</div></div>`; return html; };
 App.views.nomina = function() { 
     document.getElementById('bottom-nav').style.display = 'flex'; 
     let html = `<div class="card"><h3 class="card-title">Nómina de Artesanos</h3>`; 
@@ -497,7 +489,6 @@ App.views.nomina = function() {
     html += `</div>`; 
     return html; 
 };
-
 App.views.detalleNominaArtesano = function(artesanoId) {
     const artesano = App.state.artesanos.find(a => a.id === artesanoId);
     const pagosPendientes = App.state.pago_artesanos.filter(p => p.artesano_id === artesanoId && p.estado === 'pendiente');
@@ -514,7 +505,6 @@ App.views.detalleNominaArtesano = function(artesanoId) {
 };
 
 App.views.finanzas = function() { document.getElementById('bottom-nav').style.display = 'flex'; setTimeout(() => App.logic.renderGraficasFinanzas('todo'), 50); return `<div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3 class="card-title" style="margin:0;">Finanzas</h3><select id="filtro-finanzas" onchange="App.logic.renderGraficasFinanzas(this.value)" style="padding:5px; border-radius:5px; border:1px solid #CBD5E0;"><option value="todo">Historial</option><option value="mes_actual">Este Mes</option><option value="mes_pasado">Mes Pasado</option><option value="trimestre_actual">Este Trimestre</option><option value="anio_actual">Este Año</option></select></div><div id="finanzas-contenedor">Cargando datos...</div></div><button class="fab" style="background: var(--danger);" onclick="App.views.formGasto()">+</button>`; };
-
 App.views.detalleFinanzas = function(tipo, filtro) {
     const hoy = new Date(); let mesActual = hoy.getMonth(); let anioActual = hoy.getFullYear(); let mesPasado = mesActual - 1; let anioPasado = anioActual; if(mesPasado < 0) { mesPasado = 11; anioPasado--; } let triActual = Math.floor(mesActual / 3);
     const filtrarFecha = (str) => { if(filtro === 'todo') return true; if(!str) return false; const f = new Date(str); if(filtro === 'mes_actual') return f.getMonth() === mesActual && f.getFullYear() === anioActual; if(filtro === 'mes_pasado') return f.getMonth() === mesPasado && f.getFullYear() === anioPasado; if(filtro === 'trimestre_actual') return Math.floor(f.getMonth() / 3) === triActual && f.getFullYear() === anioActual; if(filtro === 'anio_actual') return f.getFullYear() === anioActual; return true; };
@@ -537,7 +527,6 @@ App.views.detalleFinanzas = function(tipo, filtro) {
     }
     else if (tipo === 'por_cobrar') { let hayCobros = false; pedFiltrados.forEach(p => { const abonos = App.state.abonos.filter(a => a.pedido_id === p.id).reduce((s,a)=>s+parseFloat(a.monto||0),0); const saldo = parseFloat(p.total) - parseFloat(p.anticipo) - abonos; if(saldo > 0) { hayCobros=true; html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${p.id.replace('PED-','')}</strong><br><small>${p.fecha_creacion.split('T')[0]}</small></span><span style="color:#D69E2E; font-weight:bold;">$${saldo}</span></li>`; } }); if(!hayCobros) html += '<li>No hay saldo pendiente.</li>'; }
     html += '</ul><button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="App.ui.closeSheet()">Cerrar</button>';
-    const titulos = { ventas: "Detalle de Ventas", ingresos: "Detalle de Ingresos", gastos: "Detalle de Gastos", por_cobrar: "Saldos Pendientes" };
     App.ui.openSheet(titulos[tipo], html);
 };
 
