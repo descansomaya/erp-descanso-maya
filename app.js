@@ -392,7 +392,81 @@ App.views = {
     },
 
     produccion() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Tablero Kanban</h3><button class="btn btn-secondary" style="width:100%; margin-top:10px; border: 2px dashed var(--primary); color: var(--primary); background: transparent; font-weight: bold;" onclick="App.views.formOrdenStock()">+ 🔨 Fabricar para Bodega</button></div>`; const pendientes = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'pendiente' || !o.estado); const enProceso = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'en_proceso'); const listas = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'listo'); const dibujarTarjeta = (orden) => { const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id); const producto = detalle ? App.state.productos.find(p => p.id === detalle.producto_id) : null; const pedido = detalle ? App.state.pedidos.find(p => p.id === detalle.pedido_id) : null; let nombreCliente = 'Sin Cliente'; if(pedido && pedido.cliente_id === "STOCK_INTERNO") { nombreCliente = "📦 BODEGA"; } else if (pedido) { const clienteObj = App.state.clientes.find(c => c.id === pedido.cliente_id); if(clienteObj) nombreCliente = clienteObj.nombre; } const pagos = App.state.pago_artesanos.filter(p => p.orden_id === orden.id); let infoArtesanos = pagos.length > 0 ? `🛠️ ${pagos.length} Trabajos` : '👤 Sin asignar'; let semaforo = ''; if(pedido && pedido.fecha_entrega && orden.estado !== 'listo') { const fEnt = new Date(pedido.fecha_entrega+'T00:00:00'); const hoy = new Date(); hoy.setHours(0,0,0,0); const d = Math.ceil((fEnt - hoy)/(1000*60*60*24)); if(d < 0) semaforo = '<span style="background:red; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🔴 Atrasado</span>'; else if(d <= 1) semaforo = '<span style="background:orange; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🟡 Urgente</span>'; else semaforo = '<span style="background:green; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🟢 A tiempo</span>'; } return `<div class="kanban-card" onclick="App.views.modalEditarOrden('${orden.id}')"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${orden.id}</strong><div><span style="font-size:0.75rem; color:#718096; font-weight:bold;">${pedido ? pedido.id.replace('PED-','') : ''}</span>${semaforo}</div></div><small style="color: var(--primary); font-weight: 600; display:block;">${producto ? producto.nombre : 'Producto interno'}</small><small style="color: #4A5568; display:block; margin-bottom:5px; font-weight:bold;">👤 ${nombreCliente}</small><div style="margin-top: 8px; font-size: 0.8rem; color: var(--text-muted); display:flex; justify-content: space-between; border-top: 1px dashed #E2E8F0; padding-top: 5px;"><span>${infoArtesanos}</span></div></div>`; }; html += `<div class="kanban-board"><div class="kanban-column"><div class="kanban-header">Pendientes <span>${pendientes.length}</span></div>${pendientes.map(dibujarTarjeta).join('')}</div><div class="kanban-column"><div class="kanban-header">En Proceso <span>${enProceso.length}</span></div>${enProceso.map(dibujarTarjeta).join('')}</div><div class="kanban-column"><div class="kanban-header">Listas <span>${listas.length}</span></div>${listas.map(dibujarTarjeta).join('')}</div></div>`; return html; },
-    nomina() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Nómina de Artesanos</h3>`; const pagosPorArtesano = {}; App.state.artesanos.forEach(a => { pagosPorArtesano[a.id] = { nombre: a.nombre, totalPendiente: 0, trabajos: [] }; }); App.state.pago_artesanos.forEach(p => { if (p.estado === 'pendiente' && pagosPorArtesano[p.artesano_id]) { pagosPorArtesano[p.artesano_id].totalPendiente += parseFloat(p.total); pagosPorArtesano[p.artesano_id].trabajos.push(p); } }); let hayPendientes = false; for (const [id, data] of Object.entries(pagosPorArtesano)) { if (data.totalPendiente > 0) { hayPendientes = true; html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;"><strong>🧑‍🎨 ${data.nombre}</strong><strong style="color: var(--danger); font-size: 1.1rem;">$${data.totalPendiente}</strong></div><button class="btn btn-primary" style="width: 100%; background: var(--success); border-color: var(--success);" onclick="if(confirm('¿Liquidar $${data.totalPendiente} a ${data.nombre}?')) App.logic.liquidarNomina('${id}')">💵 Registrar Pago / Liquidar</button></div>`; } } if (!hayPendientes) html += `<p style="color: var(--text-muted);">No hay pagos pendientes. Todo está al día. ✨</p>`; html += `</div>`; return html; },
+    
+    // MEJORA: Botón de "Ver Detalles" en el módulo de Nómina
+    nomina() { 
+        document.getElementById('bottom-nav').style.display = 'flex'; 
+        let html = `<div class="card"><h3 class="card-title">Nómina de Artesanos</h3>`; 
+        const pagosPorArtesano = {}; 
+        App.state.artesanos.forEach(a => { pagosPorArtesano[a.id] = { nombre: a.nombre, totalPendiente: 0, trabajos: [] }; }); 
+        App.state.pago_artesanos.forEach(p => { 
+            if (p.estado === 'pendiente' && pagosPorArtesano[p.artesano_id]) { 
+                pagosPorArtesano[p.artesano_id].totalPendiente += parseFloat(p.total); 
+                pagosPorArtesano[p.artesano_id].trabajos.push(p); 
+            } 
+        }); 
+        let hayPendientes = false; 
+        for (const [id, data] of Object.entries(pagosPorArtesano)) { 
+            if (data.totalPendiente > 0) { 
+                hayPendientes = true; 
+                html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <strong>🧑‍🎨 ${data.nombre}</strong>
+                                <strong style="color: var(--danger); font-size: 1.1rem;">$${data.totalPendiente}</strong>
+                            </div>
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn btn-secondary" style="flex: 1; border-color: var(--primary); color: var(--primary); background: transparent;" onclick="App.views.detalleNominaArtesano('${id}')">📋 Ver Detalles</button>
+                                <button class="btn btn-primary" style="flex: 1; background: var(--success); border-color: var(--success);" onclick="if(confirm('¿Liquidar $${data.totalPendiente} a ${data.nombre}?')) App.logic.liquidarNomina('${id}')">💵 Liquidar</button>
+                            </div>
+                        </div>`; 
+            } 
+        } 
+        if (!hayPendientes) html += `<p style="color: var(--text-muted);">No hay pagos pendientes. Todo está al día. ✨</p>`; 
+        html += `</div>`; 
+        return html; 
+    },
+
+    // NUEVO: Ver detalle de la deuda de cada artesano y poder cancelarla si hubo error
+    detalleNominaArtesano(artesanoId) {
+        const artesano = App.state.artesanos.find(a => a.id === artesanoId);
+        const pagosPendientes = App.state.pago_artesanos.filter(p => p.artesano_id === artesanoId && p.estado === 'pendiente');
+        
+        let html = `<div style="margin-bottom:15px;">
+            <p style="color:var(--text-muted); font-size:0.85rem;">Trabajos sin pagar de <strong>${artesano.nombre}</strong>:</p>
+            <ul style="list-style:none; padding:0; margin:0;">`;
+        
+        pagosPendientes.forEach(p => {
+            const orden = App.state.ordenes_produccion.find(o => o.id === p.orden_id);
+            let nombreProducto = 'Orden ' + p.orden_id.replace('ORD-','');
+            if(orden) {
+                const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id);
+                if(detalle) {
+                    const prod = App.state.productos.find(pr => pr.id === detalle.producto_id);
+                    if(prod) nombreProducto = prod.nombre;
+                }
+            }
+            const partesID = p.id.split('-'); 
+            const nombreTarea = partesID.length > 2 ? partesID.slice(2).join(' ') : 'Trabajo general';
+            
+            html += `<li style="padding:10px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <strong>${nombreTarea}</strong><br>
+                    <small style="color:var(--text-muted);">${nombreProducto}</small><br>
+                    <small style="color:var(--text-muted);">${p.fecha.split('T')[0]}</small>
+                </div>
+                <div style="text-align:right;">
+                    <span style="color:var(--danger); font-weight:bold; display:block; margin-bottom:5px;">$${p.total}</span>
+                    <button class="btn btn-secondary" style="padding:2px 6px; font-size:0.7rem; color:red; border-color:red;" onclick="App.ui.closeSheet(); App.logic.eliminarRegistroGenerico('pago_artesanos', '${p.id}', 'pago_artesanos')">🗑️ Cancelar</button>
+                </div>
+            </li>`;
+        });
+        
+        html += `</ul>
+        <button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="App.ui.closeSheet()">Cerrar</button></div>`;
+        
+        App.ui.openSheet(`Detalle de Nómina`, html);
+    },
+
     finanzas() { document.getElementById('bottom-nav').style.display = 'flex'; setTimeout(() => App.logic.renderGraficasFinanzas('todo'), 50); return `<div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3 class="card-title" style="margin:0;">Finanzas</h3><select id="filtro-finanzas" onchange="App.logic.renderGraficasFinanzas(this.value)" style="padding:5px; border-radius:5px; border:1px solid #CBD5E0;"><option value="todo">Historial</option><option value="mes_actual">Este Mes</option><option value="mes_pasado">Mes Pasado</option><option value="trimestre_actual">Este Trimestre</option><option value="anio_actual">Este Año</option></select></div><div id="finanzas-contenedor">Cargando datos...</div></div><button class="fab" style="background: var(--danger);" onclick="App.views.formGasto()">+</button>`; },
     
     detalleFinanzas(tipo, filtro) {
@@ -419,10 +493,9 @@ App.views = {
         html += '</ul><button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="App.ui.closeSheet()">Cerrar</button>';
         App.ui.openSheet(titulos[tipo], html);
     },
-    
     reparaciones() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Reparaciones</h3>`; [...App.state.reparaciones].reverse().forEach(r => { const c = App.state.clientes.find(cli => cli.id === r.cliente_id); const pagos = App.state.pago_artesanos.filter(p => p.orden_id === r.id); let infoArtesanos = pagos.length > 0 ? `🛠️ ${pagos.length} Trabajos asignados` : '👤 Sin asignar'; const estaLista = r.estado === 'entregada'; html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><strong>${r.id} - ${c ? c.nombre : 'Cliente'}</strong><span class="badge ${estaLista ? 'listo' : 'pendiente'}">${r.estado.toUpperCase()}</span></div><p style="color: var(--primary); font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">${r.descripcion}</p><div style="font-size:0.8rem; margin-bottom:10px; color:#4A5568;">${infoArtesanos}</div><div style="display:flex; justify-content:space-between; gap:5px;">`; if(!estaLista) { html += `<button class="btn btn-secondary" style="font-size:0.8rem; padding:6px; flex:1;" onclick="App.views.formAgregarTrabajo('${r.id}', true)">+ Asignar Tarea</button>`; html += `<button class="btn btn-primary" style="font-size:0.8rem; padding:6px; background:var(--success); border-color:var(--success); flex:1;" onclick="App.logic.actualizarReparacion('${r.id}', 'entregada')">✔ Marcar Lista</button>`; } html += `<button class="btn btn-secondary" style="padding:6px; font-size:0.8rem; color:red;" onclick="App.logic.eliminarRegistroGenerico('reparaciones', '${r.id}', 'reparaciones')">🗑️</button></div></div>`; }); return html += `</div><button class="fab" onclick="App.views.formNuevaReparacion()">+</button>`; },
-    cotizaciones() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Cotizaciones Rápidas</h3><p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:15px;">Solo informativas. No afectan inventario ni finanzas.</p>`; if (!App.state.cotizaciones || App.state.cotizaciones.length === 0) { html += `<p>No hay cotizaciones recientes.</p>`; } else { [...App.state.cotizaciones].reverse().forEach(c => { html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none;"><div style="display: flex; justify-content: space-between; margin-bottom: 5px;"><strong>${c.id} - ${c.cliente_nombre}</strong><span style="color: var(--primary); font-weight: bold;">$${c.total}</span></div><p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 5px;">${c.descripcion}</p><div style="display:flex; gap:5px; justify-content:flex-end;"><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; margin-right:4px;" onclick="App.logic.imprimirCotizacion('${c.id}')">🖨️ Imprimir PDF</button><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; color:red; border-color:red;" onclick="App.logic.eliminarCotizacion('${c.id}')">🗑️</button></div></div>`; }); } html += `</div><button class="fab" onclick="App.views.formNuevaCotizacion()">+</button>`; return html; },
-
+    cotizaciones() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Cotizaciones Rápidas</h3><p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:15px;">Solo informativas. No afectan inventario ni finanzas.</p>`; if (!App.state.cotizaciones || App.state.cotizaciones.length === 0) { html += `<p>No hay cotizaciones recientes.</p>`; } else { [...App.state.cotizaciones].reverse().forEach(c => { html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none;"><div style="display: flex; justify-content: space-between; margin-bottom: 5px;"><strong>${c.id} - ${c.cliente_nombre}</strong><span style="color: var(--primary); font-weight: bold;">$${c.total}</span></div><p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 5px;">${c.descripcion}</p><div style="display:flex; gap:5px; justify-content:flex-end;"><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; margin-right:4px;" onclick="App.logic.imprimirCotizacion('${c.id}')">🖨️ Imprimir PDF</button><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; color:red; border-color:red;" onclick="App.logic.eliminarCotizacion('${c.id}')">🗑️</button></div></div>`; }); } html += `</div><button class="fab" onclick="App.views.formNuevaCotizacion()">+</button>`; return html; }
+};
     // SOLUCIÓN: ESTE ES EL MÓDULO "MÁS" QUE DIBUJA EL MENÚ INFERIOR
     mas() { 
         return `<div class="grid-2">
