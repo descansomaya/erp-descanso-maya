@@ -81,9 +81,42 @@ App.ui = {
 
 App.logic = {
     async verificarPIN(pin) { App.ui.showLoader("Verificando..."); App.state.pinAcceso = pin; const res = await App.api.fetch("ping"); if (res.status === "success") { localStorage.setItem('erp_pin', pin); App.ui.toast("¡Acceso concedido!"); this.cargarDatosIniciales(); } else { App.state.pinAcceso = null; App.ui.hideLoader(); App.ui.toast("PIN Incorrecto."); } },
-    async cargarDatosIniciales() { App.ui.showLoader("Descargando base de datos..."); try { const hojas = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "consumos_produccion", "movimientos_inventario"]; const promesas = hojas.map(h => App.api.fetch("leer_hoja", { nombreHoja: h })); const resultados = await Promise.all(promesas); if (resultados[0].status === "error") throw new Error(resultados[0].message); App.state.inventario = resultados[0].data || []; App.state.clientes = resultados[1].data || []; App.state.productos = resultados[2].data || []; App.state.pedidos = resultados[3].data || []; App.state.pedido_detalle = resultados[4].data || []; App.state.ordenes_produccion = resultados[5].data || []; App.state.artesanos = resultados[6].data || []; App.state.abonos = resultados[7].data || []; App.state.gastos = resultados[8].data || []; App.state.compras = resultados[9].data || []; App.state.proveedores = resultados[10].data || []; App.state.reparaciones = resultados[11].data || []; App.state.tarifas_artesano = resultados[12].data || []; App.state.pago_artesanos = resultados[13].data || []; App.state.consumos_produccion = resultados[14].data || []; App.state.movimientos_inventario = resultados[15].data || []; App.ui.hideLoader(); App.router.init(); } catch (error) { App.ui.toast("Error de red."); document.getElementById('btn-reintentar').classList.remove('hidden'); } },
-    descargarRespaldo() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(App.state, null, 2)); const dlAnchorElem = document.createElement('a'); dlAnchorElem.setAttribute("href", dataStr); dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`); dlAnchorElem.click(); App.ui.toast("Respaldo descargado"); },
-
+    async cargarDatosIniciales() { 
+        App.ui.showLoader("Sincronizando Base de Datos..."); 
+        try { 
+            const hojasA_Descargar = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "consumos_produccion", "movimientos_inventario"]; 
+            
+            // Pedimos TODO en 1 sola llamada (Super rápido y seguro)
+            const res = await App.api.fetch("leer_todo", { hojas: hojasA_Descargar }); 
+            if (res.status === "error") throw new Error(res.message); 
+            
+            const bd = res.data;
+            App.state.inventario = bd["materiales"] || []; 
+            App.state.clientes = bd["clientes"] || []; 
+            App.state.productos = bd["productos"] || []; 
+            App.state.pedidos = bd["pedidos"] || []; 
+            App.state.pedido_detalle = bd["pedido_detalle"] || []; 
+            App.state.ordenes_produccion = bd["ordenes_produccion"] || []; 
+            App.state.artesanos = bd["artesanos"] || []; 
+            App.state.abonos = bd["abonos_clientes"] || []; 
+            App.state.gastos = bd["gastos"] || []; 
+            App.state.compras = bd["compras"] || []; 
+            App.state.proveedores = bd["proveedores"] || []; 
+            App.state.reparaciones = bd["reparaciones"] || []; 
+            App.state.tarifas_artesano = bd["tarifas_artesano"] || []; 
+            App.state.pago_artesanos = bd["pago_artesanos"] || []; 
+            App.state.consumos_produccion = bd["consumos_produccion"] || []; 
+            App.state.movimientos_inventario = bd["movimientos_inventario"] || []; 
+            
+            App.ui.hideLoader(); 
+            App.router.init(); 
+        } catch (error) { 
+            console.error("Fallo de conexión:", error);
+            App.ui.toast("Señal débil. Reintentando..."); 
+            // Si el internet falla, lo vuelve a intentar automáticamente en 3 segundos
+            setTimeout(() => App.logic.cargarDatosIniciales(), 3000);
+        } 
+    },
     async eliminarRegistroGenerico(hoja, id, estado) { if(!confirm("⚠️ ¿Eliminar permanentemente?")) return; App.ui.showLoader("Eliminando..."); const res = await App.api.fetch("eliminar_fila", { nombreHoja: hoja, idFila: id }); App.ui.hideLoader(); if(res.status === "success") { App.state[estado] = App.state[estado].filter(item => item.id !== id); App.ui.toast("Eliminado"); App.router.handleRoute(); } else { App.ui.toast("Error"); } },
     
     async eliminarPedido(id) { 
