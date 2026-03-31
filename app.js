@@ -1,6 +1,6 @@
 /**
- * DESCANSO MAYA ERP - Motor Principal v50
- * Tickets de Producción para Artesanos
+ * DESCANSO MAYA ERP - Motor Principal v51
+ * Ticket de Producción Personalizado y Corrección de Usos en Taller
  */
 
 window.onerror = function(message, source, lineno) { alert("Hubo un error al cargar: \n" + message + "\nLínea: " + lineno); };
@@ -101,35 +101,70 @@ App.logic = {
 
     async guardarNuevoPedido(datosFormulario) { App.ui.showLoader("Procesando pedido..."); const pedidoId = "PED-" + Date.now(); const totalNum = parseFloat(datosFormulario.total) || 0; const anticipoNum = parseFloat(datosFormulario.anticipo) || 0; const cantidadNum = parseInt(datosFormulario.cantidad) || 1; const datosPedido = { id: pedidoId, cliente_id: datosFormulario.cliente_id, estado: "nuevo", total: totalNum, anticipo: anticipoNum, notas: datosFormulario.notas, fecha_entrega: datosFormulario.fecha_entrega, fecha_creacion: new Date().toISOString() }; const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datosFormulario.producto_id, cantidad: cantidadNum, precio_unitario: totalNum / cantidadNum }; const resPedido = await App.api.fetch("guardar_fila", { nombreHoja: "pedidos", datos: datosPedido }); if (resPedido.status === "success") { await App.api.fetch("guardar_fila", { nombreHoja: "pedido_detalle", datos: datosDetalle }); App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); App.ui.hideLoader(); App.ui.toast("Guardado (Sin mandar a taller)"); App.router.handleRoute(); } else { App.ui.hideLoader(); App.ui.toast("Error"); } },
 
+    // AQUI SE GUARDA LA RECETA EXACTA QUE ELEGISTE EN TALLER
     async confirmarMandarProduccion(datos) {
-        const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); let requerimientos = {};
+        const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); 
+        const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); 
+        const usos = Array.isArray(datos.uso) ? datos.uso : (datos.uso ? [datos.uso] : []); 
+        let requerimientos = {};
         for(let i=0; i<mats.length; i++){ let mId = mats[i]; let c = parseFloat(cants[i]||0); if(mId && c > 0) requerimientos[mId] = (requerimientos[mId] || 0) + c; }
+        
         let alertasDeStock = [];
         for(let mId in requerimientos) { let material = App.state.inventario.find(m => m.id === mId); if(material && parseFloat(material.stock_actual) < requerimientos[mId]) { alertasDeStock.push(`❌ ${material.nombre}: Tienes ${material.stock_actual} y necesitas ${requerimientos[mId]}`); } }
         if(alertasDeStock.length > 0) { const continuar = confirm("⚠️ ALERTA: NO TIENES SUFICIENTE MATERIAL EN BODEGA ⚠️\n\n" + alertasDeStock.join("\n") + "\n\n¿Quieres enviarlo a producción de todos modos? (El sistema dejará el stock en números negativos)."); if(!continuar) return; }
         
         App.ui.showLoader("Generando Orden y Descontando Stock...");
-        const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datos.pedido_detalle_id, estado: "pendiente", fecha_creacion: new Date().toISOString() };
-        let promesas = []; let nuevosMovs = [];
+        let promesas = []; let nuevosMovs = []; let recetaPersonalizada = [];
         for(let i=0; i<mats.length; i++) {
-            const matId = mats[i]; const cant = parseFloat(cants[i] || 0);
+            const matId = mats[i]; const cant = parseFloat(cants[i] || 0); const usoStr = usos[i] || 'Cuerpo';
             if(matId && cant > 0) {
+                recetaPersonalizada.push({ mat_id: matId, cant: cant, uso: usoStr });
                 const material = App.state.inventario.find(m => m.id === matId);
                 if(material) {
                     const nStock = parseFloat(material.stock_actual) - cant;
                     promesas.push(App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }).then(()=> material.stock_actual = nStock));
-                    const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: nuevaOrden.id, ref_tipo: "material", ref_id: material.id, cantidad: -cant, costo_unitario: material.costo_unitario||0, total: (-cant * (material.costo_unitario||0)), notas: `Envío a taller de pedido ${datos.pedido_id.replace('PED-','')}` };
-                    nuevosMovs.push(mov); promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "movimientos_inventario", datos: mov }));
+                    const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cant, costo_unitario: material.costo_unitario||0, total: (-cant * (material.costo_unitario||0)), notas: `Envío a taller de pedido ${datos.pedido_id.replace('PED-','')}` };
+                    nuevosMovs.push(mov); 
                 }
             }
         }
+
+        const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datos.pedido_detalle_id, estado: "pendiente", fecha_creacion: new Date().toISOString(), receta_personalizada: JSON.stringify(recetaPersonalizada) };
+        nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "movimientos_inventario", datos: m })); });
+
         promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "ordenes_produccion", datos: nuevaOrden }));
-        const res = await Promise.all(promesas);
+        await Promise.all(promesas);
         App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs);
         App.ui.hideLoader(); App.ui.toast("Enviado a taller y stock descontado"); App.router.navigate('produccion');
     },
 
-    async guardarOrdenStock(datos) { App.ui.showLoader("Procesando Stock..."); const pedidoId = "PED-STOCK-" + Date.now(); const cantidadNum = parseInt(datos.cantidad) || 1; const datosPedido = { id: pedidoId, cliente_id: "STOCK_INTERNO", estado: "nuevo", total: 0, anticipo: 0, notas: "Producción Interna", fecha_entrega: "", fecha_creacion: new Date().toISOString() }; const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datos.producto_id, cantidad: cantidadNum, precio_unitario: 0 }; const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datosDetalle.id, estado: "pendiente", fecha_creacion: new Date().toISOString() }; let promesas = []; let nuevosMovs = []; const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); for(let i=0; i<mats.length; i++) { const matId = mats[i]; const cant = parseFloat(cants[i] || 0); if(matId && cant > 0) { const material = App.state.inventario.find(m => m.id === matId); if(material) { const nStock = parseFloat(material.stock_actual) - cant; promesas.push(App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }).then(()=> material.stock_actual = nStock)); const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: nuevaOrden.id, ref_tipo: "material", ref_id: material.id, cantidad: -cant, costo_unitario: material.costo_unitario||0, total: (-cant * (material.costo_unitario||0)), notas: "Stock Interno de Bodega" }; nuevosMovs.push(mov); promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "movimientos_inventario", datos: mov })); } } } promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "pedidos", datos: datosPedido })); promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "pedido_detalle", datos: datosDetalle })); promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "ordenes_produccion", datos: nuevaOrden })); await Promise.all(promesas); App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Orden creada y stock descontado"); App.router.handleRoute(); },
+    // TAMBIEN GUARDA LA RECETA AL MANDAR A STOCK DIRECTO
+    async guardarOrdenStock(datos) { 
+        App.ui.showLoader("Procesando Stock..."); const pedidoId = "PED-STOCK-" + Date.now(); const cantidadNum = parseInt(datos.cantidad) || 1; const datosPedido = { id: pedidoId, cliente_id: "STOCK_INTERNO", estado: "nuevo", total: 0, anticipo: 0, notas: "Producción Interna", fecha_entrega: "", fecha_creacion: new Date().toISOString() }; const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datos.producto_id, cantidad: cantidadNum, precio_unitario: 0 }; 
+        let promesas = []; let nuevosMovs = []; let recetaArray = []; 
+        const producto = App.state.productos.find(p => p.id === datos.producto_id); 
+        
+        if(producto) { 
+            for(let i=1; i<=20; i++) { 
+                const matId = producto[`mat_${i}`]; const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * cantidadNum; const uso = producto[`uso_${i}`] || 'Cuerpo'; 
+                if(matId && cantTeorica > 0) { 
+                    recetaArray.push({ mat_id: matId, cant: cantTeorica, uso: uso });
+                    const material = App.state.inventario.find(m => m.id === matId); 
+                    if(material) { 
+                        const nStock = parseFloat(material.stock_actual) - cantTeorica; 
+                        promesas.push(App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }).then(()=> material.stock_actual = nStock)); 
+                        const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cantTeorica, costo_unitario: material.costo_unitario||0, total: (-cantTeorica * (material.costo_unitario||0)), notas: "Stock Interno de Bodega" }; 
+                        nuevosMovs.push(mov); 
+                    } 
+                } 
+            } 
+        } 
+        const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datosDetalle.id, estado: "pendiente", fecha_creacion: new Date().toISOString(), receta_personalizada: JSON.stringify(recetaArray) }; 
+        nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "movimientos_inventario", datos: m })); });
+
+        promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "pedidos", datos: datosPedido })); promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "pedido_detalle", datos: datosDetalle })); promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "ordenes_produccion", datos: nuevaOrden })); 
+        await Promise.all(promesas); App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Orden creada y stock descontado"); App.router.handleRoute(); 
+    },
     
     async guardarTrabajoOrden(ordenId, data, esReparacion = false) { App.ui.showLoader("Asignando..."); const sanitizedTaskName = (data.tarea_nombre || "Trabajo").replace(/[^a-zA-Z0-9_ \-]/g, ""); const pagoObj = { id: "PAGO-" + Date.now() + "-" + sanitizedTaskName, artesano_id: data.artesano_id, orden_id: ordenId, monto_unitario: parseFloat(data.tarea_val), total: parseFloat(data.total), estado: "pendiente", fecha: new Date().toISOString() }; const res = await App.api.fetch("guardar_fila", { nombreHoja: "pago_artesanos", datos: pagoObj }); App.ui.hideLoader(); if(res.status === "success") { App.state.pago_artesanos.push(pagoObj); App.ui.toast("Asignado"); if(esReparacion) { App.router.handleRoute(); } else { App.views.modalEditarOrden(ordenId); } } else { App.ui.toast("Error"); App.router.handleRoute(); } },
     
@@ -211,7 +246,7 @@ App.logic = {
     imprimirCotizacion(cotId) { const c = App.state.cotizaciones.find(x => x.id === cotId); const ventana = window.open('', '_blank'); let htmlNota = `<html><head><title>Cotización</title><style>body{font-family:sans-serif;background:#f9f9f9;padding:20px;color:#333;}.ticket{background:white;max-width:380px;margin:0 auto;padding:25px;border-radius:8px;box-shadow:0 4px 15px rgba(0,0,0,0.05);}.header{text-align:center;border-bottom:2px dashed #cbd5e0;padding-bottom:15px;margin-bottom:15px;}.header img{max-height:80px;margin-bottom:10px;}.header h1{margin:0;color:#2d3748;font-size:24px;text-transform:uppercase;}.info-p{margin:4px 0;font-size:14px;}table{width:100%;border-collapse:collapse;margin-top:15px;margin-bottom:15px;}th{border-bottom:1px solid #e2e8f0;padding:8px 0;text-align:left;font-size:13px;color:#718096;}td{padding:8px 0;font-size:14px;color:#2d3748;}.totales{border-top:2px solid #cbd5e0;padding-top:15px;}.saldo-final{display:flex;justify-content:space-between;margin-top:10px;font-size:18px;font-weight:bold;color:#4C51BF;background:#EEF2FF;padding:10px;border-radius:6px;}.footer{text-align:center;margin-top:30px;font-size:12px;color:#a0aec0;}.social{margin-top:10px;font-weight:bold;color:#4A5568;font-size:13px;}@media print{body{background:white;padding:0;}.ticket{box-shadow:none;border:none;max-width:100%;}}</style></head><body><div class="ticket"><div class="header"><img src="${App.state.config.logoUrl}" onerror="this.style.display='none'"><h1>${App.state.config.empresa}</h1><h2 style="color:#4C51BF;font-size:18px;">COTIZACIÓN</h2></div><div style="margin-bottom:20px;"><p class="info-p"><strong>Folio:</strong> ${c.id.replace('COT-','')}</p><p class="info-p"><strong>Fecha:</strong> ${new Date(c.fecha_creacion).toLocaleDateString()}</p><p class="info-p"><strong>Cliente:</strong> ${c.cliente_nombre}</p></div><table><tr><th>Cant</th><th>Desc</th><th style="text-align:right;">Importe</th></tr><tr><td>1</td><td>${c.descripcion}</td><td style="text-align:right;">$${c.total}</td></tr></table><div class="totales"><div class="saldo-final"><span>TOTAL COTIZADO:</span><span>$${c.total}</span></div></div><div class="footer"><p>Vigencia de cotización: 15 días.</p><p class="social">👉 siguenos en nuestras redes sociales:<br>${App.state.config.redesSociales}</p></div></div><script>setTimeout(()=>{window.print();},500);<\/script></body></html>`; ventana.document.write(htmlNota); ventana.document.close(); },
     enviarWhatsApp(pedidoId) { const p = App.state.pedidos.find(x => x.id === pedidoId); const c = App.state.clientes.find(cli => cli.id === p.cliente_id); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id); const producto = detalle ? App.state.productos.find(prod => prod.id === detalle.producto_id) : null; const abonos = App.state.abonos.filter(a => a.pedido_id === p.id).reduce((s, a) => s + parseFloat(a.monto||0), 0); const saldoReal = parseFloat(p.total) - parseFloat(p.anticipo) - abonos; if(!c || !c.telefono) return; let texto = `Hola *${c.nombre}* 👋,\nSomos de *${App.state.config.empresa}*.\n\nDetalle de tu pedido:\n📦 *Producto:* ${producto ? producto.nombre : 'Hamaca'}\n💰 *Total:* $${p.total}\n✅ *Abonado:* $${parseFloat(p.anticipo) + abonos}\n⚠️ *Saldo Pendiente:* $${saldoReal > 0 ? saldoReal : 0}\n\n👉 Síguenos: ${App.state.config.redesSociales}\n¡Gracias!`; let tel = String(c.telefono).replace(/\D/g,''); if(tel.length === 10) tel = '52' + tel; window.location.href = `https://wa.me/${tel}?text=${encodeURIComponent(texto)}`; },
     
-    // NUEVA FUNCIÓN: IMPRIMIR TICKET DE PRODUCCIÓN (SIN PRECIOS)
+    // CORRECCIÓN: EL TICKET AHORA LEE LA RECETA PERSONALIZADA CON LOS USOS EXACTOS
     imprimirTicketProduccion(ordenId) {
         const orden = App.state.ordenes_produccion.find(o => o.id === ordenId);
         const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id);
@@ -219,15 +254,25 @@ App.logic = {
         const producto = App.state.productos.find(p => p.id === detalle.producto_id);
 
         let recetaHTML = '';
-        if (producto) {
+        let recetaGuardada = null;
+        try { if(orden.receta_personalizada) recetaGuardada = JSON.parse(orden.receta_personalizada); } catch(e){}
+
+        if (recetaGuardada && recetaGuardada.length > 0) {
+            recetaGuardada.forEach(item => {
+                const material = App.state.inventario.find(m => m.id === item.mat_id);
+                if (material) {
+                    recetaHTML += `<tr><td style="border-bottom:1px solid #e2e8f0; padding:8px;">${item.cant} <small style="color:#718096">${material.unidad}</small></td><td style="border-bottom:1px solid #e2e8f0; padding:8px; font-weight:bold; color:#2d3748;">${material.nombre}</td><td style="border-bottom:1px solid #e2e8f0; padding:8px; font-weight:bold; color:#4C51BF;">${(item.uso || 'Cuerpo').toUpperCase()}</td></tr>`;
+                }
+            });
+        } else if (producto) {
             let counter = 1;
             while(producto[`mat_${counter}`]) {
                 const matId = producto[`mat_${counter}`];
                 const cant = parseFloat(producto[`cant_${counter}`]) * parseInt(detalle.cantidad||1);
-                const uso = producto[`uso_${counter}`] || 'General';
+                const uso = producto[`uso_${counter}`] || 'Cuerpo';
                 const material = App.state.inventario.find(m => m.id === matId);
                 if (material) {
-                    recetaHTML += `<tr><td style="border-bottom:1px solid #e2e8f0; padding:8px;">${cant} ${material.unidad}</td><td style="border-bottom:1px solid #e2e8f0; padding:8px; font-weight:bold;">${material.nombre}</td><td style="border-bottom:1px solid #e2e8f0; padding:8px;">${uso.toUpperCase()}</td></tr>`;
+                    recetaHTML += `<tr><td style="border-bottom:1px solid #e2e8f0; padding:8px;">${cant} <small style="color:#718096">${material.unidad}</small></td><td style="border-bottom:1px solid #e2e8f0; padding:8px; font-weight:bold; color:#2d3748;">${material.nombre}</td><td style="border-bottom:1px solid #e2e8f0; padding:8px; font-weight:bold; color:#4C51BF;">${uso.toUpperCase()}</td></tr>`;
                 }
                 counter++;
             }
@@ -323,14 +368,13 @@ App.views.clientes = function() { document.getElementById('bottom-nav').style.di
     App.views.configuracion = function() { document.getElementById('bottom-nav').style.display = 'flex'; return `<div class="card"><h3 class="card-title">Configuración</h3><button class="btn btn-primary" style="width: 100%; margin-bottom: 15px;" onclick="App.logic.descargarRespaldo()">💾 Descargar Respaldo</button><button class="btn btn-secondary" style="width: 100%; background: #FED7D7; color: var(--danger); border: none;" onclick="localStorage.removeItem('erp_pin'); location.reload();">🔒 Bloquear Sistema</button></div>`; };
     App.views.mas = function() { return `<div class="grid-2"><div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('clientes')"><div class="label" style="margin-top:0;">👥 Clientes</div></div><div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('proveedores')"><div class="label" style="margin-top:0;">🚚 Proveedores</div></div><div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('artesanos')"><div class="label" style="margin-top:0;">🧑‍🎨 Artesanos / Tareas</div></div><div class="card stat-card" style="cursor:pointer; background: #F0FFF4;" onclick="App.router.navigate('inventario')"><div class="label" style="margin-top:0; color:#276749;">📦 Bodega / Insumos</div></div><div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('productos')"><div class="label" style="margin-top:0;">🧶 Productos / Recetas</div></div><div class="card stat-card" style="cursor:pointer; background: #EBF8FF;" onclick="App.router.navigate('compras')"><div class="label" style="margin-top:0; color:#3182CE;">🛒 Ingresar Compra</div></div><div class="card stat-card" style="cursor:pointer; background: #FAF5FF;" onclick="App.router.navigate('reparaciones')"><div class="label" style="margin-top:0; color:#6B46C1;">🪡 Reparaciones</div></div><div class="card stat-card" style="cursor:pointer; background: #EEF2FF;" onclick="App.router.navigate('cotizaciones')"><div class="label" style="margin-top:0; color:#4C51BF;">📝 Cotizaciones</div></div><div class="card stat-card" style="cursor:pointer; background: #EDF2F7; grid-column: span 2;" onclick="App.router.navigate('configuracion')"><div class="label" style="margin-top:0; color: #4A5568;">⚙️ Configuración</div></div></div>`; };
 
-
 App.views.formMandarProduccion = function(pedidoId) {
     const pedido = App.state.pedidos.find(p => p.id === pedidoId);
     const detalle = App.state.pedido_detalle.find(d => d.pedido_id === pedidoId);
     const producto = App.state.productos.find(p => p.id === detalle.producto_id);
 
     let recetaHTML = '';
-    if (producto) { let counter = 1; while(producto[`mat_${counter}`]) { const matId = producto[`mat_${counter}`]; const cant = parseFloat(producto[`cant_${counter}`]) * (parseInt(detalle.cantidad) || 1); const uso = producto[`uso_${counter}`] || 'General'; if(matId) recetaHTML += window.generarFilaRecetaProd(matId, cant, uso); counter++; } }
+    if (producto) { let counter = 1; while(producto[`mat_${counter}`]) { const matId = producto[`mat_${counter}`]; const cant = parseFloat(producto[`cant_${counter}`]) * (parseInt(detalle.cantidad) || 1); const uso = producto[`uso_${counter}`] || 'Cuerpo'; if(matId) recetaHTML += window.generarFilaRecetaProd(matId, cant, uso); counter++; } }
     if (recetaHTML === '') recetaHTML = window.generarFilaRecetaProd('','','Cuerpo');
 
     const formHTML = `<form id="dynamic-form"><input type="hidden" name="pedido_id" value="${pedidoId}"><input type="hidden" name="pedido_detalle_id" value="${detalle.id}"><div style="background: #EBF8FF; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem; color: #2B6CB0;"><strong>Confirmar Insumos para Producción</strong><br>El inventario se descontará en este momento. Puedes ajustar los colores si el cliente pidió algo especial.</div><div id="cont-receta-prod">${recetaHTML}</div><button type="button" class="btn btn-secondary" style="width:100%; margin-top:10px; border: 1px dashed var(--primary); color: var(--primary); background: transparent;" onclick="window.agregarFilaRecetaProd()">+ Añadir insumo extra</button><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 15px; background: var(--success); border-color: var(--success);">Confirmar y Enviar a Taller</button></form>`;
@@ -343,7 +387,7 @@ App.views.formMaterial = function(id = null) { const obj = id ? App.state.invent
 App.views.formProducto = function(id = null) { 
     const obj = id ? App.state.productos.find(p => p.id === id) : null; 
     const generarFila = (matId, cant, uso) => { const opcMat = App.state.inventario.map(m => `<option value="${m.id}" ${matId === m.id ? 'selected':''}>${m.nombre} (${m.unidad})</option>`).join(''); return `<div class="grid-3 fila-dinamica" style="margin-bottom: 5px;"><div class="form-group" style="margin:0;"><select name="mat_id[]" required><option value="">-- Insumo --</option>${opcMat}</select></div><div class="form-group" style="margin:0;"><input type="number" step="0.1" name="cant[]" value="${cant||''}" placeholder="Cant" required></div><div class="form-group" style="margin:0; display:flex; gap:5px;"><select name="uso[]" required><option value="Cuerpo" ${uso==='Cuerpo'?'selected':''}>Cuerpo</option><option value="Brazos" ${uso==='Brazos'?'selected':''}>Brazos</option><option value="Adicional" ${uso==='Adicional'?'selected':''}>Otro</option></select><button type="button" onclick="this.parentElement.parentElement.remove()" style="background:var(--danger); color:white; border:none; border-radius:4px; padding:0 10px;">X</button></div></div>`; };
-    let recetaHTML = ''; let counter = 1; if (obj) { while(obj[`mat_${counter}`]) { recetaHTML += generarFila(obj[`mat_${counter}`], obj[`cant_${counter}`], obj[`uso_${counter}`]); counter++; } } if (recetaHTML === '') recetaHTML = generarFila('','',''); 
+    let recetaHTML = ''; let counter = 1; if (obj) { while(obj[`mat_${counter}`]) { recetaHTML += generarFila(obj[`mat_${counter}`], obj[`cant_${counter}`], obj[`uso_${counter}`] || 'Cuerpo'); counter++; } } if (recetaHTML === '') recetaHTML = generarFila('','',''); 
     const clasif = obj ? obj.clasificacion : ''; 
     const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Nombre del Producto a Vender</label><input type="text" name="nombre" value="${obj ? obj.nombre : ''}" required></div><div class="grid-2"><div class="form-group"><label>Categoría</label><select name="categoria"><option value="fabricacion" ${obj && obj.categoria === 'fabricacion' ? 'selected' : ''}>Fabricación</option><option value="reventa" ${obj && obj.categoria === 'reventa' ? 'selected' : ''}>Reventa</option></select></div><div class="form-group"><label>Clasificación</label><select name="clasificacion"><option value="Unicolor" ${clasif==='Unicolor'?'selected':''}>Unicolor</option><option value="Combinada" ${clasif==='Combinada'?'selected':''}>Combinada</option><option value="Especial" ${clasif==='Especial'?'selected':''}>Especial</option><option value="Reventa" ${clasif==='Reventa'?'selected':''}>Reventa</option><option value="Otro" ${clasif==='Otro'?'selected':''}>Otro</option></select></div></div><div class="grid-2"><div class="form-group"><label>Tamaño</label><input type="text" name="tamano" value="${obj ? (obj.tamano||'') : ''}" placeholder="Ej. Matrimonial"></div><div class="form-group"><label>Color</label><input type="text" name="color" value="${obj ? (obj.color||'') : ''}" placeholder="Ej. Rojo/Blanco"></div></div><div class="grid-2"><div class="form-group"><label>Precio Venta ($)</label><input type="number" name="precio_venta" value="${obj ? obj.precio_venta : ''}" required></div><div class="form-group"><label>Precio Mayoreo ($)</label><input type="number" name="precio_mayoreo" value="${obj ? (obj.precio_mayoreo||'') : ''}"></div></div><div style="background: #F7FAFC; padding: 10px; border-radius: 8px; margin-bottom: 15px; border: 1px solid var(--border);"><strong style="font-size: 0.9rem; color: var(--primary);">📦 Receta de Inventario (Dinámica)</strong><div id="cont-receta" style="margin-top:10px;">${recetaHTML}</div><button type="button" class="btn btn-secondary" style="width:100%; margin-top:10px; border: 1px dashed var(--primary); color: var(--primary); background: transparent;" onclick="window.agregarFilaReceta()">+ Añadir Insumo a la Receta</button></div><button type="submit" class="btn btn-primary" style="width: 100%;">${obj ? 'Guardar Cambios' : 'Crear Producto'}</button></form>`; 
     App.ui.openSheet(obj ? "Editar Producto" : "Nuevo Producto", formHTML, (data) => { 
@@ -382,7 +426,6 @@ App.views.formCompra = function() {
 
 App.views.formEditarCompra = function(id) { const obj = App.state.compras.find(c => c.id === id); const opcProv = App.state.proveedores.map(p => `<option value="${p.id}" ${obj.proveedor_id === p.id ? 'selected':''}>${p.nombre}</option>`).join(''); const formHTML = `<form id="dynamic-form"><div style="background: #F7FAFC; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem; border: 1px solid var(--border);"><strong>Nota:</strong> Solo puedes cambiar Proveedor, Fecha y Total. Para cambiar cantidades, ELIMINA la compra y vuelve a hacerla.</div><div class="form-group"><label>Proveedor</label><select name="proveedor_id" required><option value="">-- Elige Proveedor --</option>${opcProv}</select></div><div class="form-group"><label>Fecha</label><input type="date" name="fecha" value="${obj.fecha}" required></div><div class="form-group"><label>Costo Total Pagado ($)</label><input type="number" name="total" value="${obj.total}" required></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Guardar Cambios</button></form>`; App.ui.openSheet("Editar Compra", formHTML, (data) => App.logic.actualizarRegistroGenerico("compras", id, data, "compras")); };
 
-// NUEVO BOTÓN: IMPRIMIR TICKET EN EL MODAL DE ORDEN DE PRODUCCIÓN
 App.views.modalEditarOrden = function(ordenId) { 
     const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); 
     const pagos = App.state.pago_artesanos.filter(p => p.orden_id === ordenId); 
@@ -404,16 +447,31 @@ App.views.formCerrarOrden = function(ordenId) {
     const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); 
     const detalle = App.state.pedido_detalle.find(d => d.pedido_id === orden.pedido_detalle_id); 
     const producto = detalle ? App.state.productos.find(p => p.id === detalle.producto_id) : { nombre: 'Hamaca', tubos_hilo: 0 }; 
+    
     let materialesHTML = ''; 
-    for(let i=1; i<=20; i++){ 
-        const matId = producto[`mat_${i}`]; const cant = parseFloat(producto[`cant_${i}`]); const uso = producto[`uso_${i}`] || 'General'; 
-        if(matId && cant > 0) { 
-            const material = App.state.inventario.find(m => m.id === matId); 
-            const consumoTeorico = cant * parseInt(detalle ? detalle.cantidad : 1); 
-            materialesHTML += `<div class="form-group" style="margin-bottom:8px; background: white; padding: 8px; border-radius: 4px; border: 1px solid #e2e8f0;"><label>${material ? material.nombre : 'Insumo'} <strong>[${uso.toUpperCase()}]</strong></label><input type="hidden" name="mat_${i}_id" value="${matId}"><input type="hidden" name="mat_${i}_teorico" value="${consumoTeorico}"><div style="display:flex; align-items:center; gap: 10px;"><span style="font-size:0.8rem;">Consumo Real:</span><input type="number" step="0.1" name="mat_${i}_real" value="${consumoTeorico}" required style="flex:1;"></div></div>`; 
+    let recetaGuardada = null;
+    try { if(orden.receta_personalizada) recetaGuardada = JSON.parse(orden.receta_personalizada); } catch(e){}
+
+    if (recetaGuardada && recetaGuardada.length > 0) {
+        recetaGuardada.forEach((item, index) => {
+            const material = App.state.inventario.find(m => m.id === item.mat_id);
+            if(material) {
+                materialesHTML += `<div class="form-group" style="margin-bottom:8px; background: white; padding: 8px; border-radius: 4px; border: 1px solid #e2e8f0;"><label>${material.nombre} <strong style="color:var(--primary);">[${(item.uso||'Cuerpo').toUpperCase()}]</strong></label><input type="hidden" name="mat_${index+1}_id" value="${item.mat_id}"><input type="hidden" name="mat_${index+1}_teorico" value="${item.cant}"><div style="display:flex; align-items:center; gap: 10px;"><span style="font-size:0.8rem;">Consumo Real:</span><input type="number" step="0.1" name="mat_${index+1}_real" value="${item.cant}" required style="flex:1;"></div></div>`;
+            }
+        });
+    } else {
+        for(let i=1; i<=20; i++){ 
+            const matId = producto[`mat_${i}`]; const cant = parseFloat(producto[`cant_${i}`]); const uso = producto[`uso_${i}`] || 'Cuerpo'; 
+            if(matId && cant > 0) { 
+                const material = App.state.inventario.find(m => m.id === matId); 
+                const consumoTeorico = cant * parseInt(detalle ? detalle.cantidad : 1); 
+                materialesHTML += `<div class="form-group" style="margin-bottom:8px; background: white; padding: 8px; border-radius: 4px; border: 1px solid #e2e8f0;"><label>${material ? material.nombre : 'Insumo'} <strong style="color:var(--primary);">[${uso.toUpperCase()}]</strong></label><input type="hidden" name="mat_${i}_id" value="${matId}"><input type="hidden" name="mat_${i}_teorico" value="${consumoTeorico}"><div style="display:flex; align-items:center; gap: 10px;"><span style="font-size:0.8rem;">Consumo Real:</span><input type="number" step="0.1" name="mat_${i}_real" value="${consumoTeorico}" required style="flex:1;"></div></div>`; 
+            } 
         } 
-    } 
+    }
+    
     if(materialesHTML === '') materialesHTML = '<p style="color:var(--text-muted); font-size:0.8rem;">No hay insumos a descontar para este producto.</p>'; 
+    
     const formHTML = `<div style="background: #EBF8FF; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem; color: #2B6CB0;"><strong>Cierre de Producción</strong><br>Producto: ${producto.nombre}</div><form id="dynamic-form"><input type="hidden" name="orden_id" value="${ordenId}"><p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:10px;">Si hubo merma y usaron más hilo del apartado, ajústalo aquí.</p>${materialesHTML}<div style="margin-top: 15px; padding: 10px; background: #E2E8F0; border-radius: 6px;"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" name="sumar_stock" value="1" style="width:20px; height:20px;"><strong>Guardar en mi Bodega Física</strong></label><small style="color:var(--text-muted); display:block; margin-top:5px;">Si esta hamaca NO se va a entregar a un cliente hoy, marca esta casilla para guardarla en tu inventario de reventa.</small></div><button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 15px; background: var(--success); border-color: var(--success);">Finalizar Orden</button></form>`; 
     App.ui.openSheet("Cerrar Orden", formHTML, (datos) => App.logic.cerrarOrdenProduccion(datos)); 
 };
