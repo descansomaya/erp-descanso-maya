@@ -89,8 +89,9 @@ App.logic = {
         if(!confirm("⚠️ ¿Eliminar pedido por completo?\n\nLos hilos que se enviaron a producción se regresarán automáticamente al inventario.")) return; 
         App.ui.showLoader("Procesando eliminación y devolviendo stock..."); 
         const pedido = App.state.pedidos.find(p => p.id === id); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === id); const orden = App.state.ordenes_produccion.find(o => detalle && o.pedido_detalle_id === detalle.id); 
-        let promesas = []; let nuevosMovs = [];
+        let operaciones = []; let nuevosMovs = [];
 
+        // Devolución automática de hilos
         if(orden && orden.receta_personalizada) {
             try {
                 let receta = JSON.parse(orden.receta_personalizada);
@@ -98,20 +99,29 @@ App.logic = {
                     let material = App.state.inventario.find(m => m.id === item.mat_id);
                     if(material && parseFloat(item.cant) > 0) {
                         let nStock = parseFloat(material.stock_actual) + parseFloat(item.cant);
-                        promesas.push(App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }).then(()=> material.stock_actual = nStock));
+                        operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } });
+                        material.stock_actual = nStock; // Update local state
                         const mov = { id: "MOV-" + Date.now() + Math.random().toString(36).substr(2,5), fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "entrada_devolucion", origen: "orden", origen_id: orden.id, ref_tipo: "material", ref_id: material.id, cantidad: item.cant, costo_unitario: material.costo_unitario||0, total: (item.cant * (material.costo_unitario||0)), notas: `Devolución por pedido cancelado: ${id.replace('PED-','')}` };
-                        nuevosMovs.push(mov); promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "movimientos_inventario", datos: mov }));
+                        nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov });
                     }
                 }
             } catch(e) {}
         }
 
-        promesas.push(App.api.fetch("eliminar_fila", { nombreHoja: "pedidos", idFila: id })); 
-        if(detalle) promesas.push(App.api.fetch("eliminar_fila", { nombreHoja: "pedido_detalle", idFila: detalle.id })); 
-        if(orden) { promesas.push(App.api.fetch("eliminar_fila", { nombreHoja: "ordenes_produccion", idFila: orden.id })); const pagosArtesanos = App.state.pago_artesanos.filter(p => p.orden_id === orden.id); for(let pago of pagosArtesanos) promesas.push(App.api.fetch("eliminar_fila", { nombreHoja: "pago_artesanos", idFila: pago.id })); }
-        const abonos = App.state.abonos.filter(a => a.pedido_id === id); for(let ab of abonos) promesas.push(App.api.fetch("eliminar_fila", { nombreHoja: "abonos_clientes", idFila: ab.id }));
+        // Eliminación en cascada en un solo lote
+        operaciones.push({ action: "eliminar_fila", nombreHoja: "pedidos", idFila: id }); 
+        if(detalle) operaciones.push({ action: "eliminar_fila", nombreHoja: "pedido_detalle", idFila: detalle.id }); 
+        if(orden) { 
+            operaciones.push({ action: "eliminar_fila", nombreHoja: "ordenes_produccion", idFila: orden.id }); 
+            const pagosArtesanos = App.state.pago_artesanos.filter(p => p.orden_id === orden.id); 
+            for(let pago of pagosArtesanos) operaciones.push({ action: "eliminar_fila", nombreHoja: "pago_artesanos", idFila: pago.id }); 
+        }
+        const abonos = App.state.abonos.filter(a => a.pedido_id === id); 
+        for(let ab of abonos) operaciones.push({ action: "eliminar_fila", nombreHoja: "abonos_clientes", idFila: ab.id });
         
-        await Promise.all(promesas);
+        // ENVÍO DE LOTE SEGURO
+        await App.api.fetch("ejecutar_lote", { operaciones: operaciones });
+        
         App.state.pedidos = App.state.pedidos.filter(p => p.id !== id); if(detalle) App.state.pedido_detalle = App.state.pedido_detalle.filter(d => d.id !== detalle.id); 
         if(orden) { App.state.ordenes_produccion = App.state.ordenes_produccion.filter(o => o.id !== orden.id); App.state.pago_artesanos = App.state.pago_artesanos.filter(p => p.orden_id !== orden.id); }
         App.state.abonos = App.state.abonos.filter(a => a.pedido_id !== id);
@@ -126,7 +136,10 @@ App.logic = {
     guardarCotizacion(datos) { datos.id = "COT-" + Date.now(); datos.fecha_creacion = new Date().toISOString(); App.state.cotizaciones.push(datos); localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); App.ui.toast("Cotización generada"); App.router.handleRoute(); App.logic.imprimirCotizacion(datos.id); },
     eliminarCotizacion(id) { if(!confirm("⚠️ ¿Eliminar cotización?")) return; App.state.cotizaciones = App.state.cotizaciones.filter(c => c.id !== id); localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); App.ui.toast("Eliminada"); App.router.handleRoute(); },
 
-    async guardarNuevoPedido(datosFormulario) { App.ui.showLoader("Procesando pedido..."); const pedidoId = "PED-" + Date.now(); const totalNum = parseFloat(datosFormulario.total) || 0; const anticipoNum = parseFloat(datosFormulario.anticipo) || 0; const cantidadNum = parseInt(datosFormulario.cantidad) || 1; const datosPedido = { id: pedidoId, cliente_id: datosFormulario.cliente_id, estado: "nuevo", total: totalNum, anticipo: anticipoNum, notas: datosFormulario.notas, fecha_entrega: datosFormulario.fecha_entrega, fecha_creacion: new Date().toISOString() }; const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datosFormulario.producto_id, cantidad: cantidadNum, precio_unitario: totalNum / cantidadNum }; const resPedido = await App.api.fetch("guardar_fila", { nombreHoja: "pedidos", datos: datosPedido }); if (resPedido.status === "success") { await App.api.fetch("guardar_fila", { nombreHoja: "pedido_detalle", datos: datosDetalle }); App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); App.ui.hideLoader(); App.ui.toast("Guardado (Sin mandar a taller)"); App.router.handleRoute(); } else { App.ui.hideLoader(); App.ui.toast("Error"); } },
+    // Modificados para usar Lotes
+    async guardarNuevoPedido(datosFormulario) { App.ui.showLoader("Procesando pedido..."); const pedidoId = "PED-" + Date.now(); const totalNum = parseFloat(datosFormulario.total) || 0; const anticipoNum = parseFloat(datosFormulario.anticipo) || 0; const cantidadNum = parseInt(datosFormulario.cantidad) || 1; const datosPedido = { id: pedidoId, cliente_id: datosFormulario.cliente_id, estado: "nuevo", total: totalNum, anticipo: anticipoNum, notas: datosFormulario.notas, fecha_entrega: datosFormulario.fecha_entrega, fecha_creacion: new Date().toISOString() }; const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datosFormulario.producto_id, cantidad: cantidadNum, precio_unitario: totalNum / cantidadNum }; 
+    let operaciones = [ { action: "guardar_fila", nombreHoja: "pedidos", datos: datosPedido }, { action: "guardar_fila", nombreHoja: "pedido_detalle", datos: datosDetalle } ];
+    const resPedido = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); if (resPedido.status === "success") { App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); App.ui.hideLoader(); App.ui.toast("Guardado (Sin mandar a taller)"); App.router.handleRoute(); } else { App.ui.hideLoader(); App.ui.toast("Error"); } },
 
     async confirmarMandarProduccion(datos) {
         const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); const usos = Array.isArray(datos.uso) ? datos.uso : (datos.uso ? [datos.uso] : []); let requerimientos = {};
@@ -134,60 +147,74 @@ App.logic = {
         let alertasDeStock = []; for(let mId in requerimientos) { let material = App.state.inventario.find(m => m.id === mId); if(material && parseFloat(material.stock_actual) < requerimientos[mId]) { alertasDeStock.push(`❌ ${material.nombre}: Tienes ${material.stock_actual} y necesitas ${requerimientos[mId]}`); } }
         if(alertasDeStock.length > 0) { const continuar = confirm("⚠️ ALERTA: NO TIENES SUFICIENTE MATERIAL EN BODEGA ⚠️\n\n" + alertasDeStock.join("\n") + "\n\n¿Quieres enviarlo a producción de todos modos? (El sistema dejará el stock en números negativos)."); if(!continuar) return; }
         
-        App.ui.showLoader("Generando Orden y Descontando Stock..."); let promesas = []; let nuevosMovs = []; let recetaPersonalizada = [];
+        App.ui.showLoader("Generando Orden y Descontando Stock..."); let operaciones = []; let nuevosMovs = []; let recetaPersonalizada = [];
         for(let i=0; i<mats.length; i++) {
             const matId = mats[i]; const cant = parseFloat(cants[i] || 0); const usoStr = usos[i] || 'Cuerpo';
             if(matId && cant > 0) {
                 recetaPersonalizada.push({ mat_id: matId, cant: cant, uso: usoStr }); const material = App.state.inventario.find(m => m.id === matId);
                 if(material) {
-                    const nStock = parseFloat(material.stock_actual) - cant; promesas.push(App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }).then(()=> material.stock_actual = nStock));
+                    const nStock = parseFloat(material.stock_actual) - cant; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }); material.stock_actual = nStock;
                     const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cant, costo_unitario: material.costo_unitario||0, total: (-cant * (material.costo_unitario||0)), notas: `Envío a taller de pedido ${datos.pedido_id.replace('PED-','')}` };
                     nuevosMovs.push(mov); 
                 }
             }
         }
         const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datos.pedido_detalle_id, estado: "pendiente", fecha_creacion: new Date().toISOString(), receta_personalizada: JSON.stringify(recetaPersonalizada) };
-        nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "movimientos_inventario", datos: m })); });
-        promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "ordenes_produccion", datos: nuevaOrden }));
-        await Promise.all(promesas); App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs);
+        nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: m }); });
+        operaciones.push({ action: "guardar_fila", nombreHoja: "ordenes_produccion", datos: nuevaOrden });
+        
+        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); 
+        App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs);
         App.ui.hideLoader(); App.ui.toast("Enviado a taller y stock descontado"); App.router.navigate('produccion');
     },
 
     async guardarOrdenStock(datos) { 
         App.ui.showLoader("Procesando Stock..."); const pedidoId = "PED-STOCK-" + Date.now(); const cantidadNum = parseInt(datos.cantidad) || 1; const datosPedido = { id: pedidoId, cliente_id: "STOCK_INTERNO", estado: "nuevo", total: 0, anticipo: 0, notas: "Producción Interna", fecha_entrega: "", fecha_creacion: new Date().toISOString() }; const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datos.producto_id, cantidad: cantidadNum, precio_unitario: 0 }; 
-        let promesas = []; let nuevosMovs = []; let recetaArray = []; const producto = App.state.productos.find(p => p.id === datos.producto_id); 
+        let operaciones = []; let nuevosMovs = []; let recetaArray = []; const producto = App.state.productos.find(p => p.id === datos.producto_id); 
         if(producto) { 
             for(let i=1; i<=20; i++) { 
                 const matId = producto[`mat_${i}`]; const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * cantidadNum; const uso = producto[`uso_${i}`] || 'Cuerpo'; 
                 if(matId && cantTeorica > 0) { 
                     recetaArray.push({ mat_id: matId, cant: cantTeorica, uso: uso }); const material = App.state.inventario.find(m => m.id === matId); 
-                    if(material) { const nStock = parseFloat(material.stock_actual) - cantTeorica; promesas.push(App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }).then(()=> material.stock_actual = nStock)); const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cantTeorica, costo_unitario: material.costo_unitario||0, total: (-cantTeorica * (material.costo_unitario||0)), notas: "Stock Interno de Bodega" }; nuevosMovs.push(mov); } 
+                    if(material) { const nStock = parseFloat(material.stock_actual) - cantTeorica; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }); material.stock_actual = nStock; const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cantTeorica, costo_unitario: material.costo_unitario||0, total: (-cantTeorica * (material.costo_unitario||0)), notas: "Stock Interno de Bodega" }; nuevosMovs.push(mov); } 
                 } 
             } 
         } 
         const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datosDetalle.id, estado: "pendiente", fecha_creacion: new Date().toISOString(), receta_personalizada: JSON.stringify(recetaArray) }; 
-        nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "movimientos_inventario", datos: m })); });
-        promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "pedidos", datos: datosPedido })); promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "pedido_detalle", datos: datosDetalle })); promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "ordenes_produccion", datos: nuevaOrden })); 
-        await Promise.all(promesas); App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Orden creada y stock descontado"); App.router.handleRoute(); 
+        nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: m }); });
+        operaciones.push({ action: "guardar_fila", nombreHoja: "pedidos", datos: datosPedido }, { action: "guardar_fila", nombreHoja: "pedido_detalle", datos: datosDetalle }, { action: "guardar_fila", nombreHoja: "ordenes_produccion", datos: nuevaOrden }); 
+        
+        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); 
+        App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Orden creada y stock descontado"); App.router.handleRoute(); 
     },
     
     async guardarTrabajoOrden(ordenId, data, esReparacion = false) { App.ui.showLoader("Asignando..."); const sanitizedTaskName = (data.tarea_nombre || "Trabajo").replace(/[^a-zA-Z0-9_ \-]/g, ""); const pagoObj = { id: "PAGO-" + Date.now() + "-" + sanitizedTaskName, artesano_id: data.artesano_id, orden_id: ordenId, monto_unitario: parseFloat(data.tarea_val), total: parseFloat(data.total), estado: "pendiente", fecha: new Date().toISOString() }; const res = await App.api.fetch("guardar_fila", { nombreHoja: "pago_artesanos", datos: pagoObj }); App.ui.hideLoader(); if(res.status === "success") { App.state.pago_artesanos.push(pagoObj); App.ui.toast("Asignado"); if(esReparacion) { App.router.handleRoute(); } else { App.views.modalEditarOrden(ordenId); } } else { App.ui.toast("Error"); App.router.handleRoute(); } },
     
     async cerrarOrdenProduccion(datosFormulario) { 
-        App.ui.showLoader("Finalizando..."); const ordenId = datosFormulario.orden_id; const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === orden.pedido_detalle_id); const producto = App.state.productos.find(p => p.id === detalle.producto_id); await App.api.fetch("actualizar_fila", { nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: { estado: 'listo' } }); orden.estado = 'listo'; 
-        let promesas = []; let nuevosMovs = []; 
-        for(let i=1; i<=20; i++) { const matId = datosFormulario[`mat_${i}_id`]; const consumoTeorico = parseFloat(datosFormulario[`mat_${i}_teorico`]); const consumoReal = parseFloat(datosFormulario[`mat_${i}_real`]); if(matId && !isNaN(consumoTeorico) && !isNaN(consumoReal)) { const material = App.state.inventario.find(m => m.id === matId); if(material) { const diferencia = consumoReal - consumoTeorico; if(diferencia !== 0) { const stockAjustado = parseFloat(material.stock_actual) - diferencia; promesas.push(App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: stockAjustado } }).then(()=> material.stock_actual = stockAjustado)); const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: diferencia > 0 ? "salida_merma" : "entrada_ajuste", origen: "orden", origen_id: ordenId, ref_tipo: "material", ref_id: material.id, cantidad: -diferencia, costo_unitario: material.costo_unitario||0, total: (-diferencia * (material.costo_unitario||0)), notas: "Ajuste por consumo real vs teórico en taller" }; nuevosMovs.push(mov); promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "movimientos_inventario", datos: mov })); } } } } 
-        if (datosFormulario.sumar_stock === "1" && producto) { let matHamaca = App.state.inventario.find(m => m.nombre === producto.nombre && m.tipo === 'reventa'); if(matHamaca) { let nStock = parseFloat(matHamaca.stock_actual) + 1; promesas.push(App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: matHamaca.id, datosNuevos: { stock_actual: nStock } }).then(()=> matHamaca.stock_actual = nStock)); } else { let nMat = { id: "MAT-" + Date.now() + "REV", nombre: producto.nombre, tipo: "reventa", unidad: "Pzas", stock_actual: 1, fecha_creacion: new Date().toISOString() }; promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "materiales", datos: nMat }).then(()=> App.state.inventario.push(nMat))); } App.ui.toast("Guardado en Bodega"); } 
-        if(detalle && detalle.pedido_id) { const pedidoMaster = App.state.pedidos.find(p => p.id === detalle.pedido_id); if(pedidoMaster && pedidoMaster.cliente_id !== "STOCK_INTERNO" && pedidoMaster.estado !== 'pagado') { promesas.push(App.api.fetch("actualizar_fila", { nombreHoja: "pedidos", idFila: pedidoMaster.id, datosNuevos: { estado: 'listo para entregar' } }).then(() => pedidoMaster.estado = 'listo para entregar')); } }
-        await Promise.all(promesas); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); 
+        App.ui.showLoader("Finalizando..."); const ordenId = datosFormulario.orden_id; const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === orden.pedido_detalle_id); const producto = App.state.productos.find(p => p.id === detalle.producto_id); 
+        let operaciones = [ { action: "actualizar_fila", nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: { estado: 'listo' } } ]; orden.estado = 'listo'; 
+        let nuevosMovs = []; 
+        for(let i=1; i<=20; i++) { const matId = datosFormulario[`mat_${i}_id`]; const consumoTeorico = parseFloat(datosFormulario[`mat_${i}_teorico`]); const consumoReal = parseFloat(datosFormulario[`mat_${i}_real`]); if(matId && !isNaN(consumoTeorico) && !isNaN(consumoReal)) { const material = App.state.inventario.find(m => m.id === matId); if(material) { const diferencia = consumoReal - consumoTeorico; if(diferencia !== 0) { const stockAjustado = parseFloat(material.stock_actual) - diferencia; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: stockAjustado } }); material.stock_actual = stockAjustado; const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: diferencia > 0 ? "salida_merma" : "entrada_ajuste", origen: "orden", origen_id: ordenId, ref_tipo: "material", ref_id: material.id, cantidad: -diferencia, costo_unitario: material.costo_unitario||0, total: (-diferencia * (material.costo_unitario||0)), notas: "Ajuste por consumo real vs teórico en taller" }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); } } } } 
+        if (datosFormulario.sumar_stock === "1" && producto) { let matHamaca = App.state.inventario.find(m => m.nombre === producto.nombre && m.tipo === 'reventa'); if(matHamaca) { let nStock = parseFloat(matHamaca.stock_actual) + 1; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: matHamaca.id, datosNuevos: { stock_actual: nStock } }); matHamaca.stock_actual = nStock; } else { let nMat = { id: "MAT-" + Date.now() + "REV", nombre: producto.nombre, tipo: "reventa", unidad: "Pzas", stock_actual: 1, fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "materiales", datos: nMat }); App.state.inventario.push(nMat); } App.ui.toast("Guardado en Bodega"); } 
+        if(detalle && detalle.pedido_id) { const pedidoMaster = App.state.pedidos.find(p => p.id === detalle.pedido_id); if(pedidoMaster && pedidoMaster.cliente_id !== "STOCK_INTERNO" && pedidoMaster.estado !== 'pagado') { operaciones.push({ action: "actualizar_fila", nombreHoja: "pedidos", idFila: pedidoMaster.id, datosNuevos: { estado: 'listo para entregar' } }); pedidoMaster.estado = 'listo para entregar'; } }
+        
+        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); 
+        if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); 
         App.ui.hideLoader(); App.ui.toast("¡Terminado!"); App.router.handleRoute(); 
     },
     
     async procesarCambioOrden(ordenId, datos) { if (datos.estado === 'listo') { App.views.formCerrarOrden(ordenId); } else { App.ui.showLoader("Actualizando..."); const res = await App.api.fetch("actualizar_fila", { nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: datos }); App.ui.hideLoader(); if (res.status === "success") { const ordenIndex = App.state.ordenes_produccion.findIndex(o => o.id === ordenId); App.state.ordenes_produccion[ordenIndex] = { ...App.state.ordenes_produccion[ordenIndex], ...datos }; App.ui.toast("Actualizado"); App.router.handleRoute(); } else { App.ui.toast("Error"); } } },
-    async liquidarNomina(artesanoId) { App.ui.showLoader("Liquidando..."); const pagosPendientes = App.state.pago_artesanos.filter(p => p.artesano_id === artesanoId && p.estado === 'pendiente'); let totalPagado = 0; const promesasDePago = []; for (let pago of pagosPendientes) { promesasDePago.push( App.api.fetch("actualizar_fila", { nombreHoja: "pago_artesanos", idFila: pago.id, datosNuevos: { estado: 'pagado' } }).then(res => { if(res.status === "success") { pago.estado = 'pagado'; totalPagado += parseFloat(pago.total || 0); } }) ); } await Promise.all(promesasDePago); if (totalPagado > 0) { const artesano = App.state.artesanos.find(a => a.id === artesanoId); const gastoObj = { id: "GAS-" + Date.now(), descripcion: "Nómina - " + (artesano ? artesano.nombre : 'Artesano'), categoria: "nomina", monto: totalPagado, fecha: new Date().toISOString().split('T')[0] }; await App.api.fetch("guardar_fila", { nombreHoja: "gastos", datos: gastoObj }); App.state.gastos.push(gastoObj); } App.ui.hideLoader(); App.ui.toast(`Liquidados $${totalPagado}`); App.router.handleRoute(); },
+    
+    async liquidarNomina(artesanoId) { 
+        App.ui.showLoader("Liquidando..."); const pagosPendientes = App.state.pago_artesanos.filter(p => p.artesano_id === artesanoId && p.estado === 'pendiente'); let totalPagado = 0; let operaciones = []; 
+        for (let pago of pagosPendientes) { operaciones.push({ action: "actualizar_fila", nombreHoja: "pago_artesanos", idFila: pago.id, datosNuevos: { estado: 'pagado' } }); pago.estado = 'pagado'; totalPagado += parseFloat(pago.total || 0); } 
+        if (totalPagado > 0) { const artesano = App.state.artesanos.find(a => a.id === artesanoId); const gastoObj = { id: "GAS-" + Date.now(), descripcion: "Nómina - " + (artesano ? artesano.nombre : 'Artesano'), categoria: "nomina", monto: totalPagado, fecha: new Date().toISOString().split('T')[0] }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); App.state.gastos.push(gastoObj); } 
+        await App.api.fetch("ejecutar_lote", { operaciones: operaciones });
+        App.ui.hideLoader(); App.ui.toast(`Liquidados $${totalPagado}`); App.router.handleRoute(); 
+    },
     
     async guardarNuevaCompra(datos) { 
-        App.ui.showLoader("Comprando..."); const compraId = "COM-" + Date.now(); const detallesCompra = []; const promesasMateriales = []; let nuevosMovs = [];
+        App.ui.showLoader("Comprando..."); const compraId = "COM-" + Date.now(); const detallesCompra = []; let operaciones = []; let nuevosMovs = [];
         const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); const costos = Array.isArray(datos.costo) ? datos.costo : (datos.costo ? [datos.costo] : []);
         for(let i=0; i<mats.length; i++) { 
             const matId = mats[i]; const cant = parseFloat(cants[i] || 0); const costoU = parseFloat(costos[i] || 0); 
@@ -196,18 +223,21 @@ App.logic = {
                 if(material) { 
                     detallesCompra.push({ mat_id: matId, nombre: material.nombre, cantidad: cant, costo_unitario: costoU }); 
                     const nuevoStock = parseFloat(material.stock_actual) + cant; 
-                    promesasMateriales.push( App.api.fetch("actualizar_fila", { nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } }).then(()=> { material.stock_actual = nuevoStock; if (material.tipo === 'reventa') { const existeProd = App.state.productos.find(p => p.mat_1 === material.id); if(!existeProd) { const nuevoProd = { id: "PROD-" + Date.now() + i, nombre: material.nombre, categoria: "reventa", clasificacion: "Reventa", precio_venta: 0, mat_1: material.id, cant_1: 1, uso_1: "Completo", activo: "TRUE", fecha_creacion: new Date().toISOString() }; App.api.fetch("guardar_fila", { nombreHoja: "productos", datos: nuevoProd }).then(()=> App.state.productos.push(nuevoProd)); } } })); 
+                    operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock } }); material.stock_actual = nuevoStock; 
+                    if (material.tipo === 'reventa') { const existeProd = App.state.productos.find(p => p.mat_1 === material.id); if(!existeProd) { const nuevoProd = { id: "PROD-" + Date.now() + i, nombre: material.nombre, categoria: "reventa", clasificacion: "Reventa", precio_venta: 0, mat_1: material.id, cant_1: 1, uso_1: "Completo", activo: "TRUE", fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "productos", datos: nuevoProd }); App.state.productos.push(nuevoProd); } } 
                     const mov = { id: "MOV-" + Date.now() + i, fecha: datos.fecha, tipo_movimiento: "entrada_compra", origen: "compra", origen_id: compraId, ref_tipo: "material", ref_id: material.id, cantidad: cant, costo_unitario: costoU, total: (cant * costoU), notas: "Compra a proveedor" };
-                    nuevosMovs.push(mov); promesasMateriales.push(App.api.fetch("guardar_fila", { nombreHoja: "movimientos_inventario", datos: mov }));
+                    nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov });
                 } 
             } 
         } 
         const compra = { id: compraId, proveedor_id: datos.proveedor_id, fecha: datos.fecha, total: parseFloat(datos.total), monto_pagado: parseFloat(datos.total), estado: "pagado", detalles: JSON.stringify(detallesCompra), fecha_creacion: new Date().toISOString() }; 
-        const res = await App.api.fetch("guardar_fila", { nombreHoja: "compras", datos: compra }); 
-        if (res.status === "success") { await Promise.all(promesasMateriales); App.state.compras.push(compra); if(!App.state.movimientos_inventario) App.state.movimientos_inventario=[]; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Compra registrada"); App.router.handleRoute(); } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
+        operaciones.push({ action: "guardar_fila", nombreHoja: "compras", datos: compra }); 
+        
+        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); 
+        App.state.compras.push(compra); if(!App.state.movimientos_inventario) App.state.movimientos_inventario=[]; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Compra registrada"); App.router.handleRoute();  
     },
 
-    async guardarMultiplesGastos(datos) { App.ui.showLoader("Registrando Gastos..."); const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; let promesas = []; let nuevosGastos = []; for(let i=0; i<descripciones.length; i++) { if(!descripciones[i]) continue; const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; nuevosGastos.push(gastoObj); promesas.push(App.api.fetch("guardar_fila", { nombreHoja: "gastos", datos: gastoObj })); } await Promise.all(promesas); App.state.gastos.push(...nuevosGastos); App.ui.hideLoader(); App.ui.toast("¡Gastos registrados!"); App.router.handleRoute(); },
+    async guardarMultiplesGastos(datos) { App.ui.showLoader("Registrando Gastos..."); const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; let operaciones = []; let nuevosGastos = []; for(let i=0; i<descripciones.length; i++) { if(!descripciones[i]) continue; const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; nuevosGastos.push(gastoObj); operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); } await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.gastos.push(...nuevosGastos); App.ui.hideLoader(); App.ui.toast("¡Gastos registrados!"); App.router.handleRoute(); },
     async guardarNuevaReparacion(datos) { App.ui.showLoader("Registrando..."); datos.id = "REP-" + Date.now(); datos.estado = "recibida"; datos.fecha_creacion = new Date().toISOString(); const res = await App.api.fetch("guardar_fila", { nombreHoja: "reparaciones", datos: datos }); App.ui.hideLoader(); if (res.status === "success") { App.state.reparaciones.push(datos); App.ui.toast("Reparación guardada"); App.router.handleRoute(); } else { App.ui.toast("Error Sheets."); } },
     async actualizarReparacion(repId, estado) { App.ui.showLoader("Actualizando..."); await App.api.fetch("actualizar_fila", { nombreHoja: "reparaciones", idFila: repId, datosNuevos: { estado: estado } }); const rep = App.state.reparaciones.find(r => r.id === repId); if(rep) rep.estado = estado; App.ui.hideLoader(); App.ui.toast("Actualizado"); App.router.handleRoute(); },
     
