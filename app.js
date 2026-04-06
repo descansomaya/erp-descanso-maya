@@ -436,18 +436,91 @@ App.views.productos = function() { document.getElementById('bottom-nav').style.d
 
 App.views.pedidos = function() { 
     document.getElementById('bottom-nav').style.display = 'flex'; 
+    
+    // 1. Clasificamos los pedidos en arrays separados
     const pedNuevos = []; const pedTaller = []; const pedListos = []; const pedPagados = [];
+    
     [...(App.state.pedidos||[])].reverse().slice(0, 100).forEach(p => { 
         const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id); 
         const tieneOrden = detalle ? App.state.ordenes_produccion.some(o => o.pedido_detalle_id === detalle.id) : false; 
         const abonos = App.state.abonos.filter(a => a.pedido_id === p.id).reduce((sum, a) => sum + parseFloat(a.monto || 0), 0); 
         const saldoReal = parseFloat(p.total || 0) - parseFloat(p.anticipo || 0) - abonos; 
+        
         let estadoCalculado = p.estado || 'nuevo'; 
         if (tieneOrden && estadoCalculado !== 'listo para entregar' && estadoCalculado !== 'pagado') estadoCalculado = 'en taller'; 
         if (saldoReal <= 0) estadoCalculado = 'pagado'; 
+        
         p._objDetalle = detalle; p._tieneOrden = tieneOrden; p._saldoReal = saldoReal; p._estadoCalculado = estadoCalculado;
-        if (estadoCalculado === 'pagado') pedPagados.push(p); else if (estadoCalculado === 'listo para entregar') pedListos.push(p); else if (estadoCalculado === 'en taller') pedTaller.push(p); else pedNuevos.push(p);
+        
+        if (estadoCalculado === 'pagado') pedPagados.push(p); 
+        else if (estadoCalculado === 'listo para entregar') pedListos.push(p); 
+        else if (estadoCalculado === 'en taller') pedTaller.push(p); 
+        else pedNuevos.push(p);
     }); 
+
+    // 2. Función para dibujar la tarjeta individual
+    const dibujarTarjetaPed = (p) => {
+        const c = App.state.clientes.find(cli => cli.id === p.cliente_id); 
+        const nombreC = p.cliente_id === "STOCK_INTERNO" ? "📦 BODEGA (Stock)" : (c ? c.nombre : 'Mostrador'); 
+        const producto = p._objDetalle ? App.state.productos.find(prod => prod.id === p._objDetalle.producto_id) : null; 
+        const estaPagado = p._saldoReal <= 0;
+        
+        let esUrgente = false; 
+        if(p.fecha_entrega && !estaPagado && p._estadoCalculado !== 'listo para entregar') { 
+            const fEnt = new Date(p.fecha_entrega+'T00:00:00'); const hoy = new Date(); hoy.setHours(0,0,0,0); 
+            if(Math.ceil((fEnt - hoy)/(1000*60*60*24)) <= 7) esUrgente = true; 
+        } 
+        
+        let botonesAccion = '';
+        if (!p._tieneOrden && p._estadoCalculado === 'nuevo') {
+            if (producto && producto.categoria === 'reventa') { 
+                botonesAccion = `<button class="btn btn-secondary" style="padding: 6px 10px; border-color:#3182CE; color:#3182CE;" onclick="App.logic.entregarDeBodega('${p.id}')">📦 Sacar de Bodega</button>`; 
+            } else { 
+                botonesAccion = `<button class="btn btn-secondary" style="padding: 6px 10px; border-color:var(--secondary); color:var(--secondary);" onclick="App.views.formMandarProduccion('${p.id}')">🔨 Mandar a taller</button>
+                                 <button class="btn btn-secondary" style="padding: 6px 10px; border-color:#3182CE; color:#3182CE; margin-left:5px;" onclick="App.logic.entregarDeBodega('${p.id}')">📦 Bodega</button>`; 
+            }
+        }
+        
+        return `<div class="card tarj-ped" data-estado="${p._estadoCalculado}" style="border: ${esUrgente ? '2px solid var(--danger)' : '1px solid var(--border)'}; box-shadow: none; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><strong>${(p.id||'').replace('PED-','')} - ${nombreC}</strong>${estaPagado ? `<span class="badge" style="background: var(--success); color: white;">PAGADO</span>` : `<span class="badge ${p._estadoCalculado || 'nuevo'}">${String(p._estadoCalculado || 'Nuevo').toUpperCase()}</span>`}</div>
+            <p style="color: var(--primary); font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">${producto ? producto.nombre : 'Desconocido'}</p>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);">
+                <div><strong style="color: ${estaPagado ? 'var(--success)' : 'var(--danger)'};">Saldo: $${p._saldoReal > 0 ? p._saldoReal : 0}</strong></div>
+                <div style="display: flex; gap: 8px;">${botonesAccion}${!estaPagado && p.cliente_id !== "STOCK_INTERNO" ? `<button class="btn btn-primary" style="padding: 6px 10px; background: var(--success); border-color: var(--success);" onclick="App.views.formCobrar('${p.id}', '${c ? c.id : ''}', ${p._saldoReal})">💰</button>` : ''}</div>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                ${p.cliente_id !== "STOCK_INTERNO" ? `<button class="btn" style="flex: 1; font-size: 0.8rem; border-color: #38A169; color: #38A169;" onclick="App.views.modalOpcionesWhatsApp('${p.id}')">💬 WApp</button><button class="btn" style="flex: 1; font-size: 0.8rem; border-color: var(--primary); color: var(--primary);" onclick="App.logic.imprimirNota('${p.id}')">🖨️ PDF</button>` : ''}
+                <button class="btn btn-secondary" style="font-size: 0.8rem; padding: 6px 10px;" onclick="App.views.formEditarPedido('${p.id}')">✏️</button><button class="btn btn-secondary" style="font-size: 0.8rem; padding: 6px 10px; color: red; border-color: red;" onclick="App.logic.eliminarPedido('${p.id}')">🗑️</button>
+            </div>
+        </div>`;
+    };
+
+    // 3. Renderizamos las pestañas
+    let html = `<div class="card"><h3 class="card-title">Gestión de Pedidos</h3>
+    <input type="text" id="bus-ped" onkeyup="window.filtrarLista('bus-ped', 'tarj-ped')" placeholder="🔍 Buscar por folio o producto..." style="width:100%; padding:8px; margin-bottom:15px; border-radius:6px; border:1px solid var(--border);">
+    
+    <div style="display: flex; margin-bottom: 15px; background: white; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); overflow-x: auto;">
+        <button class="tab-btn-ped" style="flex:1; min-width:80px; padding: 12px 5px; border:none; background:#F3F0FF; color:var(--primary); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid var(--primary);" onclick="window.switchTabPed('nuevos', this)">Nuevos (${pedNuevos.length})</button>
+        <button class="tab-btn-ped" style="flex:1; min-width:80px; padding: 12px 5px; border:none; background:transparent; color:var(--text-muted); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid transparent;" onclick="window.switchTabPed('taller', this)">Taller (${pedTaller.length})</button>
+        <button class="tab-btn-ped" style="flex:1; min-width:80px; padding: 12px 5px; border:none; background:transparent; color:var(--text-muted); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid transparent;" onclick="window.switchTabPed('listos', this)">Listos (${pedListos.length})</button>
+        <button class="tab-btn-ped" style="flex:1; min-width:80px; padding: 12px 5px; border:none; background:transparent; color:var(--text-muted); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid transparent;" onclick="window.switchTabPed('pagados', this)">Pagados</button>
+    </div>
+
+    <div id="tab-nuevos" class="tab-content-ped" style="display:block;">
+        ${pedNuevos.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">Sin pedidos nuevos.</div>' : pedNuevos.map(dibujarTarjetaPed).join('')}
+    </div>
+    <div id="tab-taller" class="tab-content-ped" style="display:none;">
+        ${pedTaller.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">No hay pedidos en taller.</div>' : pedTaller.map(dibujarTarjetaPed).join('')}
+    </div>
+    <div id="tab-listos" class="tab-content-ped" style="display:none;">
+        ${pedListos.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">No hay pedidos listos esperando pago.</div>' : pedListos.map(dibujarTarjetaPed).join('')}
+    </div>
+    <div id="tab-pagados" class="tab-content-ped" style="display:none;">
+        ${pedPagados.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">Historial vacío.</div>' : pedPagados.map(dibujarTarjetaPed).join('')}
+    </div>`; 
+    
+    return html += `</div><button class="fab" onclick="App.views.formNuevoPedido()">+</button>`; 
+};
 
     const dibujarTarjetaPed = (p) => {
         const c = App.state.clientes.find(cli => cli.id === p.cliente_id); const nombreC = p.cliente_id === "STOCK_INTERNO" ? "📦 BODEGA (Stock)" : (c ? c.nombre : 'Mostrador'); 
