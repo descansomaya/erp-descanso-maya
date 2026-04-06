@@ -522,45 +522,6 @@ App.views.pedidos = function() {
     return html += `</div><button class="fab" onclick="App.views.formNuevoPedido()">+</button>`; 
 };
 
-    const dibujarTarjetaPed = (p) => {
-        const c = App.state.clientes.find(cli => cli.id === p.cliente_id); const nombreC = p.cliente_id === "STOCK_INTERNO" ? "📦 BODEGA (Stock)" : (c ? c.nombre : 'Mostrador'); 
-        const producto = p._objDetalle ? App.state.productos.find(prod => prod.id === p._objDetalle.producto_id) : null; 
-        const estaPagado = p._saldoReal <= 0;
-        let esUrgente = false; if(p.fecha_entrega && !estaPagado && p._estadoCalculado !== 'listo para entregar') { const fEnt = new Date(p.fecha_entrega+'T00:00:00'); const hoy = new Date(); hoy.setHours(0,0,0,0); if(Math.ceil((fEnt - hoy)/(1000*60*60*24)) <= 7) esUrgente = true; } 
-        let botonesAccion = '';
-        if (!p._tieneOrden && p._estadoCalculado === 'nuevo') {
-            if (producto && producto.categoria === 'reventa') { botonesAccion = `<button class="btn btn-secondary" style="padding: 6px 10px; border-color:#3182CE; color:#3182CE;" onclick="App.logic.entregarDeBodega('${p.id}')">📦 Sacar de Bodega</button>`; } 
-            else { botonesAccion = `<button class="btn btn-secondary" style="padding: 6px 10px; border-color:var(--secondary); color:var(--secondary);" onclick="App.views.formMandarProduccion('${p.id}')">🔨 Mandar a taller</button><button class="btn btn-secondary" style="padding: 6px 10px; border-color:#3182CE; color:#3182CE; margin-left:5px;" onclick="App.logic.entregarDeBodega('${p.id}')">📦 Sacar de Bodega</button>`; }
-        }
-        return `<div class="card tarj-ped" data-estado="${p._estadoCalculado}" style="border: ${esUrgente ? '2px solid var(--danger)' : '1px solid var(--border)'}; box-shadow: none;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><strong>${p.id} - ${nombreC}</strong>${estaPagado ? `<span class="badge" style="background: var(--success); color: white;">PAGADO</span>` : `<span class="badge ${p.estado || 'nuevo'}">${(p.estado || 'Nuevo').toUpperCase()}</span>`}</div>
-            <p style="color: var(--primary); font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">${producto ? producto.nombre : 'Desconocido'}</p>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);">
-                <div><strong style="color: ${estaPagado ? 'var(--success)' : 'var(--danger)'};">Saldo: $${p._saldoReal > 0 ? p._saldoReal : 0}</strong></div>
-                <div style="display: flex; gap: 8px;">${botonesAccion}${!estaPagado && p.cliente_id !== "STOCK_INTERNO" ? `<button class="btn btn-primary" style="padding: 6px 10px; background: var(--success); border-color: var(--success);" onclick="App.views.formCobrar('${p.id}', '${c ? c.id : ''}', ${p._saldoReal})">💰</button>` : ''}</div>
-            </div>
-            <div style="display: flex; gap: 10px; margin-top: 15px;">
-                ${p.cliente_id !== "STOCK_INTERNO" ? `<button class="btn" style="flex: 1; font-size: 0.8rem; border-color: #38A169; color: #38A169;" onclick="App.views.modalOpcionesWhatsApp('${p.id}')">💬 WApp</button><button class="btn" style="flex: 1; font-size: 0.8rem; border-color: var(--primary); color: var(--primary);" onclick="App.logic.imprimirNota('${p.id}')">🖨️ PDF</button>` : ''}
-                <button class="btn btn-secondary" style="font-size: 0.8rem; padding: 6px 10px;" onclick="App.views.formEditarPedido('${p.id}')">✏️</button><button class="btn btn-secondary" style="font-size: 0.8rem; padding: 6px 10px; color: red; border-color: red;" onclick="App.logic.eliminarPedido('${p.id}')">🗑️</button>
-            </div>
-        </div>`;
-    };
-
-    let html = `<div class="card"><h3 class="card-title">Gestión de Pedidos</h3>
-    <input type="text" id="bus-ped" onkeyup="window.filtrarLista('bus-ped', 'tarj-ped')" placeholder="🔍 Buscar por folio o producto..." style="width:100%; padding:8px; margin-bottom:15px; border-radius:6px; border:1px solid var(--border);">
-    <div style="display: flex; margin-bottom: 15px; background: white; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); overflow-x: auto;">
-        <button class="tab-btn-ped" style="flex:1; min-width:80px; padding: 12px 5px; border:none; background:#F3F0FF; color:var(--primary); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid var(--primary);" onclick="window.switchTabPed('nuevos', this)">Nuevos (${pedNuevos.length})</button>
-        <button class="tab-btn-ped" style="flex:1; min-width:80px; padding: 12px 5px; border:none; background:transparent; color:var(--text-muted); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid transparent;" onclick="window.switchTabPed('taller', this)">Taller (${pedTaller.length})</button>
-        <button class="tab-btn-ped" style="flex:1; min-width:80px; padding: 12px 5px; border:none; background:transparent; color:var(--text-muted); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid transparent;" onclick="window.switchTabPed('listos', this)">Listos (${pedListos.length})</button>
-        <button class="tab-btn-ped" style="flex:1; min-width:80px; padding: 12px 5px; border:none; background:transparent; color:var(--text-muted); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid transparent;" onclick="window.switchTabPed('pagados', this)">Pagados</button>
-    </div>
-    <div id="tab-nuevos" class="tab-content-ped" style="display:block;">${pedNuevos.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">Sin pedidos nuevos.</div>' : pedNuevos.map(dibujarTarjetaPed).join('')}</div>
-    <div id="tab-taller" class="tab-content-ped" style="display:none;">${pedTaller.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">No hay pedidos en taller.</div>' : pedTaller.map(dibujarTarjetaPed).join('')}</div>
-    <div id="tab-listos" class="tab-content-ped" style="display:none;">${pedListos.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">No hay pedidos listos esperando pago.</div>' : pedListos.map(dibujarTarjetaPed).join('')}</div>
-    <div id="tab-pagados" class="tab-content-ped" style="display:none;">${pedPagados.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">Historial vacío.</div>' : pedPagados.map(dibujarTarjetaPed).join('')}</div>`; 
-    return html += `</div><button class="fab" onclick="App.views.formNuevoPedido()">+</button>`; 
-};
-
 App.views.modalOpcionesWhatsApp = function(pedidoId) { let html = `<div style="display:flex; flex-direction:column; gap:10px;"><p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">Elige el tipo de mensaje que deseas enviar al cliente:</p><button class="btn btn-secondary" style="border-color:#38A169; color:#38A169; background:transparent;" onclick="App.logic.enviarWhatsApp('${pedidoId}', 'listo')">✅ Aviso de "Pedido Listo"</button><button class="btn btn-secondary" style="border-color:#D69E2E; color:#D69E2E; background:transparent;" onclick="App.logic.enviarWhatsApp('${pedidoId}', 'cobro')">💰 Recordatorio de Pago</button><button class="btn btn-secondary" style="border-color:var(--primary); color:var(--primary); background:transparent;" onclick="App.logic.enviarWhatsApp('${pedidoId}', 'general')">📝 Detalles del Pedido (General)</button></div>`; App.ui.openSheet("Enviar WhatsApp", html); };
 
 App.views.produccion = function() { 
