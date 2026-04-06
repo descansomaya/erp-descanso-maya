@@ -344,7 +344,7 @@ renderGraficasFinanzas(filtro) {
         const gasFiltrados = App.state.gastos.filter(g => filtrarFecha(g.fecha));
         const repFiltradas = App.state.reparaciones.filter(r => filtrarFecha(r.fecha_creacion));
 
-        // Por Cobrar GLOBAL (ignora las fechas, nunca desaparece)
+        // Por Cobrar GLOBAL (histórico intocable por los filtros de fecha)
         let xCobrarGlobal = 0;
         App.state.pedidos.forEach(p => { const abonos = App.state.abonos.filter(a => a.pedido_id === p.id).reduce((s,a) => s + parseFloat(a.monto||0), 0); const saldo = parseFloat(p.total||0) - parseFloat(p.anticipo||0) - abonos; if(saldo > 0) xCobrarGlobal += saldo; });
         App.state.reparaciones.forEach(r => { const saldo = parseFloat(r.precio||0) - parseFloat(r.anticipo||0); if(saldo > 0) xCobrarGlobal += saldo; });
@@ -362,9 +362,21 @@ renderGraficasFinanzas(filtro) {
         const fNeto = ingReales - tGastos; 
         const labels = { todo: "Todo el historial", mes_actual: "Este Mes", mes_pasado: "Mes Pasado", trimestre_actual: "Este Trimestre", anio_actual: "Este Año" };
         
-        // --- PREPARAR DATOS PARA GRÁFICAS DE PASTEL ---
-        let expPorCat = {}; gasFiltrados.forEach(g => { const cat = g.categoria || 'otro'; expPorCat[cat] = (expPorCat[cat] || 0) + parseFloat(g.monto||0); });
+        // --- PREPARAR DATOS PARA GASTOS (Con traductor para datos viejos) ---
+        let expPorCat = {}; 
+        gasFiltrados.forEach(g => { 
+            let cat = (g.categoria || 'otro').toLowerCase(); 
+            if (cat === 'materiales') {
+                const desc = (g.descripcion || '').toLowerCase();
+                if (desc.includes('hilo')) cat = 'hilos';
+                else if (desc.includes('argolla') || desc.includes('accesorio') || desc.includes('guardacabo')) cat = 'accesorios';
+                else if (desc.includes('reventa') || desc.includes('hamaca')) cat = 'hamacas (reventa)';
+                else cat = 'materiales (general)';
+            }
+            expPorCat[cat] = (expPorCat[cat] || 0) + parseFloat(g.monto||0); 
+        });
         
+        // --- PREPARAR DATOS PARA VENTAS ---
         let ventasPorCat = { 'Hamacas': 0, 'Sillas': 0, 'Cojines': 0, 'Accesorios': 0, 'Reparaciones': 0, 'Otros': 0 };
         pedFiltrados.forEach(p => {
             const det = App.state.pedido_detalle.find(d => d.pedido_id === p.id); const prod = det ? App.state.productos.find(x => x.id === det.producto_id) : null;
@@ -378,22 +390,36 @@ renderGraficasFinanzas(filtro) {
         repFiltradas.forEach(r => { ventasPorCat['Reparaciones'] += parseFloat(r.precio||0); });
         Object.keys(ventasPorCat).forEach(k => { if(ventasPorCat[k] === 0) delete ventasPorCat[k]; });
 
-        const coloresVentas = ['#6B46C1', '#2B6CB0', '#D69E2E', '#DD6B20', '#38A169', '#718096'];
-        const coloresGastos = ['#E53E3E', '#6B46C1', '#DD6B20', '#D69E2E', '#2B6CB0', '#718096'];
+        const coloresVentas = ['#4C51BF', '#ED8936', '#38B2AC', '#E53E3E', '#ECC94B', '#A0AEC0']; // Indigo, Naranja, VerdeAgua, Rojo, Amarillo, Gris
+        const coloresGastos = ['#E53E3E', '#D69E2E', '#3182CE', '#805AD5', '#38A169', '#718096', '#DD6B20']; // Rojo, Mostaza, Azul, Morado, Verde, Gris, Naranja
 
         let html = `<p style="color:var(--text-muted); font-size:0.85rem; margin-top:-10px; margin-bottom:15px;">Mostrando: <strong>${labels[filtro]}</strong></p><div class="grid-2"><div class="card stat-card" style="background:#EBF8FF; cursor:pointer;" onclick="App.views.detalleFinanzas('ventas', '${filtro}')"><div class="label">Ventas Totales</div><div class="value" style="color:#3182CE; font-size:1.2rem;">$${tVentas.toFixed(2)}</div></div><div class="card stat-card" style="background:#C6F6D5; cursor:pointer;" onclick="App.views.detalleFinanzas('ingresos', '${filtro}')"><div class="label">Ingresos Reales</div><div class="value" style="color:#38A169; font-size:1.2rem;">$${ingReales.toFixed(2)}</div></div><div class="card stat-card" style="background:#FEFCBF; cursor:pointer;" onclick="App.views.detalleFinanzas('por_cobrar', '${filtro}')"><div class="label">Por Cobrar (Histórico)</div><div class="value" style="color:#D69E2E; font-size:1.2rem;">$${xCobrarGlobal.toFixed(2)}</div></div><div class="card stat-card" style="background:#FED7D7; cursor:pointer;" onclick="App.views.detalleFinanzas('gastos', '${filtro}')"><div class="label">Gastos</div><div class="value" style="color:#E53E3E; font-size:1.2rem;">$${tGastos.toFixed(2)}</div></div></div><div class="card stat-card" style="margin-top:10px; border:2px solid ${fNeto >= 0 ? 'var(--success)' : 'var(--danger)'}; margin-bottom:15px;"><div class="label">Flujo Neto Efectivo</div><div class="value" style="color:${fNeto >= 0 ? 'var(--success)' : 'var(--danger)'};">$${fNeto.toFixed(2)}</div></div><div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px;"><canvas id="graficaFinanzas"></canvas></div>`;
         
-        html += `<div class="grid-2" style="margin-top:15px; gap:10px;"><div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px;"><h4 style="text-align:center; margin-bottom:10px; color:var(--text-muted); font-size:0.9rem;">De dónde ingresa 📈</h4><canvas id="graficaVentasCanvas"></canvas></div><div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px;"><h4 style="text-align:center; margin-bottom:10px; color:var(--text-muted); font-size:0.9rem;">En qué se gasta 📉</h4><canvas id="graficaGastosCanvas"></canvas></div></div><button class="btn btn-secondary" style="width:100%; margin-top:15px; border-color:#38A169; color:#38A169; font-weight:bold; background:transparent;" onclick="window.exportarAExcel(App.state.gastos, 'Gastos_${labels[filtro]}')">📥 Exportar Gastos a Excel</button>`;
+        // CORRECCIÓN MÓVIL: Apilar gráficas de dona en una sola columna para que no se apachurren
+        html += `<div style="display:flex; flex-direction:column; gap:15px; margin-top:15px;">
+                    <div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px; display:flex; flex-direction:column; align-items:center;">
+                        <h4 style="text-align:center; margin-bottom:15px; color:var(--text-muted); font-size:0.9rem;">De dónde ingresa 📈</h4>
+                        <div style="position:relative; width:100%; max-width:280px; aspect-ratio:1;"><canvas id="graficaVentasCanvas"></canvas></div>
+                    </div>
+                    <div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px; display:flex; flex-direction:column; align-items:center;">
+                        <h4 style="text-align:center; margin-bottom:15px; color:var(--text-muted); font-size:0.9rem;">En qué se gasta 📉</h4>
+                        <div style="position:relative; width:100%; max-width:280px; aspect-ratio:1;"><canvas id="graficaGastosCanvas"></canvas></div>
+                    </div>
+                 </div>
+                 <button class="btn btn-secondary" style="width:100%; margin-top:15px; border-color:#38A169; color:#38A169; font-weight:bold; background:transparent;" onclick="window.exportarAExcel(App.state.gastos, 'Gastos_${labels[filtro]}')">📥 Exportar Gastos a Excel</button>`;
+        
         cont.innerHTML = html;
         
         setTimeout(() => { 
             if(window.Chart) { 
                 const ctx1 = document.getElementById('graficaFinanzas');
                 if(ctx1) { if(window.graficaActual) window.graficaActual.destroy(); window.graficaActual = new Chart(ctx1, { type: 'bar', data: { labels: ['Ingresos', 'Gastos', 'Deuda Total'], datasets: [{ label: 'Monto ($)', data: [ingReales, tGastos, xCobrarGlobal], backgroundColor: ['#38A169', '#E53E3E', '#D69E2E'], borderRadius: 4 }] }, options: { responsive: true, plugins: { legend: { display: false } } } }); } 
+                
                 const ctxV = document.getElementById('graficaVentasCanvas');
-                if(ctxV) { if(window.graficaVentasD) window.graficaVentasD.destroy(); window.graficaVentasD = new Chart(ctxV, { type: 'doughnut', data: { labels: Object.keys(ventasPorCat).map(k=>k.toUpperCase()), datasets: [{ data: Object.values(ventasPorCat), backgroundColor: coloresVentas }] }, options: { responsive: true, plugins: { legend: { position: 'bottom', labels:{font:{size:10}} } } } }); }
+                if(ctxV) { if(window.graficaVentasD) window.graficaVentasD.destroy(); window.graficaVentasD = new Chart(ctxV, { type: 'doughnut', data: { labels: Object.keys(ventasPorCat).map(k=>k.toUpperCase()), datasets: [{ data: Object.values(ventasPorCat), backgroundColor: coloresVentas }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels:{font:{size:11}, padding: 15} } } } }); }
+                
                 const ctxG = document.getElementById('graficaGastosCanvas');
-                if(ctxG) { if(window.graficaGastosD) window.graficaGastosD.destroy(); window.graficaGastosD = new Chart(ctxG, { type: 'doughnut', data: { labels: Object.keys(expPorCat).map(k=>k.toUpperCase()), datasets: [{ data: Object.values(expPorCat), backgroundColor: coloresGastos }] }, options: { responsive: true, plugins: { legend: { position: 'bottom', labels:{font:{size:10}} } } } }); }
+                if(ctxG) { if(window.graficaGastosD) window.graficaGastosD.destroy(); window.graficaGastosD = new Chart(ctxG, { type: 'doughnut', data: { labels: Object.keys(expPorCat).map(k=>k.toUpperCase()), datasets: [{ data: Object.values(expPorCat), backgroundColor: coloresGastos }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels:{font:{size:11}, padding: 15} } } } }); }
             } 
         }, 300);
     },
