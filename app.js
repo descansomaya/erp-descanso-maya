@@ -1,6 +1,7 @@
 /**
  * DESCANSO MAYA ERP - Motor Principal v62
  * Módulo de Pedidos con flujo para "Entregar de Bodega" (Reventa).
+ * ACTUALIZADO: Descuento automático de stock de reventa, control de duplicados y limpieza financiera.
  */
 
 window.onerror = function(message, source, lineno) { alert("Hubo un error al cargar: \n" + message + "\nLínea: " + lineno); };
@@ -106,7 +107,42 @@ App.logic = {
         await App.api.fetch("ejecutar_lote", { operaciones: operaciones });
         App.state.pedidos = App.state.pedidos.filter(p => p.id !== id); if(detalle) App.state.pedido_detalle = App.state.pedido_detalle.filter(d => d.id !== detalle.id); if(orden) { App.state.ordenes_produccion = App.state.ordenes_produccion.filter(o => o.id !== orden.id); App.state.pago_artesanos = App.state.pago_artesanos.filter(p => p.orden_id !== orden.id); } App.state.abonos = App.state.abonos.filter(a => a.pedido_id !== id); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Pedido eliminado e inventario restaurado"); App.router.handleRoute(); 
     },
-    async eliminarCompra(id) { if(!confirm("⚠️ ¿Eliminar compra? Ajusta manualmente tu inventario.")) return; App.ui.showLoader("Eliminando..."); const res = await App.api.fetch("eliminar_fila", { nombreHoja: "compras", idFila: id }); App.ui.hideLoader(); if(res.status === "success") { App.state.compras = App.state.compras.filter(c => c.id !== id); App.ui.toast("Compra eliminada."); App.router.handleRoute(); } else { App.ui.toast("Error"); } },
+    
+    // NUEVA FUNCIÓN PARA ELIMINAR COMPRA Y SUS GASTOS/MOVIMIENTOS ASOCIADOS
+    async eliminarCompra(id) { 
+        if(!confirm("⚠️ ¿Eliminar compra? Se eliminará la compra, el gasto financiero asociado y las entradas de inventario.")) return; 
+        App.ui.showLoader("Eliminando..."); 
+        
+        let operaciones = [
+            { action: "eliminar_fila", nombreHoja: "compras", idFila: id }
+        ];
+
+        // 1. Buscar y eliminar el Gasto asociado (buscamos por la descripción que contiene el ID de la compra)
+        const gastoAsociado = App.state.gastos.find(g => g.descripcion.includes(id));
+        if (gastoAsociado) {
+            operaciones.push({ action: "eliminar_fila", nombreHoja: "gastos", idFila: gastoAsociado.id });
+        }
+
+        // 2. Buscar y eliminar los Movimientos de Inventario asociados a esta compra
+        const movimientosAsociados = (App.state.movimientos_inventario || []).filter(m => m.origen_id === id);
+        movimientosAsociados.forEach(m => {
+            operaciones.push({ action: "eliminar_fila", nombreHoja: "movimientos_inventario", idFila: m.id });
+        });
+
+        const res = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); 
+        App.ui.hideLoader(); 
+        
+        if(res.status === "success") { 
+            App.state.compras = App.state.compras.filter(c => c.id !== id); 
+            if (gastoAsociado) App.state.gastos = App.state.gastos.filter(g => g.id !== gastoAsociado.id);
+            App.state.movimientos_inventario = App.state.movimientos_inventario.filter(m => m.origen_id !== id);
+            App.ui.toast("Compra eliminada y finanzas actualizadas."); 
+            App.router.handleRoute(); 
+        } else { 
+            App.ui.toast("Error al eliminar"); 
+        } 
+    },
+    
     async actualizarRegistroGenerico(hoja, id, datos, estado) { App.ui.showLoader("Guardando..."); const res = await App.api.fetch("actualizar_fila", { nombreHoja: hoja, idFila: id, datosNuevos: datos }); App.ui.hideLoader(); if (res.status === "success") { const index = App.state[estado].findIndex(item => item.id === id); if (index !== -1) App.state[estado][index] = { ...App.state[estado][index], ...datos }; App.ui.toast("Actualizado"); App.router.handleRoute(); } else { App.ui.toast("Error"); } },
     async guardarNuevoGenerico(hoja, datos, prefijo, estado, callback = null) { 
         App.ui.showLoader("Registrando..."); datos.id = prefijo + "-" + Date.now(); if(!datos.fecha_creacion) datos.fecha_creacion = new Date().toISOString(); 
@@ -116,14 +152,58 @@ App.logic = {
     guardarCotizacion(datos) { datos.id = "COT-" + Date.now(); datos.fecha_creacion = new Date().toISOString(); App.state.cotizaciones.push(datos); localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); App.ui.toast("Cotización generada"); App.router.handleRoute(); App.logic.imprimirCotizacion(datos.id); },
     eliminarCotizacion(id) { if(!confirm("⚠️ ¿Eliminar cotización?")) return; App.state.cotizaciones = App.state.cotizaciones.filter(c => c.id !== id); localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); App.ui.toast("Eliminada"); App.router.handleRoute(); },
 
+    // NUEVA FUNCIÓN PARA GUARDAR PEDIDO Y DESCONTAR REVENTA AUTOMÁTICO
     async guardarNuevoPedido(datosFormulario) { 
-        App.ui.showLoader("Procesando pedido..."); const pedidoId = "PED-" + Date.now(); const totalNum = parseFloat(datosFormulario.total) || 0; const anticipoNum = parseFloat(datosFormulario.anticipo) || 0; const cantidadNum = parseInt(datosFormulario.cantidad) || 1; 
+        App.ui.showLoader("Procesando pedido..."); 
+        const pedidoId = "PED-" + Date.now(); const totalNum = parseFloat(datosFormulario.total) || 0; const anticipoNum = parseFloat(datosFormulario.anticipo) || 0; const cantidadNum = parseInt(datosFormulario.cantidad) || 1; 
         const fechaC = datosFormulario.fecha_creacion ? datosFormulario.fecha_creacion + "T12:00:00.000Z" : new Date().toISOString();
-        const datosPedido = { id: pedidoId, cliente_id: datosFormulario.cliente_id, estado: "nuevo", total: totalNum, anticipo: anticipoNum, notas: datosFormulario.notas, fecha_entrega: datosFormulario.fecha_entrega, fecha_creacion: fechaC }; const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datosFormulario.producto_id, cantidad: cantidadNum, precio_unitario: totalNum / cantidadNum }; 
-        let operaciones = [ { action: "guardar_fila", nombreHoja: "pedidos", datos: datosPedido }, { action: "guardar_fila", nombreHoja: "pedido_detalle", datos: datosDetalle } ]; const resPedido = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); if (resPedido.status === "success") { App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); App.ui.hideLoader(); App.ui.toast("Guardado (Sin mandar a taller)"); App.router.handleRoute(); } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
+        
+        // Detectar si el producto es de reventa
+        const producto = App.state.productos.find(p => p.id === datosFormulario.producto_id);
+        const esReventa = producto && producto.categoria === 'reventa';
+
+        const datosPedido = { id: pedidoId, cliente_id: datosFormulario.cliente_id, estado: esReventa ? "listo para entregar" : "nuevo", total: totalNum, anticipo: anticipoNum, notas: datosFormulario.notas, fecha_entrega: datosFormulario.fecha_entrega, fecha_creacion: fechaC }; 
+        const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datosFormulario.producto_id, cantidad: cantidadNum, precio_unitario: totalNum / cantidadNum }; 
+        
+        let operaciones = [ { action: "guardar_fila", nombreHoja: "pedidos", datos: datosPedido }, { action: "guardar_fila", nombreHoja: "pedido_detalle", datos: datosDetalle } ]; 
+        let nuevosMovs = [];
+
+        // Si es reventa, descontamos el inventario en automático
+        if (esReventa) {
+            for(let i=1; i<=20; i++) {
+                const matId = producto[`mat_${i}`];
+                const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * cantidadNum;
+                if(matId && cantTeorica > 0) {
+                    const material = App.state.inventario.find(m => m.id === matId);
+                    if(material) {
+                        const nStock = parseFloat(material.stock_actual) - cantTeorica;
+                        operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } });
+                        material.stock_actual = nStock; 
+                        const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_venta", origen: "pedido", origen_id: pedidoId, ref_tipo: "material", ref_id: material.id, cantidad: -cantTeorica, costo_unitario: material.costo_unitario||0, total: (-cantTeorica * (material.costo_unitario||0)), notas: `Venta directa de reventa automática` };
+                        nuevosMovs.push(mov);
+                        operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov });
+                    }
+                }
+            }
+        }
+
+        const resPedido = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); 
+        
+        if (resPedido.status === "success") { 
+            App.state.pedidos.push(datosPedido); 
+            App.state.pedido_detalle.push(datosDetalle); 
+            if(nuevosMovs.length > 0) {
+                if(!App.state.movimientos_inventario) App.state.movimientos_inventario = [];
+                App.state.movimientos_inventario.push(...nuevosMovs);
+            }
+            App.ui.hideLoader(); 
+            App.ui.toast(esReventa ? "Pedido guardado y stock descontado" : "Guardado (Sin mandar a taller)"); 
+            App.router.handleRoute(); 
+        } else { 
+            App.ui.hideLoader(); App.ui.toast("Error"); 
+        } 
     },
     
-    // MEJORA: FUNCIÓN PARA SACAR PRODUCTOS DIRECTO DE BODEGA
     async entregarDeBodega(pedidoId) {
         const pedido = App.state.pedidos.find(p => p.id === pedidoId);
         const detalle = App.state.pedido_detalle.find(d => d.pedido_id === pedidoId);
@@ -193,12 +273,43 @@ App.logic = {
         if (totalPagado > 0) { const artesano = App.state.artesanos.find(a => a.id === artesanoId); const gastoObj = { id: "GAS-" + Date.now(), descripcion: "Nómina - " + (artesano ? artesano.nombre : 'Artesano'), categoria: "nomina", monto: totalPagado, fecha: new Date().toISOString().split('T')[0] }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); App.state.gastos.push(gastoObj); } 
         await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.ui.hideLoader(); App.ui.toast(`Liquidados $${totalPagado}`); App.router.handleRoute(); 
     },
+    
+    // NUEVA FUNCIÓN PARA PREVENIR DUPLICADOS AL COMPRAR HAMACAS
     async guardarNuevaCompra(datos) { 
         App.ui.showLoader("Comprando..."); const compraId = "COM-" + Date.now(); const detallesCompra = []; let operaciones = []; let nuevosMovs = []; const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); const precios = Array.isArray(datos.precio_u) ? datos.precio_u : (datos.precio_u ? [datos.precio_u] : []);
-        for(let i=0; i<mats.length; i++) { const matId = mats[i]; const cant = parseFloat(cants[i] || 0); const precioUnitario = parseFloat(precios[i] || 0); const totalFila = cant * precioUnitario; if(matId && cant > 0) { const material = App.state.inventario.find(m => m.id === matId); if(material) { detallesCompra.push({ mat_id: matId, nombre: material.nombre, cantidad: cant, costo_unitario: precioUnitario }); const nuevoStock = parseFloat(material.stock_actual) + cant; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock, costo_unitario: precioUnitario } }); material.stock_actual = nuevoStock; material.costo_unitario = precioUnitario; if (material.tipo === 'reventa') { const existeProd = App.state.productos.find(p => p.mat_1 === material.id); if(!existeProd) { const nuevoProd = { id: "PROD-" + Date.now() + i, nombre: material.nombre, categoria: "reventa", clasificacion: "Reventa", precio_venta: 0, mat_1: material.id, cant_1: 1, uso_1: "Completo", activo: "TRUE", fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "productos", datos: nuevoProd }); App.state.productos.push(nuevoProd); } } const mov = { id: "MOV-" + Date.now() + i, fecha: datos.fecha, tipo_movimiento: "entrada_compra", origen: "compra", origen_id: compraId, ref_tipo: "material", ref_id: material.id, cantidad: cant, costo_unitario: precioUnitario, total: totalFila, notas: "Compra a proveedor" }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); } } } 
+        
+        for(let i=0; i<mats.length; i++) { 
+            const matId = mats[i]; const cant = parseFloat(cants[i] || 0); const precioUnitario = parseFloat(precios[i] || 0); const totalFila = cant * precioUnitario; 
+            if(matId && cant > 0) { 
+                const material = App.state.inventario.find(m => m.id === matId); 
+                if(material) { 
+                    detallesCompra.push({ mat_id: matId, nombre: material.nombre, cantidad: cant, costo_unitario: precioUnitario }); 
+                    const nuevoStock = parseFloat(material.stock_actual) + cant; 
+                    operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock, costo_unitario: precioUnitario } }); 
+                    material.stock_actual = nuevoStock; material.costo_unitario = precioUnitario; 
+                    
+                    if (material.tipo === 'reventa') { 
+                        // Buscamos si existe por ID o por el MISMO NOMBRE
+                        const existeProd = App.state.productos.find(p => p.mat_1 === material.id || p.nombre.toLowerCase() === material.nombre.toLowerCase()); 
+                        if(!existeProd) { 
+                            const nuevoProd = { id: "PROD-" + Date.now() + i, nombre: material.nombre, categoria: "reventa", clasificacion: "Reventa", precio_venta: 0, mat_1: material.id, cant_1: 1, uso_1: "Completo", activo: "TRUE", fecha_creacion: new Date().toISOString() }; 
+                            operaciones.push({ action: "guardar_fila", nombreHoja: "productos", datos: nuevoProd }); 
+                            App.state.productos.push(nuevoProd); 
+                        } else if (existeProd.mat_1 !== material.id) {
+                            // Si existe por nombre pero tiene otro ID de material, lo actualizamos
+                            operaciones.push({ action: "actualizar_fila", nombreHoja: "productos", idFila: existeProd.id, datosNuevos: { mat_1: material.id } });
+                            existeProd.mat_1 = material.id;
+                        }
+                    } 
+                    const mov = { id: "MOV-" + Date.now() + i, fecha: datos.fecha, tipo_movimiento: "entrada_compra", origen: "compra", origen_id: compraId, ref_tipo: "material", ref_id: material.id, cantidad: cant, costo_unitario: precioUnitario, total: totalFila, notas: "Compra a proveedor" }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); 
+                } 
+            } 
+        } 
+        
         const compra = { id: compraId, proveedor_id: datos.proveedor_id, fecha: datos.fecha, total: parseFloat(datos.total), monto_pagado: parseFloat(datos.total), estado: "pagado", detalles: JSON.stringify(detallesCompra), fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "compras", datos: compra }); const proveedor = App.state.proveedores.find(p => p.id === datos.proveedor_id); const nombreProv = proveedor ? proveedor.nombre : "Proveedor"; const nuevoGasto = { id: "GAS-" + Date.now(), categoria: "materiales", descripcion: `Compra de Insumos: ${nombreProv} (${compraId})`, monto: parseFloat(datos.total), fecha: datos.fecha }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto });
         await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.compras.push(compra); App.state.gastos.push(nuevoGasto); if(!App.state.movimientos_inventario) App.state.movimientos_inventario=[]; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Compra y Gasto registrados"); App.router.handleRoute();  
     },
+    
     async guardarMultiplesGastos(datos) { App.ui.showLoader("Registrando Gastos..."); const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; let operaciones = []; let nuevosGastos = []; for(let i=0; i<descripciones.length; i++) { if(!descripciones[i]) continue; const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; nuevosGastos.push(gastoObj); operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); } await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.gastos.push(...nuevosGastos); App.ui.hideLoader(); App.ui.toast("¡Gastos registrados!"); App.router.handleRoute(); },
     async guardarNuevaReparacion(datos) { App.ui.showLoader("Registrando..."); datos.id = "REP-" + Date.now(); datos.estado = "recibida"; datos.fecha_creacion = new Date().toISOString(); const res = await App.api.fetch("guardar_fila", { nombreHoja: "reparaciones", datos: datos }); App.ui.hideLoader(); if (res.status === "success") { App.state.reparaciones.push(datos); App.ui.toast("Reparación guardada"); App.router.handleRoute(); } else { App.ui.toast("Error Sheets."); } },
     async actualizarReparacion(repId, estado) { App.ui.showLoader("Actualizando..."); await App.api.fetch("actualizar_fila", { nombreHoja: "reparaciones", idFila: repId, datosNuevos: { estado: estado } }); const rep = App.state.reparaciones.find(r => r.id === repId); if(rep) rep.estado = estado; App.ui.hideLoader(); App.ui.toast("Actualizado"); App.router.handleRoute(); },
@@ -319,7 +430,7 @@ App.views.formNuevoPedido = function() {
     const opcionesProductos = App.state.productos.map(p => `<option value="${p.id}">${p.nombre}</option>`).join(''); 
     const hoy = new Date().toISOString().split('T')[0];
     const formHTML = `<form id="dynamic-form">
-        <div style="background: #EBF8FF; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8rem; color: #2B6CB0;"><strong>Novedad:</strong> El inventario ya no se descuenta aquí. Se descontará cuando envíes la hamaca a Producción.</div>
+        <div style="background: #EBF8FF; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8rem; color: #2B6CB0;"><strong>Novedad:</strong> El inventario de reventa se descontará automáticamente aquí. Si es fabricación, se descontará al mandar a Producción.</div>
         <div class="form-group"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;"><label style="margin:0;">Cliente</label><span style="color:var(--primary); font-size:0.8rem; cursor:pointer; font-weight:bold;" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formCliente(null, () => App.views.formNuevoPedido()), 400);">+ Nuevo Cliente</span></div><select name="cliente_id" required><option value="">-- Elige un cliente --</option>${opcionesClientes}</select></div>
         <div class="form-group"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;"><label style="margin:0;">Producto</label><span style="color:var(--primary); font-size:0.8rem; cursor:pointer; font-weight:bold;" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formProducto(null, () => App.views.formNuevoPedido()), 400);">+ Nuevo Producto</span></div><select name="producto_id" required onchange="window.calcularTotalPedido()"><option value="">-- Elige un producto --</option>${opcionesProductos}</select></div>
         <div id="info-extra-prod" style="margin-top:-10px; margin-bottom:10px;"></div>
