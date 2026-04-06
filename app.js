@@ -492,14 +492,69 @@ App.views.modalOpcionesWhatsApp = function(pedidoId) { let html = `<div style="d
 
 App.views.produccion = function() { 
     document.getElementById('bottom-nav').style.display = 'flex'; 
-    const pendientes = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'pendiente' || !o.estado); const enProceso = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'en_proceso'); const listas = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'listo'); 
+    const pendientes = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'pendiente' || !o.estado); 
+    const enProceso = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'en_proceso'); 
+    const listas = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'listo'); 
+    
     const dibujarTarjeta = (orden) => { 
-        const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id) || App.state.pedido_detalle.find(d => d.pedido_id === orden.pedido_detalle_id) || {}; const producto = detalle.producto_id ? App.state.productos.find(p => p.id === detalle.producto_id) : null; const pedido = App.state.pedidos.find(p => p.id === detalle.pedido_id) || {}; let nombreCliente = 'Sin Cliente'; if(pedido.cliente_id === "STOCK_INTERNO") { nombreCliente = "📦 BODEGA"; } else if (pedido.cliente_id) { const clienteObj = App.state.clientes.find(c => c.id === pedido.cliente_id); if(clienteObj) nombreCliente = clienteObj.nombre; } 
-        const pagos = App.state.pago_artesanos.filter(p => p.orden_id === orden.id); let infoArtesanos = pagos.length > 0 ? `🛠️ ${pagos.length} Trabajos` : '👤 Sin asignar'; let semaforo = ''; 
-        if(pedido.fecha_entrega && orden.estado !== 'listo') { const fEnt = new Date(pedido.fecha_entrega+'T00:00:00'); const hoy = new Date(); hoy.setHours(0,0,0,0); const d = Math.ceil((fEnt - hoy)/(1000*60*60*24)); if(d < 0) semaforo = '<span style="background:red; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🔴 Atrasado</span>'; else if(d <= 1) semaforo = '<span style="background:orange; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🟡 Urgente</span>'; else semaforo = '<span style="background:green; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🟢 A tiempo</span>'; } 
-        return `<div class="card" style="border: 1px solid var(--border); box-shadow: none; cursor: pointer; margin-bottom: 10px;" onclick="App.views.modalEditarOrden('${orden.id}')"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${orden.id}</strong><div><span style="font-size:0.75rem; color:#718096; font-weight:bold;">${pedido.id ? pedido.id.replace('PED-','') : 'Huérfana'}</span>${semaforo}</div></div><small style="color: var(--primary); font-weight: 600; display:block; font-size:1rem; margin-bottom:2px;">${producto ? producto.nombre : 'Producto interno'}</small><small style="color: #4A5568; display:block; margin-bottom:5px; font-weight:bold;">👤 ${nombreCliente}</small><div style="margin-top: 8px; font-size: 0.85rem; color: var(--text-muted); display:flex; justify-content: space-between; border-top: 1px dashed #E2E8F0; padding-top: 8px;"><span>${infoArtesanos}</span><span style="color:var(--primary);">Ver detalles ➔</span></div></div>`; 
+        const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id) || App.state.pedido_detalle.find(d => d.pedido_id === orden.pedido_detalle_id) || {}; 
+        const producto = detalle.producto_id ? App.state.productos.find(p => p.id === detalle.producto_id) : null; 
+        const pedido = App.state.pedidos.find(p => p.id === detalle.pedido_id) || {}; 
+        
+        let nombreCliente = 'Sin Cliente'; 
+        if(pedido.cliente_id === "STOCK_INTERNO") { nombreCliente = "📦 BODEGA"; } 
+        else if (pedido.cliente_id) { const clienteObj = App.state.clientes.find(c => c.id === pedido.cliente_id); if(clienteObj) nombreCliente = clienteObj.nombre; } 
+        
+        const pagos = App.state.pago_artesanos.filter(p => p.orden_id === orden.id); 
+        let infoArtesanos = pagos.length > 0 ? `🛠️ ${pagos.length} Trabajos` : '👤 Sin asignar'; 
+        
+        let semaforo = ''; 
+        if(pedido.fecha_entrega && orden.estado !== 'listo') { 
+            const fEnt = new Date(pedido.fecha_entrega+'T00:00:00'); const hoy = new Date(); hoy.setHours(0,0,0,0); 
+            const d = Math.ceil((fEnt - hoy)/(1000*60*60*24)); 
+            if(d < 0) semaforo = '<span style="background:red; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🔴 Atrasado</span>'; 
+            else if(d <= 1) semaforo = '<span style="background:orange; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🟡 Urgente</span>'; 
+            else semaforo = '<span style="background:green; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🟢 A tiempo</span>'; 
+        } 
+        
+        return `<div class="card" style="border: 1px solid var(--border); box-shadow: none; cursor: pointer; margin-bottom: 10px;" onclick="App.views.modalEditarOrden('${orden.id}')">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong>${orden.id}</strong>
+                <div><span style="font-size:0.75rem; color:#718096; font-weight:bold;">${pedido.id ? pedido.id.replace('PED-','') : 'Huérfana'}</span>${semaforo}</div>
+            </div>
+            <small style="color: var(--primary); font-weight: 600; display:block; font-size:1rem; margin-bottom:2px;">${producto ? producto.nombre : 'Producto interno'}</small>
+            <small style="color: #4A5568; display:block; margin-bottom:5px; font-weight:bold;">👤 ${nombreCliente}</small>
+            <div style="margin-top: 8px; font-size: 0.85rem; color: var(--text-muted); display:flex; justify-content: space-between; border-top: 1px dashed #E2E8F0; padding-top: 8px;">
+                <span>${infoArtesanos}</span>
+                <span style="color:var(--primary);">Ver detalles ➔</span>
+            </div>
+        </div>`; 
     }; 
-    let html = `<div class="card"><h3 class="card-title">Taller de Producción</h3><button class="btn btn-secondary" style="width:100%; margin-top:5px; border: 2px dashed var(--primary); color: var(--primary); background: transparent; font-weight: bold;" onclick="App.views.formOrdenStock()">+ 🔨 Fabricar para Bodega</button></div><div style="display: flex; margin-bottom: 15px; background: white; border-radius: 8px; overflow: hidden; border: 1px solid var(--border);"><button class="tab-btn-prod" style="flex:1; padding: 12px 5px; border:none; background:#F3F0FF; color:var(--primary); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid var(--primary);" onclick="window.switchTabProd('pendientes', this)">🕒 Pendientes (${pendientes.length})</button><button class="tab-btn-prod" style="flex:1; padding: 12px 5px; border:none; background:transparent; color:var(--text-muted); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid transparent;" onclick="window.switchTabProd('en_proceso', this)">🏃 En Proceso (${enProceso.length})</button><button class="tab-btn-prod" style="flex:1; padding: 12px 5px; border:none; background:transparent; color:var(--text-muted); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid transparent;" onclick="window.switchTabProd('listas', this)">✅ Listas (${listas.length})</button></div><div id="tab-pendientes" class="tab-content-prod" style="display:block;">${pendientes.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">No hay órdenes pendientes de iniciar.</div>' : pendientes.map(dibujarTarjeta).join('')}</div><div id="tab-en_proceso" class="tab-content-prod" style="display:none;">${enProceso.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">Nadie está tejiendo hamacas en este momento.</div>' : enProceso.map(dibujarTarjeta).join('')}</div><div id="tab-listas" class="tab-content-prod" style="display:none;">${listas.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">No hay hamacas listas esperando cierre.</div>' : listas.map(dibujarTarjeta).join('')}</div>`; 
+    
+    let html = `
+    <div class="card">
+        <h3 class="card-title">Taller de Producción</h3>
+        <button class="btn btn-secondary" style="width:100%; margin-top:5px; border: 2px dashed var(--primary); color: var(--primary); background: transparent; font-weight: bold;" onclick="App.views.formOrdenStock()">+ 🔨 Fabricar para Bodega</button>
+    </div>
+    
+    <div style="display: flex; margin-bottom: 15px; background: white; border-radius: 8px; overflow: hidden; border: 1px solid var(--border);">
+        <button class="tab-btn-prod" style="flex:1; padding: 12px 5px; border:none; background:#F3F0FF; color:var(--primary); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid var(--primary);" onclick="window.switchTabProd('pendientes', this)">🕒 Pendientes (${pendientes.length})</button>
+        <button class="tab-btn-prod" style="flex:1; padding: 12px 5px; border:none; background:transparent; color:var(--text-muted); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid transparent;" onclick="window.switchTabProd('en_proceso', this)">🏃 En Proceso (${enProceso.length})</button>
+        <button class="tab-btn-prod" style="flex:1; padding: 12px 5px; border:none; background:transparent; color:var(--text-muted); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid transparent;" onclick="window.switchTabProd('listas', this)">✅ Listas (${listas.length})</button>
+    </div>
+
+    <div id="tab-pendientes" class="tab-content-prod" style="display:block;">
+        ${pendientes.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">No hay órdenes pendientes.</div>' : pendientes.map(dibujarTarjeta).join('')}
+    </div>
+    
+    <div id="tab-en_proceso" class="tab-content-prod" style="display:none;">
+        ${enProceso.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">Nadie está tejiendo hamacas.</div>' : enProceso.map(dibujarTarjeta).join('')}
+    </div>
+    
+    <div id="tab-listas" class="tab-content-prod" style="display:none;">
+        ${listas.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">No hay hamacas listas esperando cierre.</div>' : listas.map(dibujarTarjeta).join('')}
+    </div>`; 
+    
     return html; 
 };
 
