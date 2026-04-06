@@ -1,7 +1,6 @@
 /**
- * DESCANSO MAYA ERP - Motor Principal v62
- * Módulo de Pedidos con flujo para "Entregar de Bodega" (Reventa).
- * ACTUALIZADO: Descuento automático de stock de reventa, control de duplicados y limpieza financiera.
+ * DESCANSO MAYA ERP - Motor Principal v63
+ * ACTUALIZADO: Nuevo diseño de Producción con Pestañas (Tabs) optimizado para celular.
  */
 
 window.onerror = function(message, source, lineno) { alert("Hubo un error al cargar: \n" + message + "\nLínea: " + lineno); };
@@ -29,6 +28,20 @@ window.generarFilaRecetaProd = function(matId, cant, uso) { const opcMat = App.s
 window.agregarFilaRecetaProd = function() { const cont = document.getElementById('cont-receta-prod'); cont.insertAdjacentHTML('beforeend', window.generarFilaRecetaProd('', '', 'Cuerpo')); };
 window.exportarAExcel = function(datos, nombreArchivo) { if(!datos || datos.length === 0) return alert("No hay datos para exportar"); const cabeceras = Object.keys(datos[0]).join(','); const filas = datos.map(obj => Object.values(obj).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')); const csv = ["\uFEFF" + cabeceras, ...filas].join('\n'); const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = nombreArchivo + '.csv'; a.click(); };
 window.filtrarPedidos = function(estado, btn) { document.querySelectorAll('.btn-filtro-ped').forEach(b => { b.style.background = 'transparent'; b.style.color = 'var(--text-muted)'; }); if(btn) { btn.style.background = 'var(--primary)'; btn.style.color = 'white'; } document.querySelectorAll('.tarj-ped').forEach(el => { if(estado === 'todo' || el.dataset.estado === estado || (estado === 'listo' && el.dataset.estado === 'listo para entregar') || (estado === 'urgente' && el.dataset.urgente === 'true')) { el.style.display = 'block'; } else { el.style.display = 'none'; } }); };
+
+// NUEVA FUNCIÓN: Cambiar pestañas en el módulo de Producción
+window.switchTabProd = function(tabId, btn) {
+    document.querySelectorAll('.tab-content-prod').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.tab-btn-prod').forEach(el => {
+        el.style.background = 'transparent';
+        el.style.color = 'var(--text-muted)';
+        el.style.borderBottom = '2px solid transparent';
+    });
+    document.getElementById('tab-' + tabId).style.display = 'block';
+    btn.style.color = 'var(--primary)';
+    btn.style.borderBottom = '2px solid var(--primary)';
+    btn.style.background = '#F3F0FF';
+};
 
 const App = { views: {} }; 
 
@@ -108,7 +121,7 @@ App.logic = {
         App.state.pedidos = App.state.pedidos.filter(p => p.id !== id); if(detalle) App.state.pedido_detalle = App.state.pedido_detalle.filter(d => d.id !== detalle.id); if(orden) { App.state.ordenes_produccion = App.state.ordenes_produccion.filter(o => o.id !== orden.id); App.state.pago_artesanos = App.state.pago_artesanos.filter(p => p.orden_id !== orden.id); } App.state.abonos = App.state.abonos.filter(a => a.pedido_id !== id); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Pedido eliminado e inventario restaurado"); App.router.handleRoute(); 
     },
     
-    // NUEVA FUNCIÓN PARA ELIMINAR COMPRA Y SUS GASTOS/MOVIMIENTOS ASOCIADOS
+    // FUNCIÓN PARA ELIMINAR COMPRA Y SUS GASTOS/MOVIMIENTOS ASOCIADOS
     async eliminarCompra(id) { 
         if(!confirm("⚠️ ¿Eliminar compra? Se eliminará la compra, el gasto financiero asociado y las entradas de inventario.")) return; 
         App.ui.showLoader("Eliminando..."); 
@@ -117,13 +130,13 @@ App.logic = {
             { action: "eliminar_fila", nombreHoja: "compras", idFila: id }
         ];
 
-        // 1. Buscar y eliminar el Gasto asociado (buscamos por la descripción que contiene el ID de la compra)
+        // Buscar y eliminar el Gasto asociado
         const gastoAsociado = App.state.gastos.find(g => g.descripcion.includes(id));
         if (gastoAsociado) {
             operaciones.push({ action: "eliminar_fila", nombreHoja: "gastos", idFila: gastoAsociado.id });
         }
 
-        // 2. Buscar y eliminar los Movimientos de Inventario asociados a esta compra
+        // Buscar y eliminar los Movimientos de Inventario asociados
         const movimientosAsociados = (App.state.movimientos_inventario || []).filter(m => m.origen_id === id);
         movimientosAsociados.forEach(m => {
             operaciones.push({ action: "eliminar_fila", nombreHoja: "movimientos_inventario", idFila: m.id });
@@ -152,7 +165,7 @@ App.logic = {
     guardarCotizacion(datos) { datos.id = "COT-" + Date.now(); datos.fecha_creacion = new Date().toISOString(); App.state.cotizaciones.push(datos); localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); App.ui.toast("Cotización generada"); App.router.handleRoute(); App.logic.imprimirCotizacion(datos.id); },
     eliminarCotizacion(id) { if(!confirm("⚠️ ¿Eliminar cotización?")) return; App.state.cotizaciones = App.state.cotizaciones.filter(c => c.id !== id); localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); App.ui.toast("Eliminada"); App.router.handleRoute(); },
 
-    // NUEVA FUNCIÓN PARA GUARDAR PEDIDO Y DESCONTAR REVENTA AUTOMÁTICO
+    // FUNCIÓN PARA GUARDAR PEDIDO Y DESCONTAR REVENTA AUTOMÁTICO
     async guardarNuevoPedido(datosFormulario) { 
         App.ui.showLoader("Procesando pedido..."); 
         const pedidoId = "PED-" + Date.now(); const totalNum = parseFloat(datosFormulario.total) || 0; const anticipoNum = parseFloat(datosFormulario.anticipo) || 0; const cantidadNum = parseInt(datosFormulario.cantidad) || 1; 
@@ -274,7 +287,7 @@ App.logic = {
         await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.ui.hideLoader(); App.ui.toast(`Liquidados $${totalPagado}`); App.router.handleRoute(); 
     },
     
-    // NUEVA FUNCIÓN PARA PREVENIR DUPLICADOS AL COMPRAR HAMACAS
+    // FUNCIÓN PARA PREVENIR DUPLICADOS AL COMPRAR HAMACAS
     async guardarNuevaCompra(datos) { 
         App.ui.showLoader("Comprando..."); const compraId = "COM-" + Date.now(); const detallesCompra = []; let operaciones = []; let nuevosMovs = []; const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); const precios = Array.isArray(datos.precio_u) ? datos.precio_u : (datos.precio_u ? [datos.precio_u] : []);
         
@@ -296,7 +309,6 @@ App.logic = {
                             operaciones.push({ action: "guardar_fila", nombreHoja: "productos", datos: nuevoProd }); 
                             App.state.productos.push(nuevoProd); 
                         } else if (existeProd.mat_1 !== material.id) {
-                            // Si existe por nombre pero tiene otro ID de material, lo actualizamos
                             operaciones.push({ action: "actualizar_fila", nombreHoja: "productos", idFila: existeProd.id, datosNuevos: { mat_1: material.id } });
                             existeProd.mat_1 = material.id;
                         }
@@ -321,7 +333,7 @@ App.logic = {
     },
     verDiagnostico() {
         let html = `<table style="width:100%; font-size:0.85rem; border-collapse:collapse;"><tr style="border-bottom:1px solid #ccc; text-align:left;"><th>Tabla (Hoja)</th><th>Estado</th><th>Registros</th></tr>`;
-        const tablas = [ { nombre: "materiales", state: "inventario" }, { nombre: "clientes", state: "clientes" }, { nombre: "productos", state: "productos" }, { nombre: "pedidos", state: "pedidos" }, { nombre: "pedido_detalle", state: "pedido_detalle" }, { nombre: "ordenes_produccion", state: "ordenes_produccion" }, { nombre: "artesanos", state: "artesanos" }, { nombre: "abonos_clientes", state: "abonos" }, { nombre: "gastos", state: "gastos" }, { nombre: "compras", state: "compras" }, { nombre: "proveedores", state: "proveedores" }, { nombre: "reparaciones", state: "reparaciones" }, { nombre: "tarifas_artesano", state: "tarifas_artesano" }, { nombre: "pago_artesanos", state: "pago_artesanos" }, { nombre: "movimientos_inventario", state: "movimientos_inventario" } ];
+        const tablas = [ { nombre: "materiales", state: "inventario" }, { nombre: "clientes", state: "clientes" }, { nombre: "productos", state: "productos" }, { nombre: "pedidos", state: "pedidos" }, { nombre: "pedido_detalle", state: "pedido_detalle" }, { nombre: "ordenes_produccion", state: "ordenes_produccion" }, { nombre: "artesanos", state: "artesanos" }, { nombre: "abonos_clientes", state: "abonos" }, { nombre: "gastos", state: "gastos" }, { nombre: "compras", state: "compras" }, { nombre: "proveedores", state: "reparaciones" }, { nombre: "tarifas_artesano", state: "tarifas_artesano" }, { nombre: "pago_artesanos", state: "pago_artesanos" }, { nombre: "movimientos_inventario", state: "movimientos_inventario" } ];
         tablas.forEach(t => { const arr = App.state[t.state]; const count = arr ? arr.length : 0; const status = arr ? "✅ OK" : "❌ Error"; html += `<tr style="border-bottom:1px dashed #eee;"><td style="padding:5px 0;">${t.nombre}</td><td>${status}</td><td>${count}</td></tr>`; });
         html += `</table><div style="margin-top:15px; font-size:0.8rem; color:var(--danger); background:#FED7D7; padding:10px; border-radius:6px;"><strong>💡 Tip de solución:</strong> Si una tabla marca "0" y sabes que sí tiene datos en Sheets, ve a tu Google Sheet y asegúrate de que la pestaña se llame <strong>exactamente igual</strong> a lo que dice esta lista (sin mayúsculas ni espacios al final).</div><button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="App.ui.closeSheet()">Cerrar</button>`;
         App.ui.openSheet("Diagnóstico de Base de Datos", html);
@@ -380,7 +392,80 @@ App.views.pedidos = function() {
 };
 
 App.views.modalOpcionesWhatsApp = function(pedidoId) { let html = `<div style="display:flex; flex-direction:column; gap:10px;"><p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">Elige el tipo de mensaje que deseas enviar al cliente:</p><button class="btn btn-secondary" style="border-color:#38A169; color:#38A169; background:transparent;" onclick="App.logic.enviarWhatsApp('${pedidoId}', 'listo')">✅ Aviso de "Pedido Listo"</button><button class="btn btn-secondary" style="border-color:#D69E2E; color:#D69E2E; background:transparent;" onclick="App.logic.enviarWhatsApp('${pedidoId}', 'cobro')">💰 Recordatorio de Pago</button><button class="btn btn-secondary" style="border-color:var(--primary); color:var(--primary); background:transparent;" onclick="App.logic.enviarWhatsApp('${pedidoId}', 'general')">📝 Detalles del Pedido (General)</button></div>`; App.ui.openSheet("Enviar WhatsApp", html); };
-App.views.produccion = function() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Tablero Kanban</h3><button class="btn btn-secondary" style="width:100%; margin-top:10px; border: 2px dashed var(--primary); color: var(--primary); background: transparent; font-weight: bold;" onclick="App.views.formOrdenStock()">+ 🔨 Fabricar para Bodega</button></div>`; const pendientes = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'pendiente' || !o.estado); const enProceso = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'en_proceso'); const listas = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'listo'); const dibujarTarjeta = (orden) => { const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id) || App.state.pedido_detalle.find(d => d.pedido_id === orden.pedido_detalle_id) || {}; const producto = detalle.producto_id ? App.state.productos.find(p => p.id === detalle.producto_id) : null; const pedido = App.state.pedidos.find(p => p.id === detalle.pedido_id) || {}; let nombreCliente = 'Sin Cliente'; if(pedido.cliente_id === "STOCK_INTERNO") { nombreCliente = "📦 BODEGA"; } else if (pedido.cliente_id) { const clienteObj = App.state.clientes.find(c => c.id === pedido.cliente_id); if(clienteObj) nombreCliente = clienteObj.nombre; } const pagos = App.state.pago_artesanos.filter(p => p.orden_id === orden.id); let infoArtesanos = pagos.length > 0 ? `🛠️ ${pagos.length} Trabajos` : '👤 Sin asignar'; let semaforo = ''; if(pedido.fecha_entrega && orden.estado !== 'listo') { const fEnt = new Date(pedido.fecha_entrega+'T00:00:00'); const hoy = new Date(); hoy.setHours(0,0,0,0); const d = Math.ceil((fEnt - hoy)/(1000*60*60*24)); if(d < 0) semaforo = '<span style="background:red; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🔴 Atrasado</span>'; else if(d <= 1) semaforo = '<span style="background:orange; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🟡 Urgente</span>'; else semaforo = '<span style="background:green; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🟢 A tiempo</span>'; } return `<div class="kanban-card" onclick="App.views.modalEditarOrden('${orden.id}')"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${orden.id}</strong><div><span style="font-size:0.75rem; color:#718096; font-weight:bold;">${pedido.id ? pedido.id.replace('PED-','') : 'Huérfana'}</span>${semaforo}</div></div><small style="color: var(--primary); font-weight: 600; display:block;">${producto ? producto.nombre : 'Producto interno'}</small><small style="color: #4A5568; display:block; margin-bottom:5px; font-weight:bold;">👤 ${nombreCliente}</small><div style="margin-top: 8px; font-size: 0.8rem; color: var(--text-muted); display:flex; justify-content: space-between; border-top: 1px dashed #E2E8F0; padding-top: 5px;"><span>${infoArtesanos}</span></div></div>`; }; html += `<div class="kanban-board"><div class="kanban-column"><div class="kanban-header">Pendientes <span>${pendientes.length}</span></div>${pendientes.map(dibujarTarjeta).join('')}</div><div class="kanban-column"><div class="kanban-header">En Proceso <span>${enProceso.length}</span></div>${enProceso.map(dibujarTarjeta).join('')}</div><div class="kanban-column"><div class="kanban-header">Listas <span>${listas.length}</span></div>${listas.map(dibujarTarjeta).join('')}</div></div>`; return html; };
+
+// NUEVO MÓDULO DE PRODUCCIÓN (Con pestañas para móvil)
+App.views.produccion = function() { 
+    document.getElementById('bottom-nav').style.display = 'flex'; 
+    
+    // 1. Clasificamos las órdenes
+    const pendientes = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'pendiente' || !o.estado); 
+    const enProceso = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'en_proceso'); 
+    const listas = (App.state.ordenes_produccion||[]).filter(o => o.estado === 'listo'); 
+    
+    // 2. Función para dibujar las tarjetas (Ajustada para celular a ancho completo)
+    const dibujarTarjeta = (orden) => { 
+        const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id) || App.state.pedido_detalle.find(d => d.pedido_id === orden.pedido_detalle_id) || {}; 
+        const producto = detalle.producto_id ? App.state.productos.find(p => p.id === detalle.producto_id) : null; 
+        const pedido = App.state.pedidos.find(p => p.id === detalle.pedido_id) || {}; 
+        
+        let nombreCliente = 'Sin Cliente'; 
+        if(pedido.cliente_id === "STOCK_INTERNO") { nombreCliente = "📦 BODEGA"; } 
+        else if (pedido.cliente_id) { const clienteObj = App.state.clientes.find(c => c.id === pedido.cliente_id); if(clienteObj) nombreCliente = clienteObj.nombre; } 
+        
+        const pagos = App.state.pago_artesanos.filter(p => p.orden_id === orden.id); 
+        let infoArtesanos = pagos.length > 0 ? `🛠️ ${pagos.length} Trabajos` : '👤 Sin asignar'; 
+        
+        let semaforo = ''; 
+        if(pedido.fecha_entrega && orden.estado !== 'listo') { 
+            const fEnt = new Date(pedido.fecha_entrega+'T00:00:00'); const hoy = new Date(); hoy.setHours(0,0,0,0); 
+            const d = Math.ceil((fEnt - hoy)/(1000*60*60*24)); 
+            if(d < 0) semaforo = '<span style="background:red; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🔴 Atrasado</span>'; 
+            else if(d <= 1) semaforo = '<span style="background:orange; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🟡 Urgente</span>'; 
+            else semaforo = '<span style="background:green; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;">🟢 A tiempo</span>'; 
+        } 
+        
+        return `<div class="card" style="border: 1px solid var(--border); box-shadow: none; cursor: pointer; margin-bottom: 10px;" onclick="App.views.modalEditarOrden('${orden.id}')">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong>${orden.id}</strong>
+                <div><span style="font-size:0.75rem; color:#718096; font-weight:bold;">${pedido.id ? pedido.id.replace('PED-','') : 'Huérfana'}</span>${semaforo}</div>
+            </div>
+            <small style="color: var(--primary); font-weight: 600; display:block; font-size:1rem; margin-bottom:2px;">${producto ? producto.nombre : 'Producto interno'}</small>
+            <small style="color: #4A5568; display:block; margin-bottom:5px; font-weight:bold;">👤 ${nombreCliente}</small>
+            <div style="margin-top: 8px; font-size: 0.85rem; color: var(--text-muted); display:flex; justify-content: space-between; border-top: 1px dashed #E2E8F0; padding-top: 8px;">
+                <span>${infoArtesanos}</span>
+                <span style="color:var(--primary);">Ver detalles ➔</span>
+            </div>
+        </div>`; 
+    }; 
+    
+    // 3. Estructura HTML con Pestañas
+    let html = `
+    <div class="card">
+        <h3 class="card-title">Taller de Producción</h3>
+        <button class="btn btn-secondary" style="width:100%; margin-top:5px; border: 2px dashed var(--primary); color: var(--primary); background: transparent; font-weight: bold;" onclick="App.views.formOrdenStock()">+ 🔨 Fabricar para Bodega</button>
+    </div>
+    
+    <div style="display: flex; margin-bottom: 15px; background: white; border-radius: 8px; overflow: hidden; border: 1px solid var(--border);">
+        <button class="tab-btn-prod" style="flex:1; padding: 12px 5px; border:none; background:#F3F0FF; color:var(--primary); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid var(--primary);" onclick="window.switchTabProd('pendientes', this)">🕒 Pendientes (${pendientes.length})</button>
+        <button class="tab-btn-prod" style="flex:1; padding: 12px 5px; border:none; background:transparent; color:var(--text-muted); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid transparent;" onclick="window.switchTabProd('en_proceso', this)">🏃 En Proceso (${enProceso.length})</button>
+        <button class="tab-btn-prod" style="flex:1; padding: 12px 5px; border:none; background:transparent; color:var(--text-muted); font-weight:bold; font-size:0.85rem; border-bottom: 2px solid transparent;" onclick="window.switchTabProd('listas', this)">✅ Listas (${listas.length})</button>
+    </div>
+
+    <div id="tab-pendientes" class="tab-content-prod" style="display:block;">
+        ${pendientes.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">No hay órdenes pendientes de iniciar.</div>' : pendientes.map(dibujarTarjeta).join('')}
+    </div>
+    
+    <div id="tab-en_proceso" class="tab-content-prod" style="display:none;">
+        ${enProceso.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">Nadie está tejiendo hamacas en este momento.</div>' : enProceso.map(dibujarTarjeta).join('')}
+    </div>
+    
+    <div id="tab-listas" class="tab-content-prod" style="display:none;">
+        ${listas.length === 0 ? '<div class="card" style="text-align:center; color:var(--text-muted); padding:30px;">No hay hamacas listas esperando cierre.</div>' : listas.map(dibujarTarjeta).join('')}
+    </div>`; 
+    
+    return html; 
+};
+
 App.views.nomina = function() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Nómina de Artesanos</h3>`; const pagosPorArtesano = {}; App.state.artesanos.forEach(a => { pagosPorArtesano[a.id] = { nombre: a.nombre, totalPendiente: 0, trabajos: [] }; }); App.state.pago_artesanos.forEach(p => { if (p.estado === 'pendiente' && pagosPorArtesano[p.artesano_id]) { pagosPorArtesano[p.artesano_id].totalPendiente += parseFloat(p.total); pagosPorArtesano[p.artesano_id].trabajos.push(p); } }); let hayPendientes = false; for (const [id, data] of Object.entries(pagosPorArtesano)) { if (data.totalPendiente > 0) { hayPendientes = true; html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;"><strong>🧑‍🎨 ${data.nombre}</strong><strong style="color: var(--danger); font-size: 1.1rem;">$${data.totalPendiente}</strong></div><div style="display: flex; gap: 10px;"><button class="btn btn-secondary" style="flex: 1; border-color: var(--primary); color: var(--primary); background: transparent;" onclick="App.views.detalleNominaArtesano('${id}')">📋 Ver Detalles</button><button class="btn btn-primary" style="flex: 1; background: var(--success); border-color: var(--success);" onclick="if(confirm('¿Liquidar $${data.totalPendiente} a ${data.nombre}?')) App.logic.liquidarNomina('${id}')">💵 Liquidar</button></div></div>`; } } if (!hayPendientes) html += `<p style="color: var(--text-muted);">No hay pagos pendientes. Todo está al día. ✨</p>`; html += `</div>`; return html; };
 App.views.detalleNominaArtesano = function(artesanoId) { const artesano = App.state.artesanos.find(a => a.id === artesanoId); const pagosPendientes = App.state.pago_artesanos.filter(p => p.artesano_id === artesanoId && p.estado === 'pendiente'); let html = `<div style="margin-bottom:15px;"><p style="color:var(--text-muted); font-size:0.85rem;">Trabajos sin pagar de <strong>${artesano.nombre}</strong>:</p><ul style="list-style:none; padding:0; margin:0;">`; pagosPendientes.forEach(p => { const orden = App.state.ordenes_produccion.find(o => o.id === p.orden_id); let nombreProducto = 'Orden ' + p.orden_id.replace('ORD-',''); if(orden) { const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id); if(detalle) { const prod = App.state.productos.find(pr => pr.id === detalle.producto_id); if(prod) nombreProducto = prod.nombre; } } const partesID = p.id.split('-'); const nombreTarea = partesID.length > 2 ? partesID.slice(2).join(' ') : 'Trabajo general'; html += `<li style="padding:10px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between; align-items:center;"><div><strong>${nombreTarea}</strong><br><small style="color:var(--text-muted);">${nombreProducto}</small><br><small style="color:var(--text-muted);">${p.fecha.split('T')[0]}</small></div><div style="text-align:right;"><span style="color:var(--danger); font-weight:bold; display:block; margin-bottom:5px;">$${p.total}</span><button class="btn btn-secondary" style="padding:2px 6px; font-size:0.7rem; color:red; border-color:red;" onclick="App.ui.closeSheet(); App.logic.eliminarRegistroGenerico('pago_artesanos', '${p.id}', 'pago_artesanos')">🗑️ Cancelar</button></div></li>`; }); html += `</ul><button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="App.ui.closeSheet()">Cerrar</button></div>`; App.ui.openSheet(`Detalle de Nómina`, html); };
 App.views.finanzas = function() { document.getElementById('bottom-nav').style.display = 'flex'; setTimeout(() => App.logic.renderGraficasFinanzas('todo'), 50); return `<div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3 class="card-title" style="margin:0;">Finanzas</h3><select id="filtro-finanzas" onchange="App.logic.renderGraficasFinanzas(this.value)" style="padding:5px; border-radius:5px; border:1px solid #CBD5E0;"><option value="todo">Historial</option><option value="mes_actual">Este Mes</option><option value="mes_pasado">Mes Pasado</option><option value="trimestre_actual">Este Trimestre</option><option value="anio_actual">Este Año</option></select></div><div id="finanzas-contenedor">Cargando datos...</div></div><button class="fab" style="background: var(--danger);" onclick="App.views.formGasto()">+</button>`; };
