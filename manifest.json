@@ -1,6 +1,6 @@
 {
   "name": "Descanso Maya ERP",
-  "short_name": "ERP Maya",
+  "short_name": "Descanso Maya",
   "description": "Sistema de gestión para taller de hamacas",
   "start_url": "./index.html",
   "display": "standalone",
