@@ -274,13 +274,17 @@ App.logic = {
         await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.ui.hideLoader(); App.ui.toast(`Liquidados $${totalPagado}`); App.router.handleRoute(); 
     },
     
-    async guardarNuevaCompra(datos) { 
+   async guardarNuevaCompra(datos) { 
         App.ui.showLoader("Comprando..."); const compraId = "COM-" + Date.now(); const detallesCompra = []; let operaciones = []; let nuevosMovs = []; const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); const precios = Array.isArray(datos.precio_u) ? datos.precio_u : (datos.precio_u ? [datos.precio_u] : []);
+        let gastoPorTipo = {}; // Para separar hilos, accesorios, reventa
         for(let i=0; i<mats.length; i++) { 
             const matId = mats[i]; const cant = parseFloat(cants[i] || 0); const precioUnitario = parseFloat(precios[i] || 0); const totalFila = cant * precioUnitario; 
             if(matId && cant > 0) { 
                 const material = App.state.inventario.find(m => m.id === matId); 
                 if(material) { 
+                    const tipoMat = material.tipo || 'otro'; let catGasto = 'otro';
+                    if(tipoMat === 'hilo') catGasto = 'hilos'; else if(tipoMat === 'accesorio') catGasto = 'accesorios'; else if(tipoMat === 'reventa') catGasto = 'reventa';
+                    gastoPorTipo[catGasto] = (gastoPorTipo[catGasto] || 0) + totalFila;
                     detallesCompra.push({ mat_id: matId, nombre: material.nombre, cantidad: cant, costo_unitario: precioUnitario }); 
                     const nuevoStock = parseFloat(material.stock_actual) + cant; 
                     operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock, costo_unitario: precioUnitario } }); 
@@ -290,16 +294,18 @@ App.logic = {
                         if(!existeProd) { 
                             const nuevoProd = { id: "PROD-" + Date.now() + i, nombre: material.nombre, categoria: "reventa", clasificacion: "Reventa", precio_venta: 0, mat_1: material.id, cant_1: 1, uso_1: "Completo", activo: "TRUE", fecha_creacion: new Date().toISOString() }; 
                             operaciones.push({ action: "guardar_fila", nombreHoja: "productos", datos: nuevoProd }); App.state.productos.push(nuevoProd); 
-                        } else if (existeProd.mat_1 !== material.id) {
-                            operaciones.push({ action: "actualizar_fila", nombreHoja: "productos", idFila: existeProd.id, datosNuevos: { mat_1: material.id } }); existeProd.mat_1 = material.id;
-                        }
+                        } else if (existeProd.mat_1 !== material.id) { operaciones.push({ action: "actualizar_fila", nombreHoja: "productos", idFila: existeProd.id, datosNuevos: { mat_1: material.id } }); existeProd.mat_1 = material.id; }
                     } 
                     const mov = { id: "MOV-" + Date.now() + i, fecha: datos.fecha, tipo_movimiento: "entrada_compra", origen: "compra", origen_id: compraId, ref_tipo: "material", ref_id: material.id, cantidad: cant, costo_unitario: precioUnitario, total: totalFila, notas: "Compra a proveedor" }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); 
                 } 
             } 
         } 
-        const compra = { id: compraId, proveedor_id: datos.proveedor_id, fecha: datos.fecha, total: parseFloat(datos.total), monto_pagado: parseFloat(datos.total), estado: "pagado", detalles: JSON.stringify(detallesCompra), fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "compras", datos: compra }); const proveedor = App.state.proveedores.find(p => p.id === datos.proveedor_id); const nombreProv = proveedor ? proveedor.nombre : "Proveedor"; const nuevoGasto = { id: "GAS-" + Date.now(), categoria: "materiales", descripcion: `Compra de Insumos: ${nombreProv} (${compraId})`, monto: parseFloat(datos.total), fecha: datos.fecha }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto });
-        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.compras.push(compra); App.state.gastos.push(nuevoGasto); if(!App.state.movimientos_inventario) App.state.movimientos_inventario=[]; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Compra y Gasto registrados"); App.router.handleRoute();  
+        const compra = { id: compraId, proveedor_id: datos.proveedor_id, fecha: datos.fecha, total: parseFloat(datos.total), monto_pagado: parseFloat(datos.total), estado: "pagado", detalles: JSON.stringify(detallesCompra), fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "compras", datos: compra }); const proveedor = App.state.proveedores.find(p => p.id === datos.proveedor_id); const nombreProv = proveedor ? proveedor.nombre : "Proveedor"; 
+        Object.keys(gastoPorTipo).forEach((cat, idx) => {
+            const nuevoGasto = { id: "GAS-" + Date.now() + "-" + idx, categoria: cat, descripcion: `Compra a ${nombreProv} (${compraId})`, monto: gastoPorTipo[cat], fecha: datos.fecha }; 
+            operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto }); App.state.gastos.push(nuevoGasto);
+        });
+        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.compras.push(compra); if(!App.state.movimientos_inventario) App.state.movimientos_inventario=[]; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Compra registrada"); App.router.handleRoute();  
     },
     
     async guardarMultiplesGastos(datos) { App.ui.showLoader("Registrando Gastos..."); const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; let operaciones = []; let nuevosGastos = []; for(let i=0; i<descripciones.length; i++) { if(!descripciones[i]) continue; const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; nuevosGastos.push(gastoObj); operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); } await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.gastos.push(...nuevosGastos); App.ui.hideLoader(); App.ui.toast("¡Gastos registrados!"); App.router.handleRoute(); },
@@ -329,14 +335,19 @@ App.logic = {
         App.ui.openSheet("Diagnóstico de Base de Datos", html);
     },
     
-   renderGraficasFinanzas(filtro) {
+renderGraficasFinanzas(filtro) {
         const cont = document.getElementById('finanzas-contenedor'); if(!cont) return; const hoy = new Date(); let mesActual = hoy.getMonth(); let anioActual = hoy.getFullYear(); let mesPasado = mesActual - 1; let anioPasado = anioActual; if(mesPasado < 0) { mesPasado = 11; anioPasado--; } let triActual = Math.floor(mesActual / 3);
         const filtrarFecha = (str) => { if(filtro === 'todo') return true; if(!str) return false; const f = new Date(str); if(filtro === 'mes_actual') return f.getMonth() === mesActual && f.getFullYear() === anioActual; if(filtro === 'mes_pasado') return f.getMonth() === mesPasado && f.getFullYear() === anioPasado; if(filtro === 'trimestre_actual') return Math.floor(f.getMonth() / 3) === triActual && f.getFullYear() === anioActual; if(filtro === 'anio_actual') return f.getFullYear() === anioActual; return true; };
         
         const pedFiltrados = App.state.pedidos.filter(p => filtrarFecha(p.fecha_creacion)); 
         const aboFiltrados = App.state.abonos.filter(a => filtrarFecha(a.fecha)); 
         const gasFiltrados = App.state.gastos.filter(g => filtrarFecha(g.fecha));
-        const repFiltradas = App.state.reparaciones.filter(r => filtrarFecha(r.fecha_creacion)); // LIGAR REPARACIONES
+        const repFiltradas = App.state.reparaciones.filter(r => filtrarFecha(r.fecha_creacion));
+
+        // Por Cobrar GLOBAL (ignora las fechas, nunca desaparece)
+        let xCobrarGlobal = 0;
+        App.state.pedidos.forEach(p => { const abonos = App.state.abonos.filter(a => a.pedido_id === p.id).reduce((s,a) => s + parseFloat(a.monto||0), 0); const saldo = parseFloat(p.total||0) - parseFloat(p.anticipo||0) - abonos; if(saldo > 0) xCobrarGlobal += saldo; });
+        App.state.reparaciones.forEach(r => { const saldo = parseFloat(r.precio||0) - parseFloat(r.anticipo||0); if(saldo > 0) xCobrarGlobal += saldo; });
 
         const tVentasPed = pedFiltrados.reduce((acc, p) => acc + (parseFloat(p.total) || 0), 0); 
         const tVentasRep = repFiltradas.reduce((acc, r) => acc + (parseFloat(r.precio) || 0), 0); 
@@ -347,36 +358,42 @@ App.logic = {
         const tAbonos = aboFiltrados.reduce((acc, a) => acc + (parseFloat(a.monto) || 0), 0); 
         const ingReales = tAnticiposPed + tAnticiposRep + tAbonos; 
         
-        const xCobrar = tVentas - ingReales; 
         const tGastos = gasFiltrados.reduce((acc, g) => acc + (parseFloat(g.monto) || 0), 0); 
         const fNeto = ingReales - tGastos; 
         const labels = { todo: "Todo el historial", mes_actual: "Este Mes", mes_pasado: "Mes Pasado", trimestre_actual: "Este Trimestre", anio_actual: "Este Año" };
         
-        // --- NUEVO: PREPARAR DATOS PARA GRÁFICA DE PASTEL ---
-        let expPorCat = {};
-        gasFiltrados.forEach(g => { const cat = g.categoria || 'otro'; expPorCat[cat] = (expPorCat[cat] || 0) + parseFloat(g.monto||0); });
-        // Colores del sistema: Morado, Dorado, Verde, Rojo, Naranja, Azul oscuro, Morado oscuro
-        const coloresSistema = ['#6B46C1', '#D69E2E', '#38A169', '#E53E3E', '#DD6B20', '#2B6CB0', '#553C9A'];
-
-        let html = `<p style="color:var(--text-muted); font-size:0.85rem; margin-top:-10px; margin-bottom:15px;">Mostrando: <strong>${labels[filtro]}</strong>. <em>Toca una tarjeta para ver detalles.</em></p><div class="grid-2"><div class="card stat-card" style="background:#EBF8FF; cursor:pointer;" onclick="App.views.detalleFinanzas('ventas', '${filtro}')"><div class="label">Ventas Totales</div><div class="value" style="color:#3182CE; font-size:1.2rem;">$${tVentas.toFixed(2)}</div></div><div class="card stat-card" style="background:#C6F6D5; cursor:pointer;" onclick="App.views.detalleFinanzas('ingresos', '${filtro}')"><div class="label">Ingresos Reales</div><div class="value" style="color:#38A169; font-size:1.2rem;">$${ingReales.toFixed(2)}</div></div><div class="card stat-card" style="background:#FEFCBF; cursor:pointer;" onclick="App.views.detalleFinanzas('por_cobrar', '${filtro}')"><div class="label">Por Cobrar</div><div class="value" style="color:#D69E2E; font-size:1.2rem;">$${xCobrar.toFixed(2)}</div></div><div class="card stat-card" style="background:#FED7D7; cursor:pointer;" onclick="App.views.detalleFinanzas('gastos', '${filtro}')"><div class="label">Gastos</div><div class="value" style="color:#E53E3E; font-size:1.2rem;">$${tGastos.toFixed(2)}</div></div></div><div class="card stat-card" style="margin-top:10px; border:2px solid ${fNeto >= 0 ? 'var(--success)' : 'var(--danger)'}; margin-bottom:15px;"><div class="label">Flujo Neto Efectivo</div><div class="value" style="color:${fNeto >= 0 ? 'var(--success)' : 'var(--danger)'};">$${fNeto.toFixed(2)}</div></div><div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px;"><canvas id="graficaFinanzas"></canvas></div>`;
+        // --- PREPARAR DATOS PARA GRÁFICAS DE PASTEL ---
+        let expPorCat = {}; gasFiltrados.forEach(g => { const cat = g.categoria || 'otro'; expPorCat[cat] = (expPorCat[cat] || 0) + parseFloat(g.monto||0); });
         
-        // Añadir el nuevo Canvas para la gráfica de Pastel
-        html += `<div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px; margin-top:15px;"><h4 style="text-align:center; margin-bottom:10px; color:var(--primary-dark);">Desglose de Gastos</h4><canvas id="graficaGastosCanvas"></canvas></div><button class="btn btn-secondary" style="width:100%; margin-top:15px; border-color:#38A169; color:#38A169; font-weight:bold; background:transparent;" onclick="window.exportarAExcel(App.state.gastos, 'Gastos_${labels[filtro]}')">📥 Exportar Gastos a Excel</button>`;
+        let ventasPorCat = { 'Hamacas': 0, 'Sillas': 0, 'Cojines': 0, 'Accesorios': 0, 'Reparaciones': 0, 'Otros': 0 };
+        pedFiltrados.forEach(p => {
+            const det = App.state.pedido_detalle.find(d => d.pedido_id === p.id); const prod = det ? App.state.productos.find(x => x.id === det.producto_id) : null;
+            const n = prod ? prod.nombre.toLowerCase() : ''; const t = parseFloat(p.total||0);
+            if(n.includes('silla')) ventasPorCat['Sillas'] += t;
+            else if(n.includes('cojin') || n.includes('cojín')) ventasPorCat['Cojines'] += t;
+            else if(n.includes('accesorio') || n.includes('soga') || n.includes('brazo') || n.includes('argolla') || n.includes('hilo')) ventasPorCat['Accesorios'] += t;
+            else if(n.includes('hamaca') || n.includes('tejido')) ventasPorCat['Hamacas'] += t;
+            else ventasPorCat['Hamacas'] += t; 
+        });
+        repFiltradas.forEach(r => { ventasPorCat['Reparaciones'] += parseFloat(r.precio||0); });
+        Object.keys(ventasPorCat).forEach(k => { if(ventasPorCat[k] === 0) delete ventasPorCat[k]; });
+
+        const coloresVentas = ['#6B46C1', '#2B6CB0', '#D69E2E', '#DD6B20', '#38A169', '#718096'];
+        const coloresGastos = ['#E53E3E', '#6B46C1', '#DD6B20', '#D69E2E', '#2B6CB0', '#718096'];
+
+        let html = `<p style="color:var(--text-muted); font-size:0.85rem; margin-top:-10px; margin-bottom:15px;">Mostrando: <strong>${labels[filtro]}</strong></p><div class="grid-2"><div class="card stat-card" style="background:#EBF8FF; cursor:pointer;" onclick="App.views.detalleFinanzas('ventas', '${filtro}')"><div class="label">Ventas Totales</div><div class="value" style="color:#3182CE; font-size:1.2rem;">$${tVentas.toFixed(2)}</div></div><div class="card stat-card" style="background:#C6F6D5; cursor:pointer;" onclick="App.views.detalleFinanzas('ingresos', '${filtro}')"><div class="label">Ingresos Reales</div><div class="value" style="color:#38A169; font-size:1.2rem;">$${ingReales.toFixed(2)}</div></div><div class="card stat-card" style="background:#FEFCBF; cursor:pointer;" onclick="App.views.detalleFinanzas('por_cobrar', '${filtro}')"><div class="label">Por Cobrar (Histórico)</div><div class="value" style="color:#D69E2E; font-size:1.2rem;">$${xCobrarGlobal.toFixed(2)}</div></div><div class="card stat-card" style="background:#FED7D7; cursor:pointer;" onclick="App.views.detalleFinanzas('gastos', '${filtro}')"><div class="label">Gastos</div><div class="value" style="color:#E53E3E; font-size:1.2rem;">$${tGastos.toFixed(2)}</div></div></div><div class="card stat-card" style="margin-top:10px; border:2px solid ${fNeto >= 0 ? 'var(--success)' : 'var(--danger)'}; margin-bottom:15px;"><div class="label">Flujo Neto Efectivo</div><div class="value" style="color:${fNeto >= 0 ? 'var(--success)' : 'var(--danger)'};">$${fNeto.toFixed(2)}</div></div><div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px;"><canvas id="graficaFinanzas"></canvas></div>`;
+        
+        html += `<div class="grid-2" style="margin-top:15px; gap:10px;"><div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px;"><h4 style="text-align:center; margin-bottom:10px; color:var(--text-muted); font-size:0.9rem;">De dónde ingresa 📈</h4><canvas id="graficaVentasCanvas"></canvas></div><div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px;"><h4 style="text-align:center; margin-bottom:10px; color:var(--text-muted); font-size:0.9rem;">En qué se gasta 📉</h4><canvas id="graficaGastosCanvas"></canvas></div></div><button class="btn btn-secondary" style="width:100%; margin-top:15px; border-color:#38A169; color:#38A169; font-weight:bold; background:transparent;" onclick="window.exportarAExcel(App.state.gastos, 'Gastos_${labels[filtro]}')">📥 Exportar Gastos a Excel</button>`;
         cont.innerHTML = html;
         
         setTimeout(() => { 
             if(window.Chart) { 
                 const ctx1 = document.getElementById('graficaFinanzas');
-                if(ctx1) {
-                    if(window.graficaActual) window.graficaActual.destroy(); 
-                    window.graficaActual = new Chart(ctx1, { type: 'bar', data: { labels: ['Ingresos', 'Gastos', 'Por Cobrar'], datasets: [{ label: 'Monto ($)', data: [ingReales, tGastos, xCobrar], backgroundColor: ['#38A169', '#E53E3E', '#D69E2E'], borderRadius: 4 }] }, options: { responsive: true, plugins: { legend: { display: false } } } }); 
-                }
-                const ctx2 = document.getElementById('graficaGastosCanvas');
-                if(ctx2) {
-                    if(window.graficaDona) window.graficaDona.destroy();
-                    // Colores de acuerdo al sistema
-                    window.graficaDona = new Chart(ctx2, { type: 'doughnut', data: { labels: Object.keys(expPorCat).map(k=>k.toUpperCase()), datasets: [{ data: Object.values(expPorCat), backgroundColor: coloresSistema, hoverOffset: 4 }] }, options: { responsive: true, plugins: { legend: { position: 'bottom' } } } });
-                }
+                if(ctx1) { if(window.graficaActual) window.graficaActual.destroy(); window.graficaActual = new Chart(ctx1, { type: 'bar', data: { labels: ['Ingresos', 'Gastos', 'Deuda Total'], datasets: [{ label: 'Monto ($)', data: [ingReales, tGastos, xCobrarGlobal], backgroundColor: ['#38A169', '#E53E3E', '#D69E2E'], borderRadius: 4 }] }, options: { responsive: true, plugins: { legend: { display: false } } } }); } 
+                const ctxV = document.getElementById('graficaVentasCanvas');
+                if(ctxV) { if(window.graficaVentasD) window.graficaVentasD.destroy(); window.graficaVentasD = new Chart(ctxV, { type: 'doughnut', data: { labels: Object.keys(ventasPorCat).map(k=>k.toUpperCase()), datasets: [{ data: Object.values(ventasPorCat), backgroundColor: coloresVentas }] }, options: { responsive: true, plugins: { legend: { position: 'bottom', labels:{font:{size:10}} } } } }); }
+                const ctxG = document.getElementById('graficaGastosCanvas');
+                if(ctxG) { if(window.graficaGastosD) window.graficaGastosD.destroy(); window.graficaGastosD = new Chart(ctxG, { type: 'doughnut', data: { labels: Object.keys(expPorCat).map(k=>k.toUpperCase()), datasets: [{ data: Object.values(expPorCat), backgroundColor: coloresGastos }] }, options: { responsive: true, plugins: { legend: { position: 'bottom', labels:{font:{size:10}} } } } }); }
             } 
         }, 300);
     },
@@ -619,19 +636,19 @@ App.views.detalleFinanzas = function(tipo, filtro) {
     } else if (tipo === 'gastos') { 
         if(gasFiltrados.length===0) html += '<li>No hay gastos registrados.</li>'; 
         gasFiltrados.forEach(g => { html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between; align-items:center;"><span><strong>${g.descripcion}</strong><br><small>${g.fecha.split('T')[0]}</small></span><div style="text-align:right;"><span style="color:var(--danger); font-weight:bold; display:block; margin-bottom:5px;">$${g.monto}</span><button class="btn btn-secondary" style="padding:2px 6px; font-size:0.7rem; margin-right:4px;" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formGasto('${g.id}'), 300)">✏️</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:0.7rem; color:red; border-color:red;" onclick="App.ui.closeSheet(); App.logic.eliminarRegistroGenerico('gastos', '${g.id}', 'gastos')">🗑️</button></div></li>`; }); 
-    } else if (tipo === 'por_cobrar') { 
+} else if (tipo === 'por_cobrar') { 
         let hayCobros = false; 
-        pedFiltrados.forEach(p => { 
+        App.state.pedidos.forEach(p => { // <- Cambiamos pedFiltrados por App.state.pedidos para que sea GLOBAL
             const abonos = App.state.abonos.filter(a => a.pedido_id === p.id).reduce((s,a)=>s+parseFloat(a.monto||0),0); 
             const saldo = parseFloat(p.total) - parseFloat(p.anticipo) - abonos; 
             if(saldo > 0) { hayCobros=true; html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${(p.id||'').replace('PED-','')}</strong><br><small>${p.fecha_creacion.split('T')[0]}</small></span><span style="color:#D69E2E; font-weight:bold;">$${saldo}</span></li>`; } 
         }); 
-        repFiltradas.forEach(r => {
+        App.state.reparaciones.forEach(r => {
             const saldo = parseFloat(r.precio||0) - parseFloat(r.anticipo||0);
             if(saldo > 0) { hayCobros=true; html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${(r.id||'').replace('REP-','')} (Reparación)</strong><br><small>${r.fecha_creacion.split('T')[0]}</small></span><span style="color:#D69E2E; font-weight:bold;">$${saldo}</span></li>`; }
         });
         if(!hayCobros) html += '<li>No hay saldo pendiente.</li>'; 
-    } 
+    }
     html += '</ul><button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="App.ui.closeSheet()">Cerrar</button>'; 
     App.ui.openSheet(tipo === 'ventas' ? "Detalle de Ventas" : tipo === 'ingresos' ? "Detalle de Ingresos" : tipo === 'gastos' ? "Detalle de Gastos" : "Saldos Pendientes", html); 
 };
@@ -761,7 +778,14 @@ App.views.formProveedor = function(id = null, callback = null) { const obj = id 
 App.views.formArtesano = function(id = null) { const obj = id ? App.state.artesanos.find(a => a.id === id) : null; const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Nombre del Artesano</label><input type="text" name="nombre" value="${obj ? obj.nombre : ''}" required></div><div class="form-group"><label>Teléfono (10 dígitos)</label><input type="tel" name="telefono" value="${obj ? obj.telefono : ''}" pattern="\\d{10}" title="El teléfono debe tener exactamente 10 números sin espacios" maxlength="10"></div><button type="submit" class="btn btn-primary" style="width: 100%;">${obj ? 'Guardar Cambios' : 'Crear Artesano'}</button></form>`; App.ui.openSheet(obj ? "Editar Artesano" : "Nuevo Artesano", formHTML, (data) => { if (obj) App.logic.actualizarRegistroGenerico("artesanos", id, data, "artesanos"); else App.logic.guardarNuevoGenerico("artesanos", data, "ART", "artesanos"); }); };
 
 App.views.formEditarPedido = function(id) { const p = App.state.pedidos.find(x => x.id === id); const fechaC = p.fecha_creacion ? p.fecha_creacion.split('T')[0] : ''; const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Fecha de Solicitud</label><input type="date" name="fecha_creacion" value="${fechaC}" required></div><div class="form-group"><label>Precio Total ($)</label><input type="number" step="0.01" name="total" value="${p.total}" required></div><div class="form-group"><label>Anticipo Registrado ($)</label><input type="number" step="0.01" name="anticipo" value="${p.anticipo}" required></div><div class="form-group"><label>Fecha de Entrega</label><input type="date" name="fecha_entrega" value="${p.fecha_entrega || ''}"></div><div class="form-group"><label>Notas / Instrucciones</label><textarea name="notas" rows="2">${p.notas || ''}</textarea></div><button type="submit" class="btn btn-primary" style="width: 100%;">Guardar Cambios</button></form>`; App.ui.openSheet("Editar Pedido", formHTML, (data) => { if(data.fecha_creacion) data.fecha_creacion = data.fecha_creacion + "T12:00:00.000Z"; App.logic.actualizarRegistroGenerico("pedidos", id, data, "pedidos"); }); };
-App.views.formGasto = function(id = null) { const obj = id ? App.state.gastos.find(g => g.id === id) : null; let htmlGastos = ''; if(obj) { htmlGastos = `<div class="form-group"><label>Descripción del Gasto</label><input type="text" name="descripcion" value="${obj.descripcion}" required></div><div class="form-group"><label>Monto ($)</label><input type="number" step="0.01" name="monto" value="${obj.monto}" required></div>`; } else { htmlGastos = `<div id="cont-gastos"><div class="grid-2 fila-dinamica" style="margin-bottom: 5px;"><div class="form-group" style="margin:0;"><input type="text" name="descripcion[]" placeholder="Descripción" required></div><div class="form-group" style="margin:0; display:flex; gap:5px;"><input type="number" step="0.01" name="monto[]" placeholder="$ Monto" required></div></div></div><button type="button" class="btn btn-secondary" style="width:100%; margin-top:10px; margin-bottom:15px; border:1px dashed var(--danger); color:var(--danger); background: transparent;" onclick="window.agregarFilaGasto()">+ Añadir Gasto a la lista</button>`; } const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Categoría Común</label><select name="categoria" required><option value="materiales" ${obj && obj.categoria === 'materiales' ? 'selected' : ''}>Materiales</option><option value="servicios" ${obj && obj.categoria === 'servicios' ? 'selected' : ''}>Servicios</option><option value="nomina" ${obj && obj.categoria === 'nomina' ? 'selected' : ''}>Nómina</option><option value="otro" ${obj && obj.categoria === 'otro' ? 'selected' : ''}>Otro</option></select></div><div class="form-group"><label>Fecha</label><input type="date" name="fecha" value="${obj ? obj.fecha : new Date().toISOString().split('T')[0]}" required></div>${htmlGastos}<button type="submit" class="btn btn-primary" style="width: 100%; background: var(--danger); border-color: var(--danger);">${obj ? 'Guardar Cambios' : 'Registrar Gastos'}</button></form>`; App.ui.openSheet(obj ? "Editar Gasto" : "Nuevos Gastos Múltiples", formHTML, (data) => { if (obj) App.logic.actualizarRegistroGenerico("gastos", id, data, "gastos"); else App.logic.guardarMultiplesGastos(data); }); };
+
+App.views.formGasto = function(id = null) { 
+    if (typeof id !== 'string') id = null; const obj = id ? App.state.gastos.find(g => g.id === id) : null; let htmlGastos = ''; 
+    if(obj) { htmlGastos = `<div class="form-group"><label>Descripción del Gasto</label><input type="text" name="descripcion" value="${obj.descripcion}" required></div><div class="form-group"><label>Monto ($)</label><input type="number" step="0.01" name="monto" value="${obj.monto}" required></div>`; } 
+    else { htmlGastos = `<div id="cont-gastos"><div class="grid-2 fila-dinamica" style="margin-bottom: 5px;"><div class="form-group" style="margin:0;"><input type="text" name="descripcion[]" placeholder="Descripción" required></div><div class="form-group" style="margin:0; display:flex; gap:5px;"><input type="number" step="0.01" name="monto[]" placeholder="$ Monto" required></div></div></div><button type="button" class="btn btn-secondary" style="width:100%; margin-top:10px; margin-bottom:15px; border:1px dashed var(--danger); color:var(--danger); background: transparent;" onclick="window.agregarFilaGasto()">+ Añadir Gasto a la lista</button>`; } 
+    const formHTML = `<form id="dynamic-form"><div class="form-group"><label>Categoría</label><select name="categoria" required><option value="hilos" ${obj && obj.categoria === 'hilos' ? 'selected' : ''}>Materiales (Hilos)</option><option value="accesorios" ${obj && obj.categoria === 'accesorios' ? 'selected' : ''}>Accesorios / Herrajes</option><option value="reventa" ${obj && obj.categoria === 'reventa' ? 'selected' : ''}>Hamacas (Reventa)</option><option value="servicios" ${obj && obj.categoria === 'servicios' ? 'selected' : ''}>Servicios (Luz, Envíos)</option><option value="nomina" ${obj && obj.categoria === 'nomina' ? 'selected' : ''}>Nómina</option><option value="otro" ${obj && obj.categoria === 'otro' ? 'selected' : ''}>Otro</option></select></div><div class="form-group"><label>Fecha</label><input type="date" name="fecha" value="${obj ? obj.fecha : new Date().toISOString().split('T')[0]}" required></div>${htmlGastos}<button type="submit" class="btn btn-primary" style="width: 100%; background: var(--danger); border-color: var(--danger);">${obj ? 'Guardar Cambios' : 'Registrar Gastos'}</button></form>`; 
+    App.ui.openSheet(obj ? "Editar Gasto" : "Nuevos Gastos Múltiples", formHTML, (data) => { if (obj) App.logic.actualizarRegistroGenerico("gastos", id, data, "gastos"); else App.logic.guardarMultiplesGastos(data); }); 
+};
 
 App.views.formNuevoPedido = function() { 
     const opcionesClientes = App.state.clientes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join(''); 
