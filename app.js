@@ -107,12 +107,19 @@ App.api = {
 
             const data = await response.json();
 
-            if (data.status === "unauthorized") {
-                localStorage.removeItem('erp_session_token');
-                App.state.sessionToken = null;
-                App.router.handleRoute();
-                return data;
-            }
+            if (
+    data.status === "error" &&
+    (
+        data.code === "AUTH_REQUIRED" ||
+        data.code === "SESSION_EXPIRED" ||
+        data.code === "SESSION_INVALID"
+    )
+) {
+    localStorage.removeItem('erp_session_token');
+    App.state.sessionToken = null;
+    App.router.handleRoute();
+    return data;
+}
 
             return data;
         } catch (error) {
@@ -188,17 +195,17 @@ async verificarPIN(pin) {
     App.ui.showLoader("Verificando...");
     const res = await App.api.login(pin);
 
-    if (res.status === "success" && res.sessionToken) {
-        App.state.sessionToken = res.sessionToken;
-        localStorage.setItem('erp_session_token', res.sessionToken);
-        App.ui.toast("¡Acceso concedido!");
-        this.cargarDatosIniciales();
-    } else {
-        App.state.sessionToken = null;
-        localStorage.removeItem('erp_session_token');
-        App.ui.hideLoader();
-        App.ui.toast(res.message || "PIN Incorrecto.");
-    }
+    if (res.status === "success" && res.data && res.data.sessionToken) {
+    App.state.sessionToken = res.data.sessionToken;
+    localStorage.setItem('erp_session_token', res.data.sessionToken);
+    App.ui.toast("¡Acceso concedido!");
+    this.cargarDatosIniciales();
+} else {
+    App.state.sessionToken = null;
+    localStorage.removeItem('erp_session_token');
+    App.ui.hideLoader();
+    App.ui.toast(res.message || "PIN Incorrecto.");
+}
 },
     async cargarDatosIniciales() { 
         App.ui.showLoader("Sincronizando Base de Datos..."); 
