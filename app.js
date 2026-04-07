@@ -211,13 +211,13 @@ async verificarPIN(pin) {
         App.ui.showLoader("Sincronizando Base de Datos..."); 
         try { 
             const hojasA_Descargar = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "movimientos_inventario"]; 
-            const res = await App.api.fetch("leer_todo", { hojas: hojasA_Descargar });
+const res = await App.api.fetch("leer_todo", { hojas: hojasA_Descargar });
 
-if (res.status === "unauthorized") {
+if (res.status === "error") {
     App.ui.hideLoader();
+    console.error("Error al cargar datos:", res);
     return;
 }
-            if (res.status === "error") throw new Error(res.message); 
             const bd = res.data;
             App.state.inventario = bd["materiales"] || []; App.state.clientes = bd["clientes"] || []; App.state.productos = bd["productos"] || []; App.state.pedidos = bd["pedidos"] || []; App.state.pedido_detalle = bd["pedido_detalle"] || []; App.state.ordenes_produccion = bd["ordenes_produccion"] || []; App.state.artesanos = bd["artesanos"] || []; App.state.abonos = bd["abonos_clientes"] || []; App.state.gastos = bd["gastos"] || []; App.state.compras = bd["compras"] || []; App.state.proveedores = bd["proveedores"] || []; App.state.reparaciones = bd["reparaciones"] || []; App.state.tarifas_artesano = bd["tarifas_artesano"] || []; App.state.pago_artesanos = bd["pago_artesanos"] || []; App.state.movimientos_inventario = bd["movimientos_inventario"] || []; 
             App.ui.hideLoader(); App.router.init(); 
@@ -866,7 +866,7 @@ App.views.formTarifa = function(artesanoId, tarifaId = null) {
 
 App.views.compras = function() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Historial de Compras</h3>`; [...(App.state.compras||[])].reverse().forEach(c => { const p = App.state.proveedores.find(prv => prv.id === c.proveedor_id); html += `<div class="card" style="border: 1px solid var(--border); box-shadow: none;"><div style="display: flex; justify-content: space-between; margin-bottom: 5px; cursor:pointer;" onclick="App.views.verDetallesCompra('${c.id}')"><strong>${c.id}</strong><span style="color: var(--danger); font-weight: bold;">$${c.total}</span></div><p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 5px; cursor:pointer;" onclick="App.views.verDetallesCompra('${c.id}')">Proveedor: ${p ? p.nombre : 'General'} | Fecha: ${c.fecha}<br><span style="color:var(--primary); font-weight:bold; display:inline-block; margin-top:5px;">👀 Ver artículos comprados</span></p><div style="text-align: right; border-top:1px dashed #eee; padding-top:8px; margin-top:8px;"><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; margin-right:4px;" onclick="App.views.formEditarCompra('${c.id}')">✏️ Editar</button><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; color:red; border-color:red;" onclick="App.logic.eliminarCompra('${c.id}')">🗑️ Eliminar</button></div></div>`; }); return html += `</div><button class="fab" onclick="App.views.formCompra()">+</button>`; };
 App.views.verDetallesCompra = function(compraId) { const c = App.state.compras.find(x => x.id === compraId); const p = App.state.proveedores.find(prv => prv.id === c.proveedor_id); let detalles = []; try { detalles = JSON.parse(c.detalles || '[]'); } catch(e){} let detHTML = `<ul style="list-style:none; padding:0; margin:0;">`; if(detalles.length === 0) detHTML += `<li><small style="color:var(--text-muted)">Compra antigua sin detalles.</small></li>`; detalles.forEach(d => { detHTML += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between; align-items:center;"><span><strong style="color:var(--primary);">${d.cantidad}x</strong> ${d.nombre}</span><span style="color:var(--text-muted); font-size:0.85rem;">$${d.costo_unitario} c/u</span></li>`; }); detHTML += `</ul>`; let html = `<div style="font-size:0.9rem; margin-bottom:15px;"><p style="margin:2px 0;"><strong>Proveedor:</strong> ${p ? p.nombre : 'General'}</p><p style="margin:2px 0;"><strong>Fecha:</strong> ${c.fecha}</p><p style="margin:2px 0;"><strong>Total Pagado:</strong> <span style="color:var(--danger); font-weight:bold;">$${c.total}</span></p></div><h4 style="margin-top:15px; border-bottom:2px solid var(--primary); padding-bottom:5px; color:var(--primary-dark);">Artículos Comprados</h4><div style="background:#f9f9f9; padding:10px; border-radius:6px; margin-bottom:15px;">${detHTML}</div><button class="btn btn-primary" style="width:100%;" onclick="App.ui.closeSheet()">Cerrar</button>`; App.ui.openSheet(`Detalle de Compra`, html); };
-App.views.configuracion = function() { return `<div class="card"><h3 class="card-title">Configuración</h3><button class="btn btn-primary" style="width: 100%; margin-bottom: 15px;" onclick="App.logic.descargarRespaldo()">💾 Descargar Respaldo JSON</button><button class="btn btn-secondary" style="width: 100%; margin-bottom: 15px; border-color:#38A169; color:#38A169; background:transparent;" onclick="window.exportarAExcel(App.state.movimientos_inventario, 'Kardex_Completo')">📥 Descargar Kardex a Excel</button><button class="btn btn-secondary" style="width: 100%; margin-bottom: 15px; border-color:#2B6CB0; color:#2B6CB0; background:transparent;" onclick="App.logic.verDiagnostico()">🛠️ Diagnóstico de Base de Datos</button><button class="btn btn-secondary" style="width: 100%; background: #FED7D7; color: var(--danger); border: none;" onclick="localStorage.removeItem('erp_pin'); location.reload();">🔒 Bloquear Sistema</button></div>`; };
+App.views.configuracion = function() { return `<div class="card"><h3 class="card-title">Configuración</h3><button class="btn btn-primary" style="width: 100%; margin-bottom: 15px;" onclick="App.logic.descargarRespaldo()">💾 Descargar Respaldo JSON</button><button class="btn btn-secondary" style="width: 100%; margin-bottom: 15px; border-color:#38A169; color:#38A169; background:transparent;" onclick="window.exportarAExcel(App.state.movimientos_inventario, 'Kardex_Completo')">📥 Descargar Kardex a Excel</button><button class="btn btn-secondary" style="width: 100%; margin-bottom: 15px; border-color:#2B6CB0; color:#2B6CB0; background:transparent;" onclick="App.logic.verDiagnostico()">🛠️ Diagnóstico de Base de Datos</button><button class="btn btn-secondary" style="width: 100%; background: #FED7D7; color: var(--danger); border: none;" onclick="localStorage.removeItem('sessionToken'); location.reload();">🔒 Bloquear Sistema</button></div>`; };
 
 // MEJORA: Reparaciones actualizadas
 App.views.reparaciones = function() { 
@@ -1050,14 +1050,14 @@ App.router = {
     init() { window.addEventListener('hashchange', () => this.handleRoute()); this.handleRoute(); }, 
     navigate(route) { window.location.hash = route; }, 
     handleRoute() { 
-        if (!App.state.pinAcceso) { App.ui.hideLoader(); document.getElementById('app-content').innerHTML = App.views.login(); document.getElementById('header-title').textContent = "Acceso Restringido"; return; } 
+        if (!App.state.sessionToken) { App.ui.hideLoader(); document.getElementById('app-content').innerHTML = App.views.login(); document.getElementById('header-title').textContent = "Acceso Restringido"; return; } 
         let hash = window.location.hash.substring(1) || 'inicio'; const contentDiv = document.getElementById('app-content'); const titleEl = document.getElementById('header-title'); document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active')); const activeNav = document.querySelector(`.nav-item[data-view="${hash}"]`); if(activeNav) activeNav.classList.add('active'); 
         if (App.views[hash]) { contentDiv.innerHTML = App.views[hash](); titleEl.textContent = hash.charAt(0).toUpperCase() + hash.slice(1); } 
         else { contentDiv.innerHTML = `<div class="card"><p style="text-align:center; padding:20px;">Módulo no encontrado.</p></div>`; } 
     } 
 };
 
-App.start = function() { this.ui.init(); if (!this.state.pinAcceso) { this.router.init(); } else { this.logic.cargarDatosIniciales(); } };
+App.start = function() { this.ui.init(); if (!this.state.sessionToken) { this.router.init(); } else { this.logic.cargarDatosIniciales(); } };
 document.addEventListener('DOMContentLoaded', () => App.start());
 
 // =====================================================================
