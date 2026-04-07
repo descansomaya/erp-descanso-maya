@@ -387,7 +387,27 @@ if (res.status !== "success") return;  await App.logic.cargarDatosIniciales();
 App.ui.toast("¡Terminado!");
 App.router.handleRoute();
     },
-    async procesarCambioOrden(ordenId, datos) { if (datos.estado === 'listo') { App.views.formCerrarOrden(ordenId); } else { App.ui.showLoader("Actualizando..."); const res = await App.api.fetch("actualizar_fila", { nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: datos }); if (res.status === "success") { const ordenIndex = App.state.ordenes_produccion.findIndex(o => o.id === ordenId); App.state.ordenes_produccion[ordenIndex] = { ...App.state.ordenes_produccion[ordenIndex], ...datos }; App.ui.toast("Actualizado"); App.router.handleRoute(); } else { App.ui.toast("Error"); } } },
+   async procesarCambioOrden(ordenId, datos) {
+    if (datos.estado === 'listo') {
+        App.views.formCerrarOrden(ordenId);
+    } else {
+        App.ui.showLoader("Actualizando...");
+        const res = await App.api.fetch("actualizar_fila", {
+            nombreHoja: "ordenes_produccion",
+            idFila: ordenId,
+            datosNuevos: datos
+        });
+        App.ui.hideLoader();
+
+        if (res.status === "success") {
+            await App.logic.cargarDatosIniciales();
+            App.ui.toast("Actualizado");
+            App.router.handleRoute();
+        } else {
+            App.ui.toast("Error");
+        }
+    }
+},
     async liquidarNomina(artesanoId) { 
         App.ui.showLoader("Liquidando..."); const pagosPendientes = App.state.pago_artesanos.filter(p => p.artesano_id === artesanoId && p.estado === 'pendiente'); let totalPagado = 0; let operaciones = []; 
         for (let pago of pagosPendientes) { operaciones.push({ action: "actualizar_fila", nombreHoja: "pago_artesanos", idFila: pago.id, datosNuevos: { estado: 'pagado' } });  totalPagado += parseFloat(pago.total || 0); } 
@@ -434,7 +454,7 @@ App.router.handleRoute();
 if (res.status !== "success") return;
 await App.logic.cargarDatosIniciales();
 App.ui.toast("Compra registrada");
-App.router.handleRoute();};
+App.router.handleRoute();},
     
     async guardarMultiplesGastos(datos) { const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; let operaciones = []; let nuevosGastos = []; for(let i=0; i<descripciones.length; i++) { if(!descripciones[i]) continue; const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; nuevosGastos.push(gastoObj); operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); } const res = await App.safeOps.runLoteSeguro(operaciones, "Registrando Gastos...");
 if (res.status !== "success") return; await App.logic.cargarDatosIniciales();
@@ -1155,7 +1175,7 @@ App.logic.guardarNuevaCompra = async function(datos) {
     if(montoPagadoNum > 0) { Object.keys(gastoPorTipo).forEach((cat, idx) => { const proporcion = gastoPorTipo[cat] / totalNum; const montoCat = montoPagadoNum * proporcion; const nuevoGasto = { id: "GAS-" + Date.now() + "-" + idx, categoria: cat, descripcion: `Compra a ${nombreProv} (${compraId})`, monto: montoCat.toFixed(2), fecha: datos.fecha }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto });await App.logic.cargarDatosIniciales();
 App.ui.toast("Compra registrada");
 App.router.handleRoute();
-};
+},
 
 App.logic.guardarAbonoCompra = async function(datos) {
     App.ui.showLoader("Registrando..."); const compra = App.state.compras.find(c => c.id === datos.compra_id);
