@@ -94,7 +94,34 @@ App.api = {
         }
     },
 
-   App.safeOps = {
+    async fetch(action, payload = {}) {
+        try {
+            const response = await fetch(this.gasUrl, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: action,
+                    payload: payload,
+                    sessionToken: App.state.sessionToken
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.status === "unauthorized") {
+                localStorage.removeItem('erp_session_token');
+                App.state.sessionToken = null;
+                App.router.handleRoute();
+                return data;
+            }
+
+            return data;
+        } catch (error) {
+            return { status: "error", message: "Fallo de conexión." };
+        }
+    }
+};
+
+App.safeOps = {
     async runLoteSeguro(operaciones, loaderText = "Procesando...") {
         App.ui.showLoader(loaderText);
         const res = await App.api.fetch("ejecutar_lote", { operaciones: operaciones });
@@ -126,7 +153,6 @@ App.api = {
         return res;
     }
 };
-
 
 App.ui = {
     container: null,
@@ -178,7 +204,9 @@ async verificarPIN(pin) {
         App.ui.showLoader("Sincronizando Base de Datos..."); 
         try { 
             const hojasA_Descargar = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "movimientos_inventario"]; 
-            const res = await App.api.fetch("leer_todo", { hojas: hojasA_Descargar }); if (res.status === "unauthorized") {
+            const res = await App.api.fetch("leer_todo", { hojas: hojasA_Descargar });
+
+if (res.status === "unauthorized") {
     App.ui.hideLoader();
     return;
 }
@@ -194,7 +222,6 @@ async verificarPIN(pin) {
     async eliminarRegistroGenerico(hoja, id, estado) { if(!confirm("⚠️ ¿Eliminar permanentemente?")) return; App.ui.showLoader("Eliminando..."); const res = await App.api.fetch("eliminar_fila", { nombreHoja: hoja, idFila: id }); App.ui.hideLoader(); if(res.status === "success") { App.state[estado] = App.state[estado].filter(item => item.id !== id); App.ui.toast("Eliminado"); App.router.handleRoute(); } else { App.ui.toast("Error"); } },
     async eliminarPedido(id) { 
         if(!confirm("⚠️ ¿Eliminar pedido por completo?\n\nLos hilos que se enviaron a producción se regresarán automáticamente al inventario.")) return; 
-        App.ui.showLoader("Procesando eliminación y devolviendo stock..."); 
         const pedido = App.state.pedidos.find(p => p.id === id); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === id); const orden = App.state.ordenes_produccion.find(o => detalle && o.pedido_detalle_id === detalle.id); 
         let operaciones = []; let nuevosMovs = [];
         if(orden && orden.receta_personalizada) {
@@ -206,13 +233,12 @@ async verificarPIN(pin) {
         const abonos = App.state.abonos.filter(a => a.pedido_id === id); for(let ab of abonos) operaciones.push({ action: "eliminar_fila", nombreHoja: "abonos_clientes", idFila: ab.id });
 const res = await App.safeOps.runLoteSeguro(operaciones, "Procesando eliminación y devolviendo stock...");
 if (res.status !== "success") return;
-        App.state.pedidos = App.state.pedidos.filter(p => p.id !== id); if(detalle) App.state.pedido_detalle = App.state.pedido_detalle.filter(d => d.id !== detalle.id); if(orden) { App.state.ordenes_produccion = App.state.ordenes_produccion.filter(o => o.id !== orden.id); App.state.pago_artesanos = App.state.pago_artesanos.filter(p => p.orden_id !== orden.id); } App.state.abonos = App.state.abonos.filter(a => a.pedido_id !== id); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Pedido eliminado e inventario restaurado"); App.router.handleRoute(); 
+        App.state.pedidos = App.state.pedidos.filter(p => p.id !== id); if(detalle) App.state.pedido_detalle = App.state.pedido_detalle.filter(d => d.id !== detalle.id); if(orden) { App.state.ordenes_produccion = App.state.ordenes_produccion.filter(o => o.id !== orden.id); App.state.pago_artesanos = App.state.pago_artesanos.filter(p => p.orden_id !== orden.id); } App.state.abonos = App.state.abonos.filter(a => a.pedido_id !== id); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.toast("Pedido eliminado e inventario restaurado"); App.router.handleRoute(); 
     },
     
     async eliminarCompra(id) { 
         if(!confirm("⚠️ ¿Eliminar compra? Se eliminará la compra, el gasto asociado y los movimientos de inventario.")) return; 
-        App.ui.showLoader("Eliminando..."); 
-        let operaciones = [ { action: "eliminar_fila", nombreHoja: "compras", idFila: id } ];
+              let operaciones = [ { action: "eliminar_fila", nombreHoja: "compras", idFila: id } ];
         const gastoAsociado = App.state.gastos.find(g => g.descripcion.includes(id));
         if (gastoAsociado) operaciones.push({ action: "eliminar_fila", nombreHoja: "gastos", idFila: gastoAsociado.id });
         const movimientosAsociados = (App.state.movimientos_inventario || []).filter(m => m.origen_id === id);
@@ -230,7 +256,6 @@ if (res.status !== "success") return;
     // NUEVO: Eliminar reparación limpiando trabajos de artesanos
     async eliminarReparacion(id) {
         if(!confirm("⚠️ ¿Eliminar reparación? Se eliminarán también las tareas y pagos asignados a los artesanos para esta reparación.")) return;
-        App.ui.showLoader("Eliminando...");
         let operaciones = [{ action: "eliminar_fila", nombreHoja: "reparaciones", idFila: id }];
         const pagos = App.state.pago_artesanos.filter(p => p.orden_id === id);
         pagos.forEach(p => operaciones.push({ action: "eliminar_fila", nombreHoja: "pago_artesanos", idFila: p.id }));
@@ -264,7 +289,6 @@ if (res.status !== "success") return;
     eliminarCotizacion(id) { if(!confirm("⚠️ ¿Eliminar cotización?")) return; App.state.cotizaciones = App.state.cotizaciones.filter(c => c.id !== id); localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); App.ui.toast("Eliminada"); App.router.handleRoute(); },
 
     async guardarNuevoPedido(datosFormulario) { 
-        App.ui.showLoader("Procesando pedido..."); 
         const pedidoId = "PED-" + Date.now(); const totalNum = parseFloat(datosFormulario.total) || 0; const anticipoNum = parseFloat(datosFormulario.anticipo) || 0; const cantidadNum = parseInt(datosFormulario.cantidad) || 1; 
         const fechaC = datosFormulario.fecha_creacion ? datosFormulario.fecha_creacion + "T12:00:00.000Z" : new Date().toISOString();
         const producto = App.state.productos.find(p => p.id === datosFormulario.producto_id);
@@ -294,7 +318,7 @@ if (res.status !== "success") return;
         if (resPedido.status === "success") { 
             App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); 
             if(nuevosMovs.length > 0) { if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); }
-            App.ui.hideLoader(); App.ui.toast(esReventa ? "Pedido y stock guardados" : "Guardado (Sin mandar a taller)"); App.router.handleRoute(); 
+          App.ui.toast(esReventa ? "Pedido y stock guardados" : "Guardado (Sin mandar a taller)"); App.router.handleRoute(); 
         } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
     },
     
@@ -324,28 +348,28 @@ if (res.status !== "success") return;
         if (res.status !== "success") return;
         pedido.estado = 'listo para entregar';
         if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs);
-        App.ui.hideLoader(); App.ui.toast("Descontado de bodega"); App.router.handleRoute();
+     App.ui.toast("Descontado de bodega"); App.router.handleRoute();
     },
 
     async confirmarMandarProduccion(datos) {
         const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); const usos = Array.isArray(datos.uso) ? datos.uso : (datos.uso ? [datos.uso] : []); let requerimientos = {}; for(let i=0; i<mats.length; i++){ let mId = mats[i]; let c = parseFloat(cants[i]||0); if(mId && c > 0) requerimientos[mId] = (requerimientos[mId] || 0) + c; } let alertasDeStock = []; for(let mId in requerimientos) { let material = App.state.inventario.find(m => m.id === mId); if(material && parseFloat(material.stock_actual) < requerimientos[mId]) { alertasDeStock.push(`❌ ${material.nombre}: Tienes ${material.stock_actual} y necesitas ${requerimientos[mId]}`); } } if(alertasDeStock.length > 0) { const continuar = confirm("⚠️ ALERTA: NO TIENES SUFICIENTE MATERIAL EN BODEGA ⚠️\n\n" + alertasDeStock.join("\n") + "\n\n¿Quieres enviarlo a producción de todos modos?"); if(!continuar) return; }
-        App.ui.showLoader("Generando Orden..."); let operaciones = []; let nuevosMovs = []; let recetaPersonalizada = [];
+   let operaciones = []; let nuevosMovs = []; let recetaPersonalizada = [];
         for(let i=0; i<mats.length; i++) { const matId = mats[i]; const cant = parseFloat(cants[i] || 0); const usoStr = usos[i] || 'Cuerpo'; if(matId && cant > 0) { recetaPersonalizada.push({ mat_id: matId, cant: cant, uso: usoStr }); const material = App.state.inventario.find(m => m.id === matId); if(material) { const nStock = parseFloat(material.stock_actual) - cant; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }); material.stock_actual = nStock; const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cant, costo_unitario: material.costo_unitario||0, total: (-cant * (material.costo_unitario||0)), notas: `Envío a taller` }; nuevosMovs.push(mov); } } }
         const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datos.pedido_detalle_id, estado: "pendiente", fecha_creacion: new Date().toISOString(), receta_personalizada: JSON.stringify(recetaPersonalizada) }; nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: m }); }); operaciones.push({ action: "guardar_fila", nombreHoja: "ordenes_produccion", datos: nuevaOrden });
         const res = await App.safeOps.runLoteSeguro(operaciones, "Generando Orden...");
-if (res.status !== "success") return; App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Enviado a taller"); App.router.navigate('produccion');
+if (res.status !== "success") return; App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.toast("Enviado a taller"); App.router.navigate('produccion');
     },
     async guardarOrdenStock(datos) { 
-        App.ui.showLoader("Procesando..."); const pedidoId = "PED-STOCK-" + Date.now(); const cantidadNum = parseInt(datos.cantidad) || 1; const datosPedido = { id: pedidoId, cliente_id: "STOCK_INTERNO", total: 0, anticipo: 0, notas: "Producción Interna", fecha_entrega: "", fecha_creacion: new Date().toISOString() }; const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datos.producto_id, cantidad: cantidadNum, precio_unitario: 0 }; 
+        const pedidoId = "PED-STOCK-" + Date.now(); const cantidadNum = parseInt(datos.cantidad) || 1; const datosPedido = { id: pedidoId, cliente_id: "STOCK_INTERNO", total: 0, anticipo: 0, notas: "Producción Interna", fecha_entrega: "", fecha_creacion: new Date().toISOString() }; const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datos.producto_id, cantidad: cantidadNum, precio_unitario: 0 }; 
         let operaciones = []; let nuevosMovs = []; let recetaArray = []; const producto = App.state.productos.find(p => p.id === datos.producto_id); 
         if(producto) { for(let i=1; i<=20; i++) { const matId = producto[`mat_${i}`]; const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * cantidadNum; const uso = producto[`uso_${i}`] || 'Cuerpo'; if(matId && cantTeorica > 0) { recetaArray.push({ mat_id: matId, cant: cantTeorica, uso: uso }); const material = App.state.inventario.find(m => m.id === matId); if(material) { const nStock = parseFloat(material.stock_actual) - cantTeorica; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }); material.stock_actual = nStock; const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cantTeorica, costo_unitario: material.costo_unitario||0, total: (-cantTeorica * (material.costo_unitario||0)), notas: "Stock Interno" }; nuevosMovs.push(mov); } } } } 
         const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datosDetalle.id, estado: "pendiente", fecha_creacion: new Date().toISOString(), receta_personalizada: JSON.stringify(recetaArray) }; nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: m }); }); operaciones.push({ action: "guardar_fila", nombreHoja: "pedidos", datos: datosPedido }, { action: "guardar_fila", nombreHoja: "pedido_detalle", datos: datosDetalle }, { action: "guardar_fila", nombreHoja: "ordenes_produccion", datos: nuevaOrden }); 
        const res = await App.safeOps.runLoteSeguro(operaciones, "Procesando...");
-if (res.status !== "success") return; App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Orden creada"); App.router.handleRoute(); 
+if (res.status !== "success") return; App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs);  App.ui.toast("Orden creada"); App.router.handleRoute(); 
     },
     async guardarTrabajoOrden(ordenId, data, esReparacion = false) { App.ui.showLoader("Asignando..."); const sanitizedTaskName = (data.tarea_nombre || "Trabajo").replace(/[^a-zA-Z0-9_ \-]/g, ""); const pagoObj = { id: "PAGO-" + Date.now() + "-" + sanitizedTaskName, artesano_id: data.artesano_id, orden_id: ordenId, monto_unitario: parseFloat(data.tarea_val), total: parseFloat(data.total), estado: "pendiente", fecha: new Date().toISOString() }; const res = await App.api.fetch("guardar_fila", { nombreHoja: "pago_artesanos", datos: pagoObj }); App.ui.hideLoader(); if(res.status === "success") { App.state.pago_artesanos.push(pagoObj); App.ui.toast("Asignado"); if(esReparacion) { App.router.handleRoute(); } else { App.views.modalEditarOrden(ordenId); } } else { App.ui.toast("Error"); App.router.handleRoute(); } },
     async cerrarOrdenProduccion(datosFormulario) { 
-        App.ui.showLoader("Finalizando..."); const ordenId = datosFormulario.orden_id; const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === orden.pedido_detalle_id) || {}; const producto = App.state.productos.find(p => p.id === detalle.producto_id); let operaciones = [ { action: "actualizar_fila", nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: { estado: 'listo' } } ]; orden.estado = 'listo'; let nuevosMovs = []; 
+     const ordenId = datosFormulario.orden_id; const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === orden.pedido_detalle_id) || {}; const producto = App.state.productos.find(p => p.id === detalle.producto_id); let operaciones = [ { action: "actualizar_fila", nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: { estado: 'listo' } } ]; orden.estado = 'listo'; let nuevosMovs = []; 
         for(let i=1; i<=20; i++) { const matId = datosFormulario[`mat_${i}_id`]; const consumoTeorico = parseFloat(datosFormulario[`mat_${i}_teorico`]); const consumoReal = parseFloat(datosFormulario[`mat_${i}_real`]); if(matId && !isNaN(consumoTeorico) && !isNaN(consumoReal)) { const material = App.state.inventario.find(m => m.id === matId); if(material) { const diferencia = consumoReal - consumoTeorico; if(diferencia !== 0) { const stockAjustado = parseFloat(material.stock_actual) - diferencia; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: stockAjustado } }); material.stock_actual = stockAjustado; const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: diferencia > 0 ? "salida_merma" : "entrada_ajuste", origen: "orden", origen_id: ordenId, ref_tipo: "material", ref_id: material.id, cantidad: -diferencia, costo_unitario: material.costo_unitario||0, total: (-diferencia * (material.costo_unitario||0)), notas: "Ajuste por consumo en taller" }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); } } } } 
         if (datosFormulario.sumar_stock === "1" && producto) { let matHamaca = App.state.inventario.find(m => m.nombre === producto.nombre && m.tipo === 'reventa'); if(matHamaca) { let nStock = parseFloat(matHamaca.stock_actual) + 1; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: matHamaca.id, datosNuevos: { stock_actual: nStock } }); matHamaca.stock_actual = nStock; } else { let nMat = { id: "MAT-" + Date.now() + "REV", nombre: producto.nombre, tipo: "reventa", unidad: "Pzas", stock_actual: 1, fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "materiales", datos: nMat }); App.state.inventario.push(nMat); } App.ui.toast("Guardado en Bodega"); } 
         if(detalle && detalle.pedido_id) { const pedidoMaster = App.state.pedidos.find(p => p.id === detalle.pedido_id); if(pedidoMaster && pedidoMaster.cliente_id !== "STOCK_INTERNO" && pedidoMaster.estado !== 'pagado') { operaciones.push({ action: "actualizar_fila", nombreHoja: "pedidos", idFila: pedidoMaster.id, datosNuevos: { estado: 'listo para entregar' } }); pedidoMaster.estado = 'listo para entregar'; } }
@@ -357,11 +381,11 @@ if (res.status !== "success") return; if(!App.state.movimientos_inventario) App.
         App.ui.showLoader("Liquidando..."); const pagosPendientes = App.state.pago_artesanos.filter(p => p.artesano_id === artesanoId && p.estado === 'pendiente'); let totalPagado = 0; let operaciones = []; 
         for (let pago of pagosPendientes) { operaciones.push({ action: "actualizar_fila", nombreHoja: "pago_artesanos", idFila: pago.id, datosNuevos: { estado: 'pagado' } }); pago.estado = 'pagado'; totalPagado += parseFloat(pago.total || 0); } 
         if (totalPagado > 0) { const artesano = App.state.artesanos.find(a => a.id === artesanoId); const gastoObj = { id: "GAS-" + Date.now(), descripcion: "Nómina - " + (artesano ? artesano.nombre : 'Artesano'), categoria: "nomina", monto: totalPagado, fecha: new Date().toISOString().split('T')[0] }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); App.state.gastos.push(gastoObj); } 
-        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.ui.hideLoader(); App.ui.toast(`Liquidados $${totalPagado}`); App.router.handleRoute(); 
+        await App.api.fetch("ejecutar_lote", { operaciones: operaciones });  App.ui.toast(`Liquidados $${totalPagado}`); App.router.handleRoute(); 
     },
     
    async guardarNuevaCompra(datos) { 
-        App.ui.showLoader("Comprando..."); const compraId = "COM-" + Date.now(); const detallesCompra = []; let operaciones = []; let nuevosMovs = []; const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); const precios = Array.isArray(datos.precio_u) ? datos.precio_u : (datos.precio_u ? [datos.precio_u] : []);
+        const compraId = "COM-" + Date.now(); const detallesCompra = []; let operaciones = []; let nuevosMovs = []; const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); const precios = Array.isArray(datos.precio_u) ? datos.precio_u : (datos.precio_u ? [datos.precio_u] : []);
         let gastoPorTipo = {}; // Para separar hilos, accesorios, reventa
         for(let i=0; i<mats.length; i++) { 
             const matId = mats[i]; const cant = parseFloat(cants[i] || 0); const precioUnitario = parseFloat(precios[i] || 0); const totalFila = cant * precioUnitario; 
@@ -392,11 +416,11 @@ if (res.status !== "success") return; if(!App.state.movimientos_inventario) App.
             operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto }); App.state.gastos.push(nuevoGasto);
         });
         const res = await App.safeOps.runLoteSeguro(operaciones, "Comprando...");
-if (res.status !== "success") return; App.state.compras.push(compra); if(!App.state.movimientos_inventario) App.state.movimientos_inventario=[]; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Compra registrada"); App.router.handleRoute();  
+if (res.status !== "success") return; App.state.compras.push(compra); if(!App.state.movimientos_inventario) App.state.movimientos_inventario=[]; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.toast("Compra registrada"); App.router.handleRoute();  
     },
     
-    async guardarMultiplesGastos(datos) { App.ui.showLoader("Registrando Gastos..."); const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; let operaciones = []; let nuevosGastos = []; for(let i=0; i<descripciones.length; i++) { if(!descripciones[i]) continue; const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; nuevosGastos.push(gastoObj); operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); } const res = await App.safeOps.runLoteSeguro(operaciones, "Registrando Gastos...");
-if (res.status !== "success") return; App.state.gastos.push(...nuevosGastos); App.ui.hideLoader(); App.ui.toast("¡Gastos registrados!"); App.router.handleRoute(); },
+    async guardarMultiplesGastos(datos) { const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; let operaciones = []; let nuevosGastos = []; for(let i=0; i<descripciones.length; i++) { if(!descripciones[i]) continue; const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; nuevosGastos.push(gastoObj); operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); } const res = await App.safeOps.runLoteSeguro(operaciones, "Registrando Gastos...");
+if (res.status !== "success") return; App.state.gastos.push(...nuevosGastos); App.ui.toast("¡Gastos registrados!"); App.router.handleRoute(); },
     
     // MEJORA: GUARDAR Y EDITAR REPARACIÓN UNIFICADO
     async guardarNuevaReparacion(datos) { 
