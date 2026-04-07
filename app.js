@@ -51,7 +51,7 @@ const App = { views: {} };
 App.state = {
     config: { empresa: "Descanso Maya", moneda: "MXN", logoUrl: "https://i.ibb.co/5h0kNKrZ/DESCANSO-MAYA.png", redesSociales: "@descansomaya.mx" },
     sessionToken: localStorage.getItem('erp_session_token') || null,
-    cotizaciones: JSON.parse(localStorage.getItem('erp_cotizaciones')) || [], }
+    cotizaciones: JSON.parse(localStorage.getItem('erp_cotizaciones')) || [], 
 
 App.api = {
     gasUrl: "https://script.google.com/macros/s/AKfycbxL3KzjesyZIfiC-Dyr0SwwzwNnPsv5FgHpt-JhyscNpN1eTvRwAh_rdgoxdVnKTAwu/exec",
