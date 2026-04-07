@@ -232,7 +232,7 @@ if (res.status === "error") {
         const pedido = App.state.pedidos.find(p => p.id === id); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === id); const orden = App.state.ordenes_produccion.find(o => detalle && o.pedido_detalle_id === detalle.id); 
         let operaciones = []; let nuevosMovs = [];
         if(orden && orden.receta_personalizada) {
-            try { let receta = JSON.parse(orden.receta_personalizada); for(let item of receta) { let material = App.state.inventario.find(m => m.id === item.mat_id); if(material && parseFloat(item.cant) > 0) { let nStock = parseFloat(material.stock_actual) + parseFloat(item.cant); operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }); material.stock_actual = nStock; const mov = { id: "MOV-" + Date.now() + Math.random().toString(36).substr(2,5), fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "entrada_devolucion", origen: "orden", origen_id: orden.id, ref_tipo: "material", ref_id: material.id, cantidad: item.cant, costo_unitario: material.costo_unitario||0, total: (item.cant * (material.costo_unitario||0)), notas: `Devolución por pedido cancelado: ${id.replace('PED-','')}` }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); } } } catch(e) {}
+            try { let receta = JSON.parse(orden.receta_personalizada); for(let item of receta) { let material = App.state.inventario.find(m => m.id === item.mat_id); if(material && parseFloat(item.cant) > 0) { let nStock = parseFloat(material.stock_actual) + parseFloat(item.cant); operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } });  const mov = { id: "MOV-" + Date.now() + Math.random().toString(36).substr(2,5), fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "entrada_devolucion", origen: "orden", origen_id: orden.id, ref_tipo: "material", ref_id: material.id, cantidad: item.cant, costo_unitario: material.costo_unitario||0, total: (item.cant * (material.costo_unitario||0)), notas: `Devolución por pedido cancelado: ${id.replace('PED-','')}` }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); } } } catch(e) {}
         }
         operaciones.push({ action: "eliminar_fila", nombreHoja: "pedidos", idFila: id }); 
         if(detalle) operaciones.push({ action: "eliminar_fila", nombreHoja: "pedido_detalle", idFila: detalle.id }); 
@@ -240,8 +240,10 @@ if (res.status === "error") {
         const abonos = App.state.abonos.filter(a => a.pedido_id === id); for(let ab of abonos) operaciones.push({ action: "eliminar_fila", nombreHoja: "abonos_clientes", idFila: ab.id });
 const res = await App.safeOps.runLoteSeguro(operaciones, "Procesando eliminación y devolviendo stock...");
 if (res.status !== "success") return;
-        App.state.pedidos = App.state.pedidos.filter(p => p.id !== id); if(detalle) App.state.pedido_detalle = App.state.pedido_detalle.filter(d => d.id !== detalle.id); if(orden) { App.state.ordenes_produccion = App.state.ordenes_produccion.filter(o => o.id !== orden.id); App.state.pago_artesanos = App.state.pago_artesanos.filter(p => p.orden_id !== orden.id); } App.state.abonos = App.state.abonos.filter(a => a.pedido_id !== id); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.toast("Pedido eliminado e inventario restaurado"); App.router.handleRoute(); 
-    },
+        await App.logic.cargarDatosIniciales();
+App.ui.toast("Pedido eliminado e inventario restaurado");
+App.router.handleRoute();
+          },
     
     async eliminarCompra(id) { 
         if(!confirm("⚠️ ¿Eliminar compra? Se eliminará la compra, el gasto asociado y los movimientos de inventario.")) return; 
@@ -252,11 +254,9 @@ if (res.status !== "success") return;
         movimientosAsociados.forEach(m => operaciones.push({ action: "eliminar_fila", nombreHoja: "movimientos_inventario", idFila: m.id }) );
         const res = await App.safeOps.runLoteSeguro(operaciones, "Eliminando...");
         if(res.status === "success") { 
-            App.state.compras = App.state.compras.filter(c => c.id !== id); 
-            if (gastoAsociado) App.state.gastos = App.state.gastos.filter(g => g.id !== gastoAsociado.id);
-            App.state.movimientos_inventario = App.state.movimientos_inventario.filter(m => m.origen_id !== id);
-            App.ui.toast("Compra eliminada."); 
-            App.router.handleRoute(); 
+            await App.logic.cargarDatosIniciales();
+App.ui.toast("Compra eliminada.");
+App.router.handleRoute();
         } else { App.ui.toast("Error al eliminar"); } 
     },
 
@@ -269,10 +269,9 @@ if (res.status !== "success") return;
         
         const res = await App.safeOps.runLoteSeguro(operaciones, "Eliminando...");
         if(res.status === "success") {
-            App.state.reparaciones = App.state.reparaciones.filter(r => r.id !== id);
-            App.state.pago_artesanos = App.state.pago_artesanos.filter(p => p.orden_id !== id);
-            App.ui.toast("Reparación eliminada");
-            App.router.handleRoute();
+           await App.logic.cargarDatosIniciales();
+App.ui.toast("Reparación eliminada");
+App.router.handleRoute();
         } else { App.ui.toast("Error al eliminar"); }
     },
     
@@ -313,7 +312,6 @@ if (res.status !== "success") return;
                     if(material) {
                         const nStock = parseFloat(material.stock_actual) - cantTeorica;
                         operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } });
-                        material.stock_actual = nStock; 
                         const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_venta", origen: "pedido", origen_id: pedidoId, ref_tipo: "material", ref_id: material.id, cantidad: -cantTeorica, costo_unitario: material.costo_unitario||0, total: (-cantTeorica * (material.costo_unitario||0)), notas: `Venta directa reventa` };
                         nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov });
                     }
@@ -323,11 +321,12 @@ if (res.status !== "success") return;
 
         const resPedido = await App.safeOps.runLoteSeguro(operaciones, "Procesando pedido...");
         if (resPedido.status === "success") { 
-            App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); 
-            if(nuevosMovs.length > 0) { if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); }
-          App.ui.toast(esReventa ? "Pedido y stock guardados" : "Guardado (Sin mandar a taller)"); App.router.handleRoute(); 
-        } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
-    },
+           await App.logic.cargarDatosIniciales();
+App.ui.toast(esReventa ? "Pedido y stock guardados" : "Guardado (Sin mandar a taller)");
+App.router.handleRoute();
+        } else {
+    App.ui.toast("Error");
+}
     
     async entregarDeBodega(pedidoId) {
         const pedido = App.state.pedidos.find(p => p.id === pedidoId);
@@ -344,7 +343,7 @@ if (res.status !== "success") return;
                 if(material) {
                     const nStock = parseFloat(material.stock_actual) - cantTeorica;
                     operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } });
-                    material.stock_actual = nStock; 
+                
                     const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_venta", origen: "pedido", origen_id: pedidoId, ref_tipo: "material", ref_id: material.id, cantidad: -cantTeorica, costo_unitario: material.costo_unitario||0, total: (-cantTeorica * (material.costo_unitario||0)), notas: `Entrega de bodega` };
                     nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov });
                 }
@@ -353,42 +352,51 @@ if (res.status !== "success") return;
         operaciones.push({ action: "actualizar_fila", nombreHoja: "pedidos", idFila: pedidoId, datosNuevos: { estado: 'listo para entregar' } });
         const res = await App.safeOps.runLoteSeguro(operaciones, "Descontando...");
         if (res.status !== "success") return;
-        pedido.estado = 'listo para entregar';
-        if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs);
-     App.ui.toast("Descontado de bodega"); App.router.handleRoute();
+        await App.logic.cargarDatosIniciales();
+App.ui.toast("Descontado de bodega");
+App.router.handleRoute();
+     
     },
 
     async confirmarMandarProduccion(datos) {
         const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); const usos = Array.isArray(datos.uso) ? datos.uso : (datos.uso ? [datos.uso] : []); let requerimientos = {}; for(let i=0; i<mats.length; i++){ let mId = mats[i]; let c = parseFloat(cants[i]||0); if(mId && c > 0) requerimientos[mId] = (requerimientos[mId] || 0) + c; } let alertasDeStock = []; for(let mId in requerimientos) { let material = App.state.inventario.find(m => m.id === mId); if(material && parseFloat(material.stock_actual) < requerimientos[mId]) { alertasDeStock.push(`❌ ${material.nombre}: Tienes ${material.stock_actual} y necesitas ${requerimientos[mId]}`); } } if(alertasDeStock.length > 0) { const continuar = confirm("⚠️ ALERTA: NO TIENES SUFICIENTE MATERIAL EN BODEGA ⚠️\n\n" + alertasDeStock.join("\n") + "\n\n¿Quieres enviarlo a producción de todos modos?"); if(!continuar) return; }
    let operaciones = []; let nuevosMovs = []; let recetaPersonalizada = [];
-        for(let i=0; i<mats.length; i++) { const matId = mats[i]; const cant = parseFloat(cants[i] || 0); const usoStr = usos[i] || 'Cuerpo'; if(matId && cant > 0) { recetaPersonalizada.push({ mat_id: matId, cant: cant, uso: usoStr }); const material = App.state.inventario.find(m => m.id === matId); if(material) { const nStock = parseFloat(material.stock_actual) - cant; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }); material.stock_actual = nStock; const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cant, costo_unitario: material.costo_unitario||0, total: (-cant * (material.costo_unitario||0)), notas: `Envío a taller` }; nuevosMovs.push(mov); } } }
+        for(let i=0; i<mats.length; i++) { const matId = mats[i]; const cant = parseFloat(cants[i] || 0); const usoStr = usos[i] || 'Cuerpo'; if(matId && cant > 0) { recetaPersonalizada.push({ mat_id: matId, cant: cant, uso: usoStr }); const material = App.state.inventario.find(m => m.id === matId); if(material) { const nStock = parseFloat(material.stock_actual) - cant; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } });  const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cant, costo_unitario: material.costo_unitario||0, total: (-cant * (material.costo_unitario||0)), notas: `Envío a taller` }; nuevosMovs.push(mov); } } }
         const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datos.pedido_detalle_id, estado: "pendiente", fecha_creacion: new Date().toISOString(), receta_personalizada: JSON.stringify(recetaPersonalizada) }; nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: m }); }); operaciones.push({ action: "guardar_fila", nombreHoja: "ordenes_produccion", datos: nuevaOrden });
         const res = await App.safeOps.runLoteSeguro(operaciones, "Generando Orden...");
-if (res.status !== "success") return; App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.toast("Enviado a taller"); App.router.navigate('produccion');
-    },
+if (res.status !== "success") return; await App.logic.cargarDatosIniciales();
+App.ui.toast("Enviado a taller");
+App.router.navigate('produccion');  },
     async guardarOrdenStock(datos) { 
         const pedidoId = "PED-STOCK-" + Date.now(); const cantidadNum = parseInt(datos.cantidad) || 1; const datosPedido = { id: pedidoId, cliente_id: "STOCK_INTERNO", total: 0, anticipo: 0, notas: "Producción Interna", fecha_entrega: "", fecha_creacion: new Date().toISOString() }; const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datos.producto_id, cantidad: cantidadNum, precio_unitario: 0 }; 
         let operaciones = []; let nuevosMovs = []; let recetaArray = []; const producto = App.state.productos.find(p => p.id === datos.producto_id); 
-        if(producto) { for(let i=1; i<=20; i++) { const matId = producto[`mat_${i}`]; const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * cantidadNum; const uso = producto[`uso_${i}`] || 'Cuerpo'; if(matId && cantTeorica > 0) { recetaArray.push({ mat_id: matId, cant: cantTeorica, uso: uso }); const material = App.state.inventario.find(m => m.id === matId); if(material) { const nStock = parseFloat(material.stock_actual) - cantTeorica; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }); material.stock_actual = nStock; const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cantTeorica, costo_unitario: material.costo_unitario||0, total: (-cantTeorica * (material.costo_unitario||0)), notas: "Stock Interno" }; nuevosMovs.push(mov); } } } } 
+        if(producto) { for(let i=1; i<=20; i++) { const matId = producto[`mat_${i}`]; const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * cantidadNum; const uso = producto[`uso_${i}`] || 'Cuerpo'; if(matId && cantTeorica > 0) { recetaArray.push({ mat_id: matId, cant: cantTeorica, uso: uso }); const material = App.state.inventario.find(m => m.id === matId); if(material) { const nStock = parseFloat(material.stock_actual) - cantTeorica; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }); const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cantTeorica, costo_unitario: material.costo_unitario||0, total: (-cantTeorica * (material.costo_unitario||0)), notas: "Stock Interno" }; nuevosMovs.push(mov); } } } } 
         const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datosDetalle.id, estado: "pendiente", fecha_creacion: new Date().toISOString(), receta_personalizada: JSON.stringify(recetaArray) }; nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: m }); }); operaciones.push({ action: "guardar_fila", nombreHoja: "pedidos", datos: datosPedido }, { action: "guardar_fila", nombreHoja: "pedido_detalle", datos: datosDetalle }, { action: "guardar_fila", nombreHoja: "ordenes_produccion", datos: nuevaOrden }); 
        const res = await App.safeOps.runLoteSeguro(operaciones, "Procesando...");
-if (res.status !== "success") return; App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs);  App.ui.toast("Orden creada"); App.router.handleRoute(); 
-    },
+if (res.status !== "success") return; await App.logic.cargarDatosIniciales();
+App.ui.toast("Orden creada");
+App.router.handleRoute();    },
     async guardarTrabajoOrden(ordenId, data, esReparacion = false) { App.ui.showLoader("Asignando..."); const sanitizedTaskName = (data.tarea_nombre || "Trabajo").replace(/[^a-zA-Z0-9_ \-]/g, ""); const pagoObj = { id: "PAGO-" + Date.now() + "-" + sanitizedTaskName, artesano_id: data.artesano_id, orden_id: ordenId, monto_unitario: parseFloat(data.tarea_val), total: parseFloat(data.total), estado: "pendiente", fecha: new Date().toISOString() }; const res = await App.api.fetch("guardar_fila", { nombreHoja: "pago_artesanos", datos: pagoObj }); App.ui.hideLoader(); if(res.status === "success") { App.state.pago_artesanos.push(pagoObj); App.ui.toast("Asignado"); if(esReparacion) { App.router.handleRoute(); } else { App.views.modalEditarOrden(ordenId); } } else { App.ui.toast("Error"); App.router.handleRoute(); } },
     async cerrarOrdenProduccion(datosFormulario) { 
-     const ordenId = datosFormulario.orden_id; const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === orden.pedido_detalle_id) || {}; const producto = App.state.productos.find(p => p.id === detalle.producto_id); let operaciones = [ { action: "actualizar_fila", nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: { estado: 'listo' } } ]; orden.estado = 'listo'; let nuevosMovs = []; 
-        for(let i=1; i<=20; i++) { const matId = datosFormulario[`mat_${i}_id`]; const consumoTeorico = parseFloat(datosFormulario[`mat_${i}_teorico`]); const consumoReal = parseFloat(datosFormulario[`mat_${i}_real`]); if(matId && !isNaN(consumoTeorico) && !isNaN(consumoReal)) { const material = App.state.inventario.find(m => m.id === matId); if(material) { const diferencia = consumoReal - consumoTeorico; if(diferencia !== 0) { const stockAjustado = parseFloat(material.stock_actual) - diferencia; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: stockAjustado } }); material.stock_actual = stockAjustado; const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: diferencia > 0 ? "salida_merma" : "entrada_ajuste", origen: "orden", origen_id: ordenId, ref_tipo: "material", ref_id: material.id, cantidad: -diferencia, costo_unitario: material.costo_unitario||0, total: (-diferencia * (material.costo_unitario||0)), notas: "Ajuste por consumo en taller" }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); } } } } 
-        if (datosFormulario.sumar_stock === "1" && producto) { let matHamaca = App.state.inventario.find(m => m.nombre === producto.nombre && m.tipo === 'reventa'); if(matHamaca) { let nStock = parseFloat(matHamaca.stock_actual) + 1; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: matHamaca.id, datosNuevos: { stock_actual: nStock } }); matHamaca.stock_actual = nStock; } else { let nMat = { id: "MAT-" + Date.now() + "REV", nombre: producto.nombre, tipo: "reventa", unidad: "Pzas", stock_actual: 1, fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "materiales", datos: nMat }); App.state.inventario.push(nMat); } App.ui.toast("Guardado en Bodega"); } 
-        if(detalle && detalle.pedido_id) { const pedidoMaster = App.state.pedidos.find(p => p.id === detalle.pedido_id); if(pedidoMaster && pedidoMaster.cliente_id !== "STOCK_INTERNO" && pedidoMaster.estado !== 'pagado') { operaciones.push({ action: "actualizar_fila", nombreHoja: "pedidos", idFila: pedidoMaster.id, datosNuevos: { estado: 'listo para entregar' } }); pedidoMaster.estado = 'listo para entregar'; } }
+     const ordenId = datosFormulario.orden_id; const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id) || {}; const producto = App.state.productos.find(p => p.id === detalle.producto_id); let operaciones = [ { action: "actualizar_fila", nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: { estado: 'listo' } } ]; let nuevosMovs = []; 
+        for(let i=1; i<=20; i++) { const matId = datosFormulario[`mat_${i}_id`]; const consumoTeorico = parseFloat(datosFormulario[`mat_${i}_teorico`]); const consumoReal = parseFloat(datosFormulario[`mat_${i}_real`]); if(matId && !isNaN(consumoTeorico) && !isNaN(consumoReal)) { const material = App.state.inventario.find(m => m.id === matId); if(material) { const diferencia = consumoReal - consumoTeorico; if(diferencia !== 0) { const stockAjustado = parseFloat(material.stock_actual) - diferencia; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: stockAjustado } }); const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: diferencia > 0 ? "salida_merma" : "entrada_ajuste", origen: "orden", origen_id: ordenId, ref_tipo: "material", ref_id: material.id, cantidad: -diferencia, costo_unitario: material.costo_unitario||0, total: (-diferencia * (material.costo_unitario||0)), notas: "Ajuste por consumo en taller" }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); } } } } 
+        if (datosFormulario.sumar_stock === "1" && producto) { let matHamaca = App.state.inventario.find(m => m.nombre === producto.nombre && m.tipo === 'reventa'); if(matHamaca) { let nStock = parseFloat(matHamaca.stock_actual) + 1; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: matHamaca.id, datosNuevos: { stock_actual: nStock } });  } else { let nMat = { id: "MAT-" + Date.now() + "REV", nombre: producto.nombre, tipo: "reventa", unidad: "Pzas", stock_actual: 1, fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "materiales", datos: nMat });  } App.ui.toast("Guardado en Bodega"); } 
+        if(detalle && detalle.pedido_id) { const pedidoMaster = App.state.pedidos.find(p => p.id === detalle.pedido_id); if(pedidoMaster && pedidoMaster.cliente_id !== "STOCK_INTERNO" && pedidoMaster.estado !== 'pagado') { operaciones.push({ action: "actualizar_fila", nombreHoja: "pedidos", idFila: pedidoMaster.id, datosNuevos: { estado: 'listo para entregar' } }); } }
         const res = await App.safeOps.runLoteSeguro(operaciones, "Finalizando...");
-if (res.status !== "success") return; if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("¡Terminado!"); App.router.handleRoute(); 
+if (res.status !== "success") return;  await App.logic.cargarDatosIniciales();
+App.ui.toast("¡Terminado!");
+App.router.handleRoute();
     },
     async procesarCambioOrden(ordenId, datos) { if (datos.estado === 'listo') { App.views.formCerrarOrden(ordenId); } else { App.ui.showLoader("Actualizando..."); const res = await App.api.fetch("actualizar_fila", { nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: datos }); App.ui.hideLoader(); if (res.status === "success") { const ordenIndex = App.state.ordenes_produccion.findIndex(o => o.id === ordenId); App.state.ordenes_produccion[ordenIndex] = { ...App.state.ordenes_produccion[ordenIndex], ...datos }; App.ui.toast("Actualizado"); App.router.handleRoute(); } else { App.ui.toast("Error"); } } },
     async liquidarNomina(artesanoId) { 
         App.ui.showLoader("Liquidando..."); const pagosPendientes = App.state.pago_artesanos.filter(p => p.artesano_id === artesanoId && p.estado === 'pendiente'); let totalPagado = 0; let operaciones = []; 
-        for (let pago of pagosPendientes) { operaciones.push({ action: "actualizar_fila", nombreHoja: "pago_artesanos", idFila: pago.id, datosNuevos: { estado: 'pagado' } }); pago.estado = 'pagado'; totalPagado += parseFloat(pago.total || 0); } 
-        if (totalPagado > 0) { const artesano = App.state.artesanos.find(a => a.id === artesanoId); const gastoObj = { id: "GAS-" + Date.now(), descripcion: "Nómina - " + (artesano ? artesano.nombre : 'Artesano'), categoria: "nomina", monto: totalPagado, fecha: new Date().toISOString().split('T')[0] }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); App.state.gastos.push(gastoObj); } 
-        await App.api.fetch("ejecutar_lote", { operaciones: operaciones });  App.ui.toast(`Liquidados $${totalPagado}`); App.router.handleRoute(); 
+        for (let pago of pagosPendientes) { operaciones.push({ action: "actualizar_fila", nombreHoja: "pago_artesanos", idFila: pago.id, datosNuevos: { estado: 'pagado' } });  totalPagado += parseFloat(pago.total || 0); } 
+        if (totalPagado > 0) { const artesano = App.state.artesanos.find(a => a.id === artesanoId); const gastoObj = { id: "GAS-" + Date.now(), descripcion: "Nómina - " + (artesano ? artesano.nombre : 'Artesano'), categoria: "nomina", monto: totalPagado, fecha: new Date().toISOString().split('T')[0] }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj });  } 
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Liquidando...");
+if (res.status !== "success") return;
+await App.logic.cargarDatosIniciales();
+App.ui.toast(`Liquidados $${totalPagado}`);
+App.router.handleRoute(); 
     },
     
    async guardarNuevaCompra(datos) { 
@@ -405,13 +413,13 @@ if (res.status !== "success") return; if(!App.state.movimientos_inventario) App.
                     detallesCompra.push({ mat_id: matId, nombre: material.nombre, cantidad: cant, costo_unitario: precioUnitario }); 
                     const nuevoStock = parseFloat(material.stock_actual) + cant; 
                     operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock, costo_unitario: precioUnitario } }); 
-                    material.stock_actual = nuevoStock; material.costo_unitario = precioUnitario; 
+                    
                     if (material.tipo === 'reventa') { 
                         const existeProd = App.state.productos.find(p => p.mat_1 === material.id || p.nombre.toLowerCase() === material.nombre.toLowerCase()); 
                         if(!existeProd) { 
                             const nuevoProd = { id: "PROD-" + Date.now() + i, nombre: material.nombre, categoria: "reventa", clasificacion: "Reventa", precio_venta: 0, mat_1: material.id, cant_1: 1, uso_1: "Completo", activo: "TRUE", fecha_creacion: new Date().toISOString() }; 
-                            operaciones.push({ action: "guardar_fila", nombreHoja: "productos", datos: nuevoProd }); App.state.productos.push(nuevoProd); 
-                        } else if (existeProd.mat_1 !== material.id) { operaciones.push({ action: "actualizar_fila", nombreHoja: "productos", idFila: existeProd.id, datosNuevos: { mat_1: material.id } }); existeProd.mat_1 = material.id; }
+                            operaciones.push({ action: "guardar_fila", nombreHoja: "productos", datos: nuevoProd }); 
+                        } else if (existeProd.mat_1 !== material.id) { operaciones.push({ action: "actualizar_fila", nombreHoja: "productos", idFila: existeProd.id, datosNuevos: { mat_1: material.id } }); }
                     } 
                     const mov = { id: "MOV-" + Date.now() + i, fecha: datos.fecha, tipo_movimiento: "entrada_compra", origen: "compra", origen_id: compraId, ref_tipo: "material", ref_id: material.id, cantidad: cant, costo_unitario: precioUnitario, total: totalFila, notas: "Compra a proveedor" }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); 
                 } 
@@ -420,14 +428,16 @@ if (res.status !== "success") return; if(!App.state.movimientos_inventario) App.
         const compra = { id: compraId, proveedor_id: datos.proveedor_id, fecha: datos.fecha, total: parseFloat(datos.total), monto_pagado: parseFloat(datos.total), estado: "pagado", detalles: JSON.stringify(detallesCompra), fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "compras", datos: compra }); const proveedor = App.state.proveedores.find(p => p.id === datos.proveedor_id); const nombreProv = proveedor ? proveedor.nombre : "Proveedor"; 
         Object.keys(gastoPorTipo).forEach((cat, idx) => {
             const nuevoGasto = { id: "GAS-" + Date.now() + "-" + idx, categoria: cat, descripcion: `Compra a ${nombreProv} (${compraId})`, monto: gastoPorTipo[cat], fecha: datos.fecha }; 
-            operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto }); App.state.gastos.push(nuevoGasto);
+            operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto }); 
         });
         const res = await App.safeOps.runLoteSeguro(operaciones, "Comprando...");
 if (res.status !== "success") return; App.state.compras.push(compra); if(!App.state.movimientos_inventario) App.state.movimientos_inventario=[]; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.toast("Compra registrada"); App.router.handleRoute();  
     },
     
     async guardarMultiplesGastos(datos) { const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; let operaciones = []; let nuevosGastos = []; for(let i=0; i<descripciones.length; i++) { if(!descripciones[i]) continue; const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; nuevosGastos.push(gastoObj); operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); } const res = await App.safeOps.runLoteSeguro(operaciones, "Registrando Gastos...");
-if (res.status !== "success") return; App.state.gastos.push(...nuevosGastos); App.ui.toast("¡Gastos registrados!"); App.router.handleRoute(); },
+if (res.status !== "success") return; await App.logic.cargarDatosIniciales();
+App.ui.toast("¡Gastos registrados!");
+App.router.handleRoute();},
     
     // MEJORA: GUARDAR Y EDITAR REPARACIÓN UNIFICADO
     async guardarNuevaReparacion(datos) { 
@@ -1140,8 +1150,9 @@ App.logic.guardarNuevaCompra = async function(datos) {
     } 
     const totalNum = parseFloat(datos.total); const montoPagadoNum = parseFloat(datos.monto_pagado) || 0; const estadoCompra = montoPagadoNum >= totalNum ? 'pagado' : 'credito';
     const compra = { id: compraId, proveedor_id: datos.proveedor_id, fecha: datos.fecha, total: totalNum, monto_pagado: montoPagadoNum, estado: estadoCompra, detalles: JSON.stringify(detallesCompra), fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "compras", datos: compra }); const proveedor = App.state.proveedores.find(p => p.id === datos.proveedor_id); const nombreProv = proveedor ? proveedor.nombre : "Proveedor"; 
-    if(montoPagadoNum > 0) { Object.keys(gastoPorTipo).forEach((cat, idx) => { const proporcion = gastoPorTipo[cat] / totalNum; const montoCat = montoPagadoNum * proporcion; const nuevoGasto = { id: "GAS-" + Date.now() + "-" + idx, categoria: cat, descripcion: `Compra a ${nombreProv} (${compraId})`, monto: montoCat.toFixed(2), fecha: datos.fecha }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto }); App.state.gastos.push(nuevoGasto); }); }
-    await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.compras.push(compra); if(!App.state.movimientos_inventario) App.state.movimientos_inventario=[]; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Compra registrada"); App.router.handleRoute();  
+    if(montoPagadoNum > 0) { Object.keys(gastoPorTipo).forEach((cat, idx) => { const proporcion = gastoPorTipo[cat] / totalNum; const montoCat = montoPagadoNum * proporcion; const nuevoGasto = { id: "GAS-" + Date.now() + "-" + idx, categoria: cat, descripcion: `Compra a ${nombreProv} (${compraId})`, monto: montoCat.toFixed(2), fecha: datos.fecha }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto });await App.logic.cargarDatosIniciales();
+App.ui.toast("Compra registrada");
+App.router.handleRoute();
 };
 
 App.logic.guardarAbonoCompra = async function(datos) {
