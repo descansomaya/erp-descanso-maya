@@ -49,14 +49,52 @@ window.switchTabPed = function(tabId, btn) {
 const App = { views: {} }; 
 
 App.state = {
-    config: { empresa: "Descanso Maya", moneda: "MXN", logoUrl: "https://i.ibb.co/5h0kNKrZ/DESCANSO-MAYA.png", redesSociales: "@descansomaya.mx" },
+    config: {
+        empresa: "Descanso Maya",
+        moneda: "MXN",
+        logoUrl: "https://i.ibb.co/5h0kNKrZ/DESCANSO-MAYA.png",
+        redesSociales: "@descansomaya.mx"
+    },
     sessionToken: localStorage.getItem('erp_session_token') || null,
-    cotizaciones: JSON.parse(localStorage.getItem('erp_cotizaciones')) || [], 
+    cotizaciones: JSON.parse(localStorage.getItem('erp_cotizaciones')) || [],
+    pedidos: [],
+    pedido_detalle: [],
+    ordenes_produccion: [],
+    artesanos: [],
+    inventario: [],
+    productos: [],
+    clientes: [],
+    abonos: [],
+    gastos: [],
+    compras: [],
+    proveedores: [],
+    reparaciones: [],
+    tarifas_artesano: [],
+    pago_artesanos: [],
+    movimientos_inventario: []
+};
 
 App.api = {
     gasUrl: "https://script.google.com/macros/s/AKfycbxL3KzjesyZIfiC-Dyr0SwwzwNnPsv5FgHpt-JhyscNpN1eTvRwAh_rdgoxdVnKTAwu/exec",
 
-    App.safeOps = {
+    async login(pin) {
+        try {
+            const response = await fetch(this.gasUrl, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'login',
+                    pin: pin
+                })
+            });
+
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            return { status: "error", message: "Fallo de conexión." };
+        }
+    },
+
+   App.safeOps = {
     async runLoteSeguro(operaciones, loaderText = "Procesando...") {
         App.ui.showLoader(loaderText);
         const res = await App.api.fetch("ejecutar_lote", { operaciones: operaciones });
@@ -88,55 +126,7 @@ App.api = {
         return res;
     }
 };
-    
-    async login(pin) {
-        try {
-            const response = await fetch(this.gasUrl, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'login',
-                    pin: pin
-                })
-            });
 
-            const data = await response.json();
-
-            if (data.status !== "success") {
-                return data;
-            }
-
-            return data;
-        } catch (error) {
-            return { status: "error", message: "Fallo de conexión." };
-        }
-    },
-
-    async fetch(action, payload = {}) {
-        try {
-            const response = await fetch(this.gasUrl, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: action,
-                    payload: payload,
-                    sessionToken: App.state.sessionToken
-                })
-            });
-
-            const data = await response.json();
-
-            if (data.status === "unauthorized") {
-                localStorage.removeItem('erp_session_token');
-                App.state.sessionToken = null;
-                App.router.handleRoute();
-                return data;
-            }
-
-            return data;
-        } catch (error) {
-            return { status: "error", message: "Fallo de conexión." };
-        }
-    }
-};
 
 App.ui = {
     container: null,
@@ -188,7 +178,10 @@ async verificarPIN(pin) {
         App.ui.showLoader("Sincronizando Base de Datos..."); 
         try { 
             const hojasA_Descargar = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "movimientos_inventario"]; 
-            const res = await App.api.fetch("leer_todo", { hojas: hojasA_Descargar }); 
+            const res = await App.api.fetch("leer_todo", { hojas: hojasA_Descargar }); if (res.status === "unauthorized") {
+    App.ui.hideLoader();
+    return;
+}
             if (res.status === "error") throw new Error(res.message); 
             const bd = res.data;
             App.state.inventario = bd["materiales"] || []; App.state.clientes = bd["clientes"] || []; App.state.productos = bd["productos"] || []; App.state.pedidos = bd["pedidos"] || []; App.state.pedido_detalle = bd["pedido_detalle"] || []; App.state.ordenes_produccion = bd["ordenes_produccion"] || []; App.state.artesanos = bd["artesanos"] || []; App.state.abonos = bd["abonos_clientes"] || []; App.state.gastos = bd["gastos"] || []; App.state.compras = bd["compras"] || []; App.state.proveedores = bd["proveedores"] || []; App.state.reparaciones = bd["reparaciones"] || []; App.state.tarifas_artesano = bd["tarifas_artesano"] || []; App.state.pago_artesanos = bd["pago_artesanos"] || []; App.state.movimientos_inventario = bd["movimientos_inventario"] || []; 
@@ -424,7 +417,7 @@ if (res.status !== "success") return; App.state.gastos.push(...nuevosGastos); Ap
     },
     verDiagnostico() {
         let html = `<table style="width:100%; font-size:0.85rem; border-collapse:collapse;"><tr style="border-bottom:1px solid #ccc; text-align:left;"><th>Tabla (Hoja)</th><th>Estado</th><th>Registros</th></tr>`;
-        const tablas = [ { nombre: "materiales", state: "inventario" }, { nombre: "clientes", state: "clientes" }, { nombre: "productos", state: "productos" }, { nombre: "pedidos", state: "pedidos" }, { nombre: "pedido_detalle", state: "pedido_detalle" }, { nombre: "ordenes_produccion", state: "ordenes_produccion" }, { nombre: "artesanos", state: "artesanos" }, { nombre: "abonos_clientes", state: "abonos" }, { nombre: "gastos", state: "gastos" }, { nombre: "compras", state: "compras" }, { nombre: "proveedores", state: "reparaciones" }, { nombre: "tarifas_artesano", state: "tarifas_artesano" }, { nombre: "pago_artesanos", state: "pago_artesanos" }, { nombre: "movimientos_inventario", state: "movimientos_inventario" } ];
+        const tablas = [ { nombre: "materiales", state: "inventario" }, { nombre: "clientes", state: "clientes" }, { nombre: "productos", state: "productos" }, { nombre: "pedidos", state: "pedidos" }, { nombre: "pedido_detalle", state: "pedido_detalle" }, { nombre: "ordenes_produccion", state: "ordenes_produccion" }, { nombre: "artesanos", state: "artesanos" }, { nombre: "abonos_clientes", state: "abonos" }, { nombre: "gastos", state: "gastos" }, { nombre: "compras", state: "compras" }, { nombre: "proveedores", state: "proveedores" }, { nombre: "tarifas_artesano", state: "tarifas_artesano" }, { nombre: "pago_artesanos", state: "pago_artesanos" }, { nombre: "movimientos_inventario", state: "movimientos_inventario" } ];
         tablas.forEach(t => { const arr = App.state[t.state]; const count = arr ? arr.length : 0; const status = arr ? "✅ OK" : "❌ Error"; html += `<tr style="border-bottom:1px dashed #eee;"><td style="padding:5px 0;">${t.nombre}</td><td>${status}</td><td>${count}</td></tr>`; });
         html += `</table><button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="App.ui.closeSheet()">Cerrar</button>`;
         App.ui.openSheet("Diagnóstico de Base de Datos", html);
