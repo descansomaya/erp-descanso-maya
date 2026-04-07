@@ -327,7 +327,7 @@ App.router.handleRoute();
         } else {
     App.ui.toast("Error");
 }
-    
+ },   
     async entregarDeBodega(pedidoId) {
         const pedido = App.state.pedidos.find(p => p.id === pedidoId);
         const detalle = App.state.pedido_detalle.find(d => d.pedido_id === pedidoId);
@@ -387,7 +387,7 @@ if (res.status !== "success") return;  await App.logic.cargarDatosIniciales();
 App.ui.toast("¡Terminado!");
 App.router.handleRoute();
     },
-    async procesarCambioOrden(ordenId, datos) { if (datos.estado === 'listo') { App.views.formCerrarOrden(ordenId); } else { App.ui.showLoader("Actualizando..."); const res = await App.api.fetch("actualizar_fila", { nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: datos }); App.ui.hideLoader(); if (res.status === "success") { const ordenIndex = App.state.ordenes_produccion.findIndex(o => o.id === ordenId); App.state.ordenes_produccion[ordenIndex] = { ...App.state.ordenes_produccion[ordenIndex], ...datos }; App.ui.toast("Actualizado"); App.router.handleRoute(); } else { App.ui.toast("Error"); } } },
+    async procesarCambioOrden(ordenId, datos) { if (datos.estado === 'listo') { App.views.formCerrarOrden(ordenId); } else { App.ui.showLoader("Actualizando..."); const res = await App.api.fetch("actualizar_fila", { nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: datos }); if (res.status === "success") { const ordenIndex = App.state.ordenes_produccion.findIndex(o => o.id === ordenId); App.state.ordenes_produccion[ordenIndex] = { ...App.state.ordenes_produccion[ordenIndex], ...datos }; App.ui.toast("Actualizado"); App.router.handleRoute(); } else { App.ui.toast("Error"); } } },
     async liquidarNomina(artesanoId) { 
         App.ui.showLoader("Liquidando..."); const pagosPendientes = App.state.pago_artesanos.filter(p => p.artesano_id === artesanoId && p.estado === 'pendiente'); let totalPagado = 0; let operaciones = []; 
         for (let pago of pagosPendientes) { operaciones.push({ action: "actualizar_fila", nombreHoja: "pago_artesanos", idFila: pago.id, datosNuevos: { estado: 'pagado' } });  totalPagado += parseFloat(pago.total || 0); } 
@@ -431,8 +431,10 @@ App.router.handleRoute();
             operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto }); 
         });
         const res = await App.safeOps.runLoteSeguro(operaciones, "Comprando...");
-if (res.status !== "success") return; App.state.compras.push(compra); if(!App.state.movimientos_inventario) App.state.movimientos_inventario=[]; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.toast("Compra registrada"); App.router.handleRoute();  
-    },
+if (res.status !== "success") return;
+await App.logic.cargarDatosIniciales();
+App.ui.toast("Compra registrada");
+App.router.handleRoute();};
     
     async guardarMultiplesGastos(datos) { const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; let operaciones = []; let nuevosGastos = []; for(let i=0; i<descripciones.length; i++) { if(!descripciones[i]) continue; const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; nuevosGastos.push(gastoObj); operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); } const res = await App.safeOps.runLoteSeguro(operaciones, "Registrando Gastos...");
 if (res.status !== "success") return; await App.logic.cargarDatosIniciales();
