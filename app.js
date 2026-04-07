@@ -50,15 +50,91 @@ const App = { views: {} };
 
 App.state = {
     config: { empresa: "Descanso Maya", moneda: "MXN", logoUrl: "https://i.ibb.co/5h0kNKrZ/DESCANSO-MAYA.png", redesSociales: "@descansomaya.mx" },
-    pinAcceso: localStorage.getItem('erp_pin') || null, cotizaciones: JSON.parse(localStorage.getItem('erp_cotizaciones')) || [], 
-    pedidos: [], pedido_detalle: [], ordenes_produccion: [], artesanos: [], inventario: [], productos: [], clientes: [], abonos: [], gastos: [], compras: [], proveedores: [], reparaciones: [], tarifas_artesano: [], pago_artesanos: [], movimientos_inventario: []
-};
+    sessionToken: localStorage.getItem('erp_session_token') || null,
+    cotizaciones: JSON.parse(localStorage.getItem('erp_cotizaciones')) || [], }
 
 App.api = {
-    gasUrl: "https://script.google.com/macros/s/AKfycbxL3KzjesyZIfiC-Dyr0SwwzwNnPsv5FgHpt-JhyscNpN1eTvRwAh_rdgoxdVnKTAwu/exec", 
+    gasUrl: "https://script.google.com/macros/s/AKfycbxL3KzjesyZIfiC-Dyr0SwwzwNnPsv5FgHpt-JhyscNpN1eTvRwAh_rdgoxdVnKTAwu/exec",
+
+    App.safeOps = {
+    async runLoteSeguro(operaciones, loaderText = "Procesando...") {
+        App.ui.showLoader(loaderText);
+        const res = await App.api.fetch("ejecutar_lote", { operaciones: operaciones });
+        App.ui.hideLoader();
+
+        if (res.status !== "success") {
+            App.ui.toast(res.message || "Error al ejecutar lote");
+            return res;
+        }
+
+        if (res.data && res.data.errores && res.data.errores.length > 0) {
+            console.error("Errores de lote:", res.data.errores);
+            App.ui.toast(res.data.errores[0].message || "Error en lote");
+            return { status: "error", message: res.data.errores[0].message };
+        }
+
+        return res;
+    },
+
+    async runAccionSegura(action, payload = {}, loaderText = "Procesando...") {
+        App.ui.showLoader(loaderText);
+        const res = await App.api.fetch(action, payload);
+        App.ui.hideLoader();
+
+        if (res.status !== "success") {
+            App.ui.toast(res.message || "Error");
+        }
+
+        return res;
+    }
+};
+    
+    async login(pin) {
+        try {
+            const response = await fetch(this.gasUrl, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'login',
+                    pin: pin
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.status !== "success") {
+                return data;
+            }
+
+            return data;
+        } catch (error) {
+            return { status: "error", message: "Fallo de conexión." };
+        }
+    },
+
     async fetch(action, payload = {}) {
-        try { const response = await fetch(this.gasUrl, { method: 'POST', body: JSON.stringify({ action: action, payload: payload, pin: App.state.pinAcceso }) }); const data = await response.json(); if (data.message === "Acceso Denegado. PIN incorrecto.") { localStorage.removeItem('erp_pin'); App.state.pinAcceso = null; App.router.handleRoute(); } return data; } 
-        catch (error) { return { status: "error", message: "Fallo de conexión." }; }
+        try {
+            const response = await fetch(this.gasUrl, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: action,
+                    payload: payload,
+                    sessionToken: App.state.sessionToken
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.status === "unauthorized") {
+                localStorage.removeItem('erp_session_token');
+                App.state.sessionToken = null;
+                App.router.handleRoute();
+                return data;
+            }
+
+            return data;
+        } catch (error) {
+            return { status: "error", message: "Fallo de conexión." };
+        }
     }
 };
 
@@ -92,7 +168,22 @@ App.ui = {
 };
 
 App.logic = {
-    async verificarPIN(pin) { App.ui.showLoader("Verificando..."); App.state.pinAcceso = pin; const res = await App.api.fetch("ping"); if (res.status === "success") { localStorage.setItem('erp_pin', pin); App.ui.toast("¡Acceso concedido!"); this.cargarDatosIniciales(); } else { App.state.pinAcceso = null; App.ui.hideLoader(); App.ui.toast("PIN Incorrecto."); } },
+async verificarPIN(pin) {
+    App.ui.showLoader("Verificando...");
+    const res = await App.api.login(pin);
+
+    if (res.status === "success" && res.sessionToken) {
+        App.state.sessionToken = res.sessionToken;
+        localStorage.setItem('erp_session_token', res.sessionToken);
+        App.ui.toast("¡Acceso concedido!");
+        this.cargarDatosIniciales();
+    } else {
+        App.state.sessionToken = null;
+        localStorage.removeItem('erp_session_token');
+        App.ui.hideLoader();
+        App.ui.toast(res.message || "PIN Incorrecto.");
+    }
+},
     async cargarDatosIniciales() { 
         App.ui.showLoader("Sincronizando Base de Datos..."); 
         try { 
@@ -120,7 +211,8 @@ App.logic = {
         if(detalle) operaciones.push({ action: "eliminar_fila", nombreHoja: "pedido_detalle", idFila: detalle.id }); 
         if(orden) { operaciones.push({ action: "eliminar_fila", nombreHoja: "ordenes_produccion", idFila: orden.id }); const pagosArtesanos = App.state.pago_artesanos.filter(p => p.orden_id === orden.id); for(let pago of pagosArtesanos) operaciones.push({ action: "eliminar_fila", nombreHoja: "pago_artesanos", idFila: pago.id }); }
         const abonos = App.state.abonos.filter(a => a.pedido_id === id); for(let ab of abonos) operaciones.push({ action: "eliminar_fila", nombreHoja: "abonos_clientes", idFila: ab.id });
-        await App.api.fetch("ejecutar_lote", { operaciones: operaciones });
+const res = await App.safeOps.runLoteSeguro(operaciones, "Procesando eliminación y devolviendo stock...");
+if (res.status !== "success") return;
         App.state.pedidos = App.state.pedidos.filter(p => p.id !== id); if(detalle) App.state.pedido_detalle = App.state.pedido_detalle.filter(d => d.id !== detalle.id); if(orden) { App.state.ordenes_produccion = App.state.ordenes_produccion.filter(o => o.id !== orden.id); App.state.pago_artesanos = App.state.pago_artesanos.filter(p => p.orden_id !== orden.id); } App.state.abonos = App.state.abonos.filter(a => a.pedido_id !== id); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Pedido eliminado e inventario restaurado"); App.router.handleRoute(); 
     },
     
@@ -132,8 +224,7 @@ App.logic = {
         if (gastoAsociado) operaciones.push({ action: "eliminar_fila", nombreHoja: "gastos", idFila: gastoAsociado.id });
         const movimientosAsociados = (App.state.movimientos_inventario || []).filter(m => m.origen_id === id);
         movimientosAsociados.forEach(m => operaciones.push({ action: "eliminar_fila", nombreHoja: "movimientos_inventario", idFila: m.id }) );
-        const res = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); 
-        App.ui.hideLoader(); 
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Eliminando...");
         if(res.status === "success") { 
             App.state.compras = App.state.compras.filter(c => c.id !== id); 
             if (gastoAsociado) App.state.gastos = App.state.gastos.filter(g => g.id !== gastoAsociado.id);
@@ -151,8 +242,7 @@ App.logic = {
         const pagos = App.state.pago_artesanos.filter(p => p.orden_id === id);
         pagos.forEach(p => operaciones.push({ action: "eliminar_fila", nombreHoja: "pago_artesanos", idFila: p.id }));
         
-        const res = await App.api.fetch("ejecutar_lote", { operaciones: operaciones });
-        App.ui.hideLoader();
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Eliminando...");
         if(res.status === "success") {
             App.state.reparaciones = App.state.reparaciones.filter(r => r.id !== id);
             App.state.pago_artesanos = App.state.pago_artesanos.filter(p => p.orden_id !== id);
@@ -207,7 +297,7 @@ App.logic = {
             }
         }
 
-        const resPedido = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); 
+        const resPedido = await App.safeOps.runLoteSeguro(operaciones, "Procesando pedido...");
         if (resPedido.status === "success") { 
             App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); 
             if(nuevosMovs.length > 0) { if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); }
@@ -237,8 +327,8 @@ App.logic = {
             }
         }
         operaciones.push({ action: "actualizar_fila", nombreHoja: "pedidos", idFila: pedidoId, datosNuevos: { estado: 'listo para entregar' } });
-        App.ui.showLoader("Descontando...");
-        await App.api.fetch("ejecutar_lote", { operaciones: operaciones });
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Descontando...");
+        if (res.status !== "success") return;
         pedido.estado = 'listo para entregar';
         if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs);
         App.ui.hideLoader(); App.ui.toast("Descontado de bodega"); App.router.handleRoute();
@@ -249,14 +339,16 @@ App.logic = {
         App.ui.showLoader("Generando Orden..."); let operaciones = []; let nuevosMovs = []; let recetaPersonalizada = [];
         for(let i=0; i<mats.length; i++) { const matId = mats[i]; const cant = parseFloat(cants[i] || 0); const usoStr = usos[i] || 'Cuerpo'; if(matId && cant > 0) { recetaPersonalizada.push({ mat_id: matId, cant: cant, uso: usoStr }); const material = App.state.inventario.find(m => m.id === matId); if(material) { const nStock = parseFloat(material.stock_actual) - cant; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }); material.stock_actual = nStock; const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cant, costo_unitario: material.costo_unitario||0, total: (-cant * (material.costo_unitario||0)), notas: `Envío a taller` }; nuevosMovs.push(mov); } } }
         const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datos.pedido_detalle_id, estado: "pendiente", fecha_creacion: new Date().toISOString(), receta_personalizada: JSON.stringify(recetaPersonalizada) }; nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: m }); }); operaciones.push({ action: "guardar_fila", nombreHoja: "ordenes_produccion", datos: nuevaOrden });
-        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Enviado a taller"); App.router.navigate('produccion');
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Generando Orden...");
+if (res.status !== "success") return; App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Enviado a taller"); App.router.navigate('produccion');
     },
     async guardarOrdenStock(datos) { 
         App.ui.showLoader("Procesando..."); const pedidoId = "PED-STOCK-" + Date.now(); const cantidadNum = parseInt(datos.cantidad) || 1; const datosPedido = { id: pedidoId, cliente_id: "STOCK_INTERNO", total: 0, anticipo: 0, notas: "Producción Interna", fecha_entrega: "", fecha_creacion: new Date().toISOString() }; const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datos.producto_id, cantidad: cantidadNum, precio_unitario: 0 }; 
         let operaciones = []; let nuevosMovs = []; let recetaArray = []; const producto = App.state.productos.find(p => p.id === datos.producto_id); 
         if(producto) { for(let i=1; i<=20; i++) { const matId = producto[`mat_${i}`]; const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * cantidadNum; const uso = producto[`uso_${i}`] || 'Cuerpo'; if(matId && cantTeorica > 0) { recetaArray.push({ mat_id: matId, cant: cantTeorica, uso: uso }); const material = App.state.inventario.find(m => m.id === matId); if(material) { const nStock = parseFloat(material.stock_actual) - cantTeorica; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }); material.stock_actual = nStock; const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cantTeorica, costo_unitario: material.costo_unitario||0, total: (-cantTeorica * (material.costo_unitario||0)), notas: "Stock Interno" }; nuevosMovs.push(mov); } } } } 
         const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datosDetalle.id, estado: "pendiente", fecha_creacion: new Date().toISOString(), receta_personalizada: JSON.stringify(recetaArray) }; nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: m }); }); operaciones.push({ action: "guardar_fila", nombreHoja: "pedidos", datos: datosPedido }, { action: "guardar_fila", nombreHoja: "pedido_detalle", datos: datosDetalle }, { action: "guardar_fila", nombreHoja: "ordenes_produccion", datos: nuevaOrden }); 
-        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Orden creada"); App.router.handleRoute(); 
+       const res = await App.safeOps.runLoteSeguro(operaciones, "Procesando...");
+if (res.status !== "success") return; App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Orden creada"); App.router.handleRoute(); 
     },
     async guardarTrabajoOrden(ordenId, data, esReparacion = false) { App.ui.showLoader("Asignando..."); const sanitizedTaskName = (data.tarea_nombre || "Trabajo").replace(/[^a-zA-Z0-9_ \-]/g, ""); const pagoObj = { id: "PAGO-" + Date.now() + "-" + sanitizedTaskName, artesano_id: data.artesano_id, orden_id: ordenId, monto_unitario: parseFloat(data.tarea_val), total: parseFloat(data.total), estado: "pendiente", fecha: new Date().toISOString() }; const res = await App.api.fetch("guardar_fila", { nombreHoja: "pago_artesanos", datos: pagoObj }); App.ui.hideLoader(); if(res.status === "success") { App.state.pago_artesanos.push(pagoObj); App.ui.toast("Asignado"); if(esReparacion) { App.router.handleRoute(); } else { App.views.modalEditarOrden(ordenId); } } else { App.ui.toast("Error"); App.router.handleRoute(); } },
     async cerrarOrdenProduccion(datosFormulario) { 
@@ -264,7 +356,8 @@ App.logic = {
         for(let i=1; i<=20; i++) { const matId = datosFormulario[`mat_${i}_id`]; const consumoTeorico = parseFloat(datosFormulario[`mat_${i}_teorico`]); const consumoReal = parseFloat(datosFormulario[`mat_${i}_real`]); if(matId && !isNaN(consumoTeorico) && !isNaN(consumoReal)) { const material = App.state.inventario.find(m => m.id === matId); if(material) { const diferencia = consumoReal - consumoTeorico; if(diferencia !== 0) { const stockAjustado = parseFloat(material.stock_actual) - diferencia; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: stockAjustado } }); material.stock_actual = stockAjustado; const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: diferencia > 0 ? "salida_merma" : "entrada_ajuste", origen: "orden", origen_id: ordenId, ref_tipo: "material", ref_id: material.id, cantidad: -diferencia, costo_unitario: material.costo_unitario||0, total: (-diferencia * (material.costo_unitario||0)), notas: "Ajuste por consumo en taller" }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); } } } } 
         if (datosFormulario.sumar_stock === "1" && producto) { let matHamaca = App.state.inventario.find(m => m.nombre === producto.nombre && m.tipo === 'reventa'); if(matHamaca) { let nStock = parseFloat(matHamaca.stock_actual) + 1; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: matHamaca.id, datosNuevos: { stock_actual: nStock } }); matHamaca.stock_actual = nStock; } else { let nMat = { id: "MAT-" + Date.now() + "REV", nombre: producto.nombre, tipo: "reventa", unidad: "Pzas", stock_actual: 1, fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "materiales", datos: nMat }); App.state.inventario.push(nMat); } App.ui.toast("Guardado en Bodega"); } 
         if(detalle && detalle.pedido_id) { const pedidoMaster = App.state.pedidos.find(p => p.id === detalle.pedido_id); if(pedidoMaster && pedidoMaster.cliente_id !== "STOCK_INTERNO" && pedidoMaster.estado !== 'pagado') { operaciones.push({ action: "actualizar_fila", nombreHoja: "pedidos", idFila: pedidoMaster.id, datosNuevos: { estado: 'listo para entregar' } }); pedidoMaster.estado = 'listo para entregar'; } }
-        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("¡Terminado!"); App.router.handleRoute(); 
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Finalizando...");
+if (res.status !== "success") return; if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("¡Terminado!"); App.router.handleRoute(); 
     },
     async procesarCambioOrden(ordenId, datos) { if (datos.estado === 'listo') { App.views.formCerrarOrden(ordenId); } else { App.ui.showLoader("Actualizando..."); const res = await App.api.fetch("actualizar_fila", { nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: datos }); App.ui.hideLoader(); if (res.status === "success") { const ordenIndex = App.state.ordenes_produccion.findIndex(o => o.id === ordenId); App.state.ordenes_produccion[ordenIndex] = { ...App.state.ordenes_produccion[ordenIndex], ...datos }; App.ui.toast("Actualizado"); App.router.handleRoute(); } else { App.ui.toast("Error"); } } },
     async liquidarNomina(artesanoId) { 
@@ -305,10 +398,12 @@ App.logic = {
             const nuevoGasto = { id: "GAS-" + Date.now() + "-" + idx, categoria: cat, descripcion: `Compra a ${nombreProv} (${compraId})`, monto: gastoPorTipo[cat], fecha: datos.fecha }; 
             operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto }); App.state.gastos.push(nuevoGasto);
         });
-        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.compras.push(compra); if(!App.state.movimientos_inventario) App.state.movimientos_inventario=[]; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Compra registrada"); App.router.handleRoute();  
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Comprando...");
+if (res.status !== "success") return; App.state.compras.push(compra); if(!App.state.movimientos_inventario) App.state.movimientos_inventario=[]; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Compra registrada"); App.router.handleRoute();  
     },
     
-    async guardarMultiplesGastos(datos) { App.ui.showLoader("Registrando Gastos..."); const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; let operaciones = []; let nuevosGastos = []; for(let i=0; i<descripciones.length; i++) { if(!descripciones[i]) continue; const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; nuevosGastos.push(gastoObj); operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); } await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.gastos.push(...nuevosGastos); App.ui.hideLoader(); App.ui.toast("¡Gastos registrados!"); App.router.handleRoute(); },
+    async guardarMultiplesGastos(datos) { App.ui.showLoader("Registrando Gastos..."); const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; let operaciones = []; let nuevosGastos = []; for(let i=0; i<descripciones.length; i++) { if(!descripciones[i]) continue; const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; nuevosGastos.push(gastoObj); operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); } const res = await App.safeOps.runLoteSeguro(operaciones, "Registrando Gastos...");
+if (res.status !== "success") return; App.state.gastos.push(...nuevosGastos); App.ui.hideLoader(); App.ui.toast("¡Gastos registrados!"); App.router.handleRoute(); },
     
     // MEJORA: GUARDAR Y EDITAR REPARACIÓN UNIFICADO
     async guardarNuevaReparacion(datos) { 
