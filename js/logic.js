@@ -4,16 +4,29 @@
 
 App.logic = {
     async verificarPIN(pin) { App.ui.showLoader("Verificando..."); App.state.pinAcceso = pin; const res = await App.api.fetch("ping"); if (res.status === "success") { localStorage.setItem('erp_pin', pin); App.ui.toast("¡Acceso concedido!"); this.cargarDatosIniciales(); } else { App.state.pinAcceso = null; App.ui.hideLoader(); App.ui.toast("PIN Incorrecto."); } },
-    async cargarDatosIniciales() { 
+  async cargarDatosIniciales() { 
         App.ui.showLoader("Sincronizando Base de Datos..."); 
         try { 
             const hojas = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "movimientos_inventario"]; 
             const res = await App.api.fetch("leer_todo", { hojas: hojas }); 
+            
+            // 🛑 FRENO DE EMERGENCIA: Si la base de datos rechaza el PIN, detenemos la carga.
+            if (!App.state.pinAcceso) { App.ui.hideLoader(); return; }
+
             if (res.status === "error") throw new Error(res.message); 
             const bd = res.data;
             App.state.inventario = bd["materiales"] || []; App.state.clientes = bd["clientes"] || []; App.state.productos = bd["productos"] || []; App.state.pedidos = bd["pedidos"] || []; App.state.pedido_detalle = bd["pedido_detalle"] || []; App.state.ordenes_produccion = bd["ordenes_produccion"] || []; App.state.artesanos = bd["artesanos"] || []; App.state.abonos = bd["abonos_clientes"] || []; App.state.gastos = bd["gastos"] || []; App.state.compras = bd["compras"] || []; App.state.proveedores = bd["proveedores"] || []; App.state.reparaciones = bd["reparaciones"] || []; App.state.tarifas_artesano = bd["tarifas_artesano"] || []; App.state.pago_artesanos = bd["pago_artesanos"] || []; App.state.movimientos_inventario = bd["movimientos_inventario"] || []; 
             App.ui.hideLoader(); App.router.init(); 
-        } catch (error) { console.error("Fallo de conexión:", error); App.ui.toast("Señal débil. Reintentando..."); setTimeout(() => App.logic.cargarDatosIniciales(), 3000); } 
+        } catch (error) { 
+            console.error("Fallo de conexión:", error); 
+            // 🛑 Solo reintentar si el PIN sigue siendo válido
+            if (App.state.pinAcceso) {
+                App.ui.toast("Señal débil. Reintentando..."); 
+                setTimeout(() => App.logic.cargarDatosIniciales(), 3000); 
+            } else {
+                App.ui.hideLoader();
+            }
+        } 
     },
     descargarRespaldo() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(App.state, null, 2)); const dlAnchorElem = document.createElement('a'); dlAnchorElem.setAttribute("href", dataStr); dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`); dlAnchorElem.click(); App.ui.toast("Respaldo descargado"); },
     async eliminarRegistroGenerico(hoja, id, estado) { if(!confirm("⚠️ ¿Eliminar permanentemente?")) return; App.ui.showLoader("Eliminando..."); const res = await App.api.fetch("eliminar_fila", { nombreHoja: hoja, idFila: id }); App.ui.hideLoader(); if(res.status === "success") { App.state[estado] = App.state[estado].filter(item => item.id !== id); App.ui.toast("Eliminado"); App.router.handleRoute(); } else { App.ui.toast("Error"); } },
