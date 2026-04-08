@@ -3,7 +3,7 @@
 // ==========================================
 
 App.api = { 
-    gasUrl: "https://script.google.com/macros/s/AKfycbxL3KzjesyZIfiC-Dyr0SwwzwNnPsv5FgHpt-JhyscNpN1eTvRwAh_rdgoxdVnKTAwu/exec", 
+    gasUrl: "https://script.google.com/macros/s/AKfycbxL3KzjesyZIfiC-Dyr0SwwzwNnPsv5FgHpt-JhyscNpN1eTvRwAh_rdgoxdVnKTAwu/exec",
     async fetch(action, payload = {}) { 
         try { 
             const response = await fetch(this.gasUrl, { 
