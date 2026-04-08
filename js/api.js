@@ -3,8 +3,8 @@
 // ==========================================
 
 App.api = { 
-    // 👇 PON AQUÍ TU ENLACE REAL DE GOOGLE APPS SCRIPT 👇
-    gasUrl: "https://script.google.com/macros/s/TU_ENLACE_AQUI/exec", 
+    // 👇 PEGA TU ENLACE REAL AQUÍ ABAJO 👇
+    gasUrl: "https://script.google.com/macros/s/AKfycbxL3KzjesyZIfiC-Dyr0SwwzwNnPsv5FgHpt-JhyscNpN1eTvRwAh_rdgoxdVnKTAwu/exec", 
     
     async fetch(action, payload = {}) { 
         try { 
@@ -19,8 +19,13 @@ App.api = {
 
             const response = await fetch(this.gasUrl, { 
                 method: 'POST', 
+                redirect: 'follow', // 🛑 REGLA DE GOOGLE: Seguir redirecciones
+                headers: {
+                    "Content-Type": "text/plain;charset=utf-8" // 🛑 REGLA DE GOOGLE: Evitar bloqueo CORS
+                },
                 body: JSON.stringify(requestBody) 
             }); 
+            
             const data = await response.json(); 
             
             // Si el token expiró o la sesión es inválida
@@ -32,7 +37,8 @@ App.api = {
             return data; 
         } 
         catch (error) { 
-            return { status: "error", message: "Fallo de conexión." }; 
+            console.error("Detalle del error de red:", error);
+            return { status: "error", message: "Fallo de conexión con Google." }; 
         } 
     } 
 };
