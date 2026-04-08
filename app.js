@@ -191,211 +191,975 @@ App.ui = {
 };
 
 App.logic = {
-async verificarPIN(pin) {
-    App.ui.showLoader("Verificando...");
-    const res = await App.api.login(pin);
+    async verificarPIN(pin) {
+        App.ui.showLoader("Verificando...");
+        const res = await App.api.login(pin);
 
-    if (res.status === "success" && res.data && res.data.sessionToken) {
-    App.state.sessionToken = res.data.sessionToken;
-    localStorage.setItem('erp_session_token', res.data.sessionToken);
-    App.ui.toast("¡Acceso concedido!");
-    this.cargarDatosIniciales();
-} else {
-    App.state.sessionToken = null;
-    localStorage.removeItem('erp_session_token');
-    App.ui.hideLoader();
-    App.ui.toast(res.message || "PIN Incorrecto.");
-}
-},
-    async cargarDatosIniciales() { 
-        App.ui.showLoader("Sincronizando Base de Datos..."); 
-        try { 
-            const hojasA_Descargar = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "movimientos_inventario"]; 
-const res = await App.api.fetch("leer_todo", { hojas: hojasA_Descargar });
-
-if (res.status === "error") {
-    App.ui.hideLoader();
-    console.error("Error al cargar datos:", res);
-    return;
-}
-            const bd = res.data;
-            App.state.inventario = bd["materiales"] || []; App.state.clientes = bd["clientes"] || []; App.state.productos = bd["productos"] || []; App.state.pedidos = bd["pedidos"] || []; App.state.pedido_detalle = bd["pedido_detalle"] || []; App.state.ordenes_produccion = bd["ordenes_produccion"] || []; App.state.artesanos = bd["artesanos"] || []; App.state.abonos = bd["abonos_clientes"] || []; App.state.gastos = bd["gastos"] || []; App.state.compras = bd["compras"] || []; App.state.proveedores = bd["proveedores"] || []; App.state.reparaciones = bd["reparaciones"] || []; App.state.tarifas_artesano = bd["tarifas_artesano"] || []; App.state.pago_artesanos = bd["pago_artesanos"] || []; App.state.movimientos_inventario = bd["movimientos_inventario"] || []; 
-            App.ui.hideLoader(); App.router.init(); 
-        } catch (error) { 
-            console.error("Fallo de conexión:", error); App.ui.toast("Señal débil. Reintentando..."); setTimeout(() => App.logic.cargarDatosIniciales(), 3000);
-        } 
-    },
-    descargarRespaldo() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(App.state, null, 2)); const dlAnchorElem = document.createElement('a'); dlAnchorElem.setAttribute("href", dataStr); dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`); dlAnchorElem.click(); App.ui.toast("Respaldo descargado"); },
-    async eliminarRegistroGenerico(hoja, id, estado) { if(!confirm("⚠️ ¿Eliminar permanentemente?")) return; App.ui.showLoader("Eliminando..."); const res = await App.api.fetch("eliminar_fila", { nombreHoja: hoja, idFila: id }); App.ui.hideLoader(); if(res.status === "success") { App.state[estado] = App.state[estado].filter(item => item.id !== id); App.ui.toast("Eliminado"); App.router.handleRoute(); } else { App.ui.toast("Error"); } },
-    async eliminarPedido(id) { 
-        if(!confirm("⚠️ ¿Eliminar pedido por completo?\n\nLos hilos que se enviaron a producción se regresarán automáticamente al inventario.")) return; 
-        const pedido = App.state.pedidos.find(p => p.id === id); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === id); const orden = App.state.ordenes_produccion.find(o => detalle && o.pedido_detalle_id === detalle.id); 
-        let operaciones = []; let nuevosMovs = [];
-        if(orden && orden.receta_personalizada) {
-            try { let receta = JSON.parse(orden.receta_personalizada); for(let item of receta) { let material = App.state.inventario.find(m => m.id === item.mat_id); if(material && parseFloat(item.cant) > 0) { let nStock = parseFloat(material.stock_actual) + parseFloat(item.cant); operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } });  const mov = { id: "MOV-" + Date.now() + Math.random().toString(36).substr(2,5), fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "entrada_devolucion", origen: "orden", origen_id: orden.id, ref_tipo: "material", ref_id: material.id, cantidad: item.cant, costo_unitario: material.costo_unitario||0, total: (item.cant * (material.costo_unitario||0)), notas: `Devolución por pedido cancelado: ${id.replace('PED-','')}` }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); } } } catch(e) {}
+        if (res.status === "success" && res.data && res.data.sessionToken) {
+            App.state.sessionToken = res.data.sessionToken;
+            localStorage.setItem('erp_session_token', res.data.sessionToken);
+            App.ui.toast("¡Acceso concedido!");
+            await this.cargarDatosIniciales();
+        } else {
+            App.state.sessionToken = null;
+            localStorage.removeItem('erp_session_token');
+            App.ui.hideLoader();
+            App.ui.toast(res.message || "PIN Incorrecto.");
         }
-        operaciones.push({ action: "eliminar_fila", nombreHoja: "pedidos", idFila: id }); 
-        if(detalle) operaciones.push({ action: "eliminar_fila", nombreHoja: "pedido_detalle", idFila: detalle.id }); 
-        if(orden) { operaciones.push({ action: "eliminar_fila", nombreHoja: "ordenes_produccion", idFila: orden.id }); const pagosArtesanos = App.state.pago_artesanos.filter(p => p.orden_id === orden.id); for(let pago of pagosArtesanos) operaciones.push({ action: "eliminar_fila", nombreHoja: "pago_artesanos", idFila: pago.id }); }
-        const abonos = App.state.abonos.filter(a => a.pedido_id === id); for(let ab of abonos) operaciones.push({ action: "eliminar_fila", nombreHoja: "abonos_clientes", idFila: ab.id });
-const res = await App.safeOps.runLoteSeguro(operaciones, "Procesando eliminación y devolviendo stock...");
-if (res.status !== "success") return;
-        await App.logic.cargarDatosIniciales();
-App.ui.toast("Pedido eliminado e inventario restaurado");
-App.router.handleRoute();
-          },
-    
-    async eliminarCompra(id) { 
-        if(!confirm("⚠️ ¿Eliminar compra? Se eliminará la compra, el gasto asociado y los movimientos de inventario.")) return; 
-              let operaciones = [ { action: "eliminar_fila", nombreHoja: "compras", idFila: id } ];
-        const gastoAsociado = App.state.gastos.find(g => g.descripcion.includes(id));
-        if (gastoAsociado) operaciones.push({ action: "eliminar_fila", nombreHoja: "gastos", idFila: gastoAsociado.id });
-        const movimientosAsociados = (App.state.movimientos_inventario || []).filter(m => m.origen_id === id);
-        movimientosAsociados.forEach(m => operaciones.push({ action: "eliminar_fila", nombreHoja: "movimientos_inventario", idFila: m.id }) );
-        const res = await App.safeOps.runLoteSeguro(operaciones, "Eliminando...");
-        if(res.status === "success") { 
-            await App.logic.cargarDatosIniciales();
-App.ui.toast("Compra eliminada.");
-App.router.handleRoute();
-        } else { App.ui.toast("Error al eliminar"); } 
     },
 
-    // NUEVO: Eliminar reparación limpiando trabajos de artesanos
+    async cargarDatosIniciales() {
+        App.ui.showLoader("Sincronizando Base de Datos...");
+        try {
+            const hojasA_Descargar = [
+                "materiales", "clientes", "productos", "pedidos", "pedido_detalle",
+                "ordenes_produccion", "artesanos", "abonos_clientes", "gastos",
+                "compras", "proveedores", "reparaciones", "tarifas_artesano",
+                "pago_artesanos", "movimientos_inventario"
+            ];
+
+            const res = await App.api.fetch("leer_todo", { hojas: hojasA_Descargar });
+
+            if (res.status === "error") {
+                App.ui.hideLoader();
+                console.error("Error al cargar datos:", res);
+                return;
+            }
+
+            const bd = res.data || {};
+            App.state.inventario = bd["materiales"] || [];
+            App.state.clientes = bd["clientes"] || [];
+            App.state.productos = bd["productos"] || [];
+            App.state.pedidos = bd["pedidos"] || [];
+            App.state.pedido_detalle = bd["pedido_detalle"] || [];
+            App.state.ordenes_produccion = bd["ordenes_produccion"] || [];
+            App.state.artesanos = bd["artesanos"] || [];
+            App.state.abonos = bd["abonos_clientes"] || [];
+            App.state.gastos = bd["gastos"] || [];
+            App.state.compras = bd["compras"] || [];
+            App.state.proveedores = bd["proveedores"] || [];
+            App.state.reparaciones = bd["reparaciones"] || [];
+            App.state.tarifas_artesano = bd["tarifas_artesano"] || [];
+            App.state.pago_artesanos = bd["pago_artesanos"] || [];
+            App.state.movimientos_inventario = bd["movimientos_inventario"] || [];
+
+            App.ui.hideLoader();
+            App.router.init();
+        } catch (error) {
+            console.error("Fallo de conexión:", error);
+            App.ui.toast("Señal débil. Reintentando...");
+            setTimeout(() => App.logic.cargarDatosIniciales(), 3000);
+        }
+    },
+
+    descargarRespaldo() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(App.state, null, 2));
+        const dlAnchorElem = document.createElement('a');
+        dlAnchorElem.setAttribute("href", dataStr);
+        dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`);
+        dlAnchorElem.click();
+        App.ui.toast("Respaldo descargado");
+    },
+
+    async eliminarRegistroGenerico(hoja, id, estado) {
+        if (!confirm("⚠️ ¿Eliminar permanentemente?")) return;
+
+        App.ui.showLoader("Eliminando...");
+        const res = await App.api.fetch("eliminar_fila", { nombreHoja: hoja, idFila: id });
+        App.ui.hideLoader();
+
+        if (res.status === "success") {
+            await App.logic.cargarDatosIniciales();
+            App.ui.toast("Eliminado");
+            App.router.handleRoute();
+        } else {
+            App.ui.toast("Error");
+        }
+    },
+
+    async eliminarPedido(id) {
+        if (!confirm("⚠️ ¿Eliminar pedido por completo?\n\nLos hilos que se enviaron a producción se regresarán automáticamente al inventario.")) return;
+
+        const detalle = App.state.pedido_detalle.find(d => d.pedido_id === id);
+        const orden = App.state.ordenes_produccion.find(o => detalle && o.pedido_detalle_id === detalle.id);
+
+        let operaciones = [];
+
+        if (orden && orden.receta_personalizada) {
+            try {
+                const receta = JSON.parse(orden.receta_personalizada);
+                for (let item of receta) {
+                    const material = App.state.inventario.find(m => m.id === item.mat_id);
+                    if (material && parseFloat(item.cant) > 0) {
+                        const nStock = parseFloat(material.stock_actual) + parseFloat(item.cant);
+                        operaciones.push({
+                            action: "actualizar_fila",
+                            nombreHoja: "materiales",
+                            idFila: material.id,
+                            datosNuevos: { stock_actual: nStock }
+                        });
+
+                        const mov = {
+                            id: "MOV-" + Date.now() + Math.random().toString(36).substr(2, 5),
+                            fecha: new Date().toISOString().split('T')[0],
+                            tipo_movimiento: "entrada_devolucion",
+                            origen: "orden",
+                            origen_id: orden.id,
+                            ref_tipo: "material",
+                            ref_id: material.id,
+                            cantidad: item.cant,
+                            costo_unitario: material.costo_unitario || 0,
+                            total: (item.cant * (material.costo_unitario || 0)),
+                            notas: `Devolución por pedido cancelado: ${id.replace('PED-', '')}`
+                        };
+
+                        operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov });
+                    }
+                }
+            } catch (e) {
+                console.error("Error leyendo receta_personalizada:", e);
+            }
+        }
+
+        operaciones.push({ action: "eliminar_fila", nombreHoja: "pedidos", idFila: id });
+
+        if (detalle) {
+            operaciones.push({ action: "eliminar_fila", nombreHoja: "pedido_detalle", idFila: detalle.id });
+        }
+
+        if (orden) {
+            operaciones.push({ action: "eliminar_fila", nombreHoja: "ordenes_produccion", idFila: orden.id });
+            const pagosArtesanos = App.state.pago_artesanos.filter(p => p.orden_id === orden.id);
+            for (let pago of pagosArtesanos) {
+                operaciones.push({ action: "eliminar_fila", nombreHoja: "pago_artesanos", idFila: pago.id });
+            }
+        }
+
+        const abonos = App.state.abonos.filter(a => a.pedido_id === id);
+        for (let ab of abonos) {
+            operaciones.push({ action: "eliminar_fila", nombreHoja: "abonos_clientes", idFila: ab.id });
+        }
+
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Procesando eliminación y devolviendo stock...");
+        if (res.status !== "success") return;
+
+        await App.logic.cargarDatosIniciales();
+        App.ui.toast("Pedido eliminado e inventario restaurado");
+        App.router.handleRoute();
+    },
+
+    async eliminarCompra(id) {
+        if (!confirm("⚠️ ¿Eliminar compra? Se eliminará la compra, el gasto asociado y los movimientos de inventario.")) return;
+
+        let operaciones = [
+            { action: "eliminar_fila", nombreHoja: "compras", idFila: id }
+        ];
+
+        const gastoAsociado = App.state.gastos.find(g => (g.descripcion || "").includes(id));
+        if (gastoAsociado) {
+            operaciones.push({ action: "eliminar_fila", nombreHoja: "gastos", idFila: gastoAsociado.id });
+        }
+
+        const movimientosAsociados = (App.state.movimientos_inventario || []).filter(m => m.origen_id === id);
+        movimientosAsociados.forEach(m => {
+            operaciones.push({ action: "eliminar_fila", nombreHoja: "movimientos_inventario", idFila: m.id });
+        });
+
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Eliminando...");
+        if (res.status === "success") {
+            await App.logic.cargarDatosIniciales();
+            App.ui.toast("Compra eliminada.");
+            App.router.handleRoute();
+        } else {
+            App.ui.toast("Error al eliminar");
+        }
+    },
+
     async eliminarReparacion(id) {
-        if(!confirm("⚠️ ¿Eliminar reparación? Se eliminarán también las tareas y pagos asignados a los artesanos para esta reparación.")) return;
+        if (!confirm("⚠️ ¿Eliminar reparación? Se eliminarán también las tareas y pagos asignados a los artesanos para esta reparación.")) return;
+
         let operaciones = [{ action: "eliminar_fila", nombreHoja: "reparaciones", idFila: id }];
         const pagos = App.state.pago_artesanos.filter(p => p.orden_id === id);
-        pagos.forEach(p => operaciones.push({ action: "eliminar_fila", nombreHoja: "pago_artesanos", idFila: p.id }));
-        
-        const res = await App.safeOps.runLoteSeguro(operaciones, "Eliminando...");
-        if(res.status === "success") {
-           await App.logic.cargarDatosIniciales();
-App.ui.toast("Reparación eliminada");
-App.router.handleRoute();
-        } else { App.ui.toast("Error al eliminar"); }
-    },
-    
-    // MEJORA: Acepta callback para refrescar modales (Ej. Tarifas)
-    async actualizarRegistroGenerico(hoja, id, datos, estado, callback = null) { 
-        App.ui.showLoader("Guardando..."); const res = await App.api.fetch("actualizar_fila", { nombreHoja: hoja, idFila: id, datosNuevos: datos }); App.ui.hideLoader(); 
-        if (res.status === "success") { 
-            const index = App.state[estado].findIndex(item => item.id === id); 
-            if (index !== -1) App.state[estado][index] = { ...App.state[estado][index], ...datos }; 
-            App.ui.toast("Actualizado"); 
-            if (callback) callback(); else App.router.handleRoute(); 
-        } else { App.ui.toast("Error"); } 
-    },
-    
-    async guardarNuevoGenerico(hoja, datos, prefijo, estado, callback = null) { 
-        App.ui.showLoader("Registrando..."); datos.id = prefijo + "-" + Date.now(); if(!datos.fecha_creacion) datos.fecha_creacion = new Date().toISOString(); 
-        const res = await App.api.fetch("guardar_fila", { nombreHoja: hoja, datos: datos }); App.ui.hideLoader(); 
-        if (res.status === "success") { App.state[estado].push(datos); App.ui.toast("Guardado exitosamente"); if (callback) callback(); else App.router.handleRoute(); } else { App.ui.toast("Error al guardar"); } 
-    },
-    guardarCotizacion(datos) { datos.id = "COT-" + Date.now(); datos.fecha_creacion = new Date().toISOString(); App.state.cotizaciones.push(datos); localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); App.ui.toast("Cotización generada"); App.router.handleRoute(); App.logic.imprimirCotizacion(datos.id); },
-    eliminarCotizacion(id) { if(!confirm("⚠️ ¿Eliminar cotización?")) return; App.state.cotizaciones = App.state.cotizaciones.filter(c => c.id !== id); localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); App.ui.toast("Eliminada"); App.router.handleRoute(); },
 
-    async guardarNuevoPedido(datosFormulario) { 
-        const pedidoId = "PED-" + Date.now(); const totalNum = parseFloat(datosFormulario.total) || 0; const anticipoNum = parseFloat(datosFormulario.anticipo) || 0; const cantidadNum = parseInt(datosFormulario.cantidad) || 1; 
-        const fechaC = datosFormulario.fecha_creacion ? datosFormulario.fecha_creacion + "T12:00:00.000Z" : new Date().toISOString();
+        pagos.forEach(p => {
+            operaciones.push({ action: "eliminar_fila", nombreHoja: "pago_artesanos", idFila: p.id });
+        });
+
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Eliminando...");
+        if (res.status === "success") {
+            await App.logic.cargarDatosIniciales();
+            App.ui.toast("Reparación eliminada");
+            App.router.handleRoute();
+        } else {
+            App.ui.toast("Error al eliminar");
+        }
+    },
+
+    async actualizarRegistroGenerico(hoja, id, datos, estado, callback = null) {
+        App.ui.showLoader("Guardando...");
+        const res = await App.api.fetch("actualizar_fila", {
+            nombreHoja: hoja,
+            idFila: id,
+            datosNuevos: datos
+        });
+        App.ui.hideLoader();
+
+        if (res.status === "success") {
+            await App.logic.cargarDatosIniciales();
+            App.ui.toast("Actualizado");
+            if (callback) callback();
+            else App.router.handleRoute();
+        } else {
+            App.ui.toast("Error");
+        }
+    },
+
+    async guardarNuevoGenerico(hoja, datos, prefijo, estado, callback = null) {
+        App.ui.showLoader("Registrando...");
+        datos.id = prefijo + "-" + Date.now();
+        if (!datos.fecha_creacion) datos.fecha_creacion = new Date().toISOString();
+
+        const res = await App.api.fetch("guardar_fila", {
+            nombreHoja: hoja,
+            datos: datos
+        });
+        App.ui.hideLoader();
+
+        if (res.status === "success") {
+            await App.logic.cargarDatosIniciales();
+            App.ui.toast("Guardado exitosamente");
+            if (callback) callback();
+            else App.router.handleRoute();
+        } else {
+            App.ui.toast("Error al guardar");
+        }
+    },
+
+    guardarCotizacion(datos) {
+        datos.id = "COT-" + Date.now();
+        datos.fecha_creacion = new Date().toISOString();
+        App.state.cotizaciones.push(datos);
+        localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones));
+        App.ui.toast("Cotización generada");
+        App.router.handleRoute();
+        App.logic.imprimirCotizacion(datos.id);
+    },
+
+    eliminarCotizacion(id) {
+        if (!confirm("⚠️ ¿Eliminar cotización?")) return;
+        App.state.cotizaciones = App.state.cotizaciones.filter(c => c.id !== id);
+        localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones));
+        App.ui.toast("Eliminada");
+        App.router.handleRoute();
+    },
+
+    async guardarNuevoPedido(datosFormulario) {
+        const pedidoId = "PED-" + Date.now();
+        const totalNum = parseFloat(datosFormulario.total) || 0;
+        const anticipoNum = parseFloat(datosFormulario.anticipo) || 0;
+        const cantidadNum = parseInt(datosFormulario.cantidad) || 1;
+        const fechaC = datosFormulario.fecha_creacion
+            ? datosFormulario.fecha_creacion + "T12:00:00.000Z"
+            : new Date().toISOString();
+
         const producto = App.state.productos.find(p => p.id === datosFormulario.producto_id);
         const esReventa = producto && producto.categoria === 'reventa';
-        const datosPedido = { id: pedidoId, cliente_id: datosFormulario.cliente_id, estado: esReventa ? "listo para entregar" : "nuevo", total: totalNum, anticipo: anticipoNum, notas: datosFormulario.notas, fecha_entrega: datosFormulario.fecha_entrega, fecha_creacion: fechaC }; 
-        const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datosFormulario.producto_id, cantidad: cantidadNum, precio_unitario: totalNum / cantidadNum }; 
-        let operaciones = [ { action: "guardar_fila", nombreHoja: "pedidos", datos: datosPedido }, { action: "guardar_fila", nombreHoja: "pedido_detalle", datos: datosDetalle } ]; 
-        let nuevosMovs = [];
+
+        const datosPedido = {
+            id: pedidoId,
+            cliente_id: datosFormulario.cliente_id,
+            estado: esReventa ? "listo para entregar" : "nuevo",
+            total: totalNum,
+            anticipo: anticipoNum,
+            notas: datosFormulario.notas,
+            fecha_entrega: datosFormulario.fecha_entrega,
+            fecha_creacion: fechaC
+        };
+
+        const datosDetalle = {
+            id: "PDET-" + Date.now(),
+            pedido_id: pedidoId,
+            producto_id: datosFormulario.producto_id,
+            cantidad: cantidadNum,
+            precio_unitario: totalNum / cantidadNum
+        };
+
+        let operaciones = [
+            { action: "guardar_fila", nombreHoja: "pedidos", datos: datosPedido },
+            { action: "guardar_fila", nombreHoja: "pedido_detalle", datos: datosDetalle }
+        ];
 
         if (esReventa) {
-            for(let i=1; i<=20; i++) {
-                const matId = producto[`mat_${i}`]; const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * cantidadNum;
-                if(matId && cantTeorica > 0) {
+            for (let i = 1; i <= 20; i++) {
+                const matId = producto[`mat_${i}`];
+                const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * cantidadNum;
+
+                if (matId && cantTeorica > 0) {
                     const material = App.state.inventario.find(m => m.id === matId);
-                    if(material) {
+                    if (material) {
                         const nStock = parseFloat(material.stock_actual) - cantTeorica;
-                        operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } });
-                        const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_venta", origen: "pedido", origen_id: pedidoId, ref_tipo: "material", ref_id: material.id, cantidad: -cantTeorica, costo_unitario: material.costo_unitario||0, total: (-cantTeorica * (material.costo_unitario||0)), notas: `Venta directa reventa` };
-                        nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov });
+
+                        operaciones.push({
+                            action: "actualizar_fila",
+                            nombreHoja: "materiales",
+                            idFila: material.id,
+                            datosNuevos: { stock_actual: nStock }
+                        });
+
+                        const mov = {
+                            id: "MOV-" + Date.now() + i,
+                            fecha: new Date().toISOString().split('T')[0],
+                            tipo_movimiento: "salida_venta",
+                            origen: "pedido",
+                            origen_id: pedidoId,
+                            ref_tipo: "material",
+                            ref_id: material.id,
+                            cantidad: -cantTeorica,
+                            costo_unitario: material.costo_unitario || 0,
+                            total: (-cantTeorica * (material.costo_unitario || 0)),
+                            notas: "Venta directa reventa"
+                        };
+
+                        operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov });
                     }
                 }
             }
         }
 
         const resPedido = await App.safeOps.runLoteSeguro(operaciones, "Procesando pedido...");
-        if (resPedido.status === "success") { 
-           await App.logic.cargarDatosIniciales();
-App.ui.toast(esReventa ? "Pedido y stock guardados" : "Guardado (Sin mandar a taller)");
-App.router.handleRoute();
+        if (resPedido.status === "success") {
+            await App.logic.cargarDatosIniciales();
+            App.ui.toast(esReventa ? "Pedido y stock guardados" : "Guardado (Sin mandar a taller)");
+            App.router.handleRoute();
         } else {
-    App.ui.toast("Error");
-}
- },   
+            App.ui.toast("Error");
+        }
+    },
+
     async entregarDeBodega(pedidoId) {
-        const pedido = App.state.pedidos.find(p => p.id === pedidoId);
         const detalle = App.state.pedido_detalle.find(d => d.pedido_id === pedidoId);
-        const producto = App.state.productos.find(p => p.id === detalle.producto_id);
-        if(!confirm(`¿Sacar ${producto.nombre} directamente de la bodega?`)) return;
-        
-        let operaciones = []; let nuevosMovs = []; let cantPedida = parseInt(detalle.cantidad) || 1;
-        
-        for(let i=1; i<=20; i++) {
-            const matId = producto[`mat_${i}`]; const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * cantPedida;
-            if(matId && cantTeorica > 0) {
+        const producto = detalle ? App.state.productos.find(p => p.id === detalle.producto_id) : null;
+        if (!producto) {
+            App.ui.toast("No se encontró el producto del pedido");
+            return;
+        }
+
+        if (!confirm(`¿Sacar ${producto.nombre} directamente de la bodega?`)) return;
+
+        let operaciones = [];
+        let cantPedida = parseInt(detalle.cantidad) || 1;
+
+        for (let i = 1; i <= 20; i++) {
+            const matId = producto[`mat_${i}`];
+            const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * cantPedida;
+
+            if (matId && cantTeorica > 0) {
                 const material = App.state.inventario.find(m => m.id === matId);
-                if(material) {
+                if (material) {
                     const nStock = parseFloat(material.stock_actual) - cantTeorica;
-                    operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } });
-                
-                    const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_venta", origen: "pedido", origen_id: pedidoId, ref_tipo: "material", ref_id: material.id, cantidad: -cantTeorica, costo_unitario: material.costo_unitario||0, total: (-cantTeorica * (material.costo_unitario||0)), notas: `Entrega de bodega` };
-                    nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov });
+
+                    operaciones.push({
+                        action: "actualizar_fila",
+                        nombreHoja: "materiales",
+                        idFila: material.id,
+                        datosNuevos: { stock_actual: nStock }
+                    });
+
+                    const mov = {
+                        id: "MOV-" + Date.now() + i,
+                        fecha: new Date().toISOString().split('T')[0],
+                        tipo_movimiento: "salida_venta",
+                        origen: "pedido",
+                        origen_id: pedidoId,
+                        ref_tipo: "material",
+                        ref_id: material.id,
+                        cantidad: -cantTeorica,
+                        costo_unitario: material.costo_unitario || 0,
+                        total: (-cantTeorica * (material.costo_unitario || 0)),
+                        notas: "Entrega de bodega"
+                    };
+
+                    operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov });
                 }
             }
         }
-        operaciones.push({ action: "actualizar_fila", nombreHoja: "pedidos", idFila: pedidoId, datosNuevos: { estado: 'listo para entregar' } });
+
+        operaciones.push({
+            action: "actualizar_fila",
+            nombreHoja: "pedidos",
+            idFila: pedidoId,
+            datosNuevos: { estado: 'listo para entregar' }
+        });
+
         const res = await App.safeOps.runLoteSeguro(operaciones, "Descontando...");
         if (res.status !== "success") return;
+
         await App.logic.cargarDatosIniciales();
-App.ui.toast("Descontado de bodega");
-App.router.handleRoute();
-     
+        App.ui.toast("Descontado de bodega");
+        App.router.handleRoute();
     },
 
     async confirmarMandarProduccion(datos) {
-        const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); const usos = Array.isArray(datos.uso) ? datos.uso : (datos.uso ? [datos.uso] : []); let requerimientos = {}; for(let i=0; i<mats.length; i++){ let mId = mats[i]; let c = parseFloat(cants[i]||0); if(mId && c > 0) requerimientos[mId] = (requerimientos[mId] || 0) + c; } let alertasDeStock = []; for(let mId in requerimientos) { let material = App.state.inventario.find(m => m.id === mId); if(material && parseFloat(material.stock_actual) < requerimientos[mId]) { alertasDeStock.push(`❌ ${material.nombre}: Tienes ${material.stock_actual} y necesitas ${requerimientos[mId]}`); } } if(alertasDeStock.length > 0) { const continuar = confirm("⚠️ ALERTA: NO TIENES SUFICIENTE MATERIAL EN BODEGA ⚠️\n\n" + alertasDeStock.join("\n") + "\n\n¿Quieres enviarlo a producción de todos modos?"); if(!continuar) return; }
-   let operaciones = []; let nuevosMovs = []; let recetaPersonalizada = [];
-        for(let i=0; i<mats.length; i++) { const matId = mats[i]; const cant = parseFloat(cants[i] || 0); const usoStr = usos[i] || 'Cuerpo'; if(matId && cant > 0) { recetaPersonalizada.push({ mat_id: matId, cant: cant, uso: usoStr }); const material = App.state.inventario.find(m => m.id === matId); if(material) { const nStock = parseFloat(material.stock_actual) - cant; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } });  const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cant, costo_unitario: material.costo_unitario||0, total: (-cant * (material.costo_unitario||0)), notas: `Envío a taller` }; nuevosMovs.push(mov); } } }
-        const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datos.pedido_detalle_id, estado: "pendiente", fecha_creacion: new Date().toISOString(), receta_personalizada: JSON.stringify(recetaPersonalizada) }; nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: m }); }); operaciones.push({ action: "guardar_fila", nombreHoja: "ordenes_produccion", datos: nuevaOrden });
+        const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []);
+        const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []);
+        const usos = Array.isArray(datos.uso) ? datos.uso : (datos.uso ? [datos.uso] : []);
+
+        let requerimientos = {};
+        for (let i = 0; i < mats.length; i++) {
+            const mId = mats[i];
+            const c = parseFloat(cants[i] || 0);
+            if (mId && c > 0) requerimientos[mId] = (requerimientos[mId] || 0) + c;
+        }
+
+        let alertasDeStock = [];
+        for (let mId in requerimientos) {
+            const material = App.state.inventario.find(m => m.id === mId);
+            if (material && parseFloat(material.stock_actual) < requerimientos[mId]) {
+                alertasDeStock.push(`❌ ${material.nombre}: Tienes ${material.stock_actual} y necesitas ${requerimientos[mId]}`);
+            }
+        }
+
+        if (alertasDeStock.length > 0) {
+            const continuar = confirm(
+                "⚠️ ALERTA: NO TIENES SUFICIENTE MATERIAL EN BODEGA ⚠️\n\n" +
+                alertasDeStock.join("\n") +
+                "\n\n¿Quieres enviarlo a producción de todos modos?"
+            );
+            if (!continuar) return;
+        }
+
+        let operaciones = [];
+        let nuevosMovs = [];
+        let recetaPersonalizada = [];
+
+        for (let i = 0; i < mats.length; i++) {
+            const matId = mats[i];
+            const cant = parseFloat(cants[i] || 0);
+            const usoStr = usos[i] || 'Cuerpo';
+
+            if (matId && cant > 0) {
+                recetaPersonalizada.push({ mat_id: matId, cant: cant, uso: usoStr });
+                const material = App.state.inventario.find(m => m.id === matId);
+
+                if (material) {
+                    const nStock = parseFloat(material.stock_actual) - cant;
+                    operaciones.push({
+                        action: "actualizar_fila",
+                        nombreHoja: "materiales",
+                        idFila: material.id,
+                        datosNuevos: { stock_actual: nStock }
+                    });
+
+                    nuevosMovs.push({
+                        id: "MOV-" + Date.now() + i,
+                        fecha: new Date().toISOString().split('T')[0],
+                        tipo_movimiento: "salida_produccion",
+                        origen: "orden",
+                        origen_id: "PENDIENTE",
+                        ref_tipo: "material",
+                        ref_id: material.id,
+                        cantidad: -cant,
+                        costo_unitario: material.costo_unitario || 0,
+                        total: (-cant * (material.costo_unitario || 0)),
+                        notas: "Envío a taller"
+                    });
+                }
+            }
+        }
+
+        const nuevaOrden = {
+            id: "ORD-" + Date.now(),
+            pedido_detalle_id: datos.pedido_detalle_id,
+            estado: "pendiente",
+            fecha_creacion: new Date().toISOString(),
+            receta_personalizada: JSON.stringify(recetaPersonalizada)
+        };
+
+        nuevosMovs.forEach(m => {
+            m.origen_id = nuevaOrden.id;
+            operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: m });
+        });
+
+        operaciones.push({ action: "guardar_fila", nombreHoja: "ordenes_produccion", datos: nuevaOrden });
+
         const res = await App.safeOps.runLoteSeguro(operaciones, "Generando Orden...");
-if (res.status !== "success") return; await App.logic.cargarDatosIniciales();
-App.ui.toast("Enviado a taller");
-App.router.navigate('produccion');  },
-    async guardarOrdenStock(datos) { 
-        const pedidoId = "PED-STOCK-" + Date.now(); const cantidadNum = parseInt(datos.cantidad) || 1; const datosPedido = { id: pedidoId, cliente_id: "STOCK_INTERNO", total: 0, anticipo: 0, notas: "Producción Interna", fecha_entrega: "", fecha_creacion: new Date().toISOString() }; const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datos.producto_id, cantidad: cantidadNum, precio_unitario: 0 }; 
-        let operaciones = []; let nuevosMovs = []; let recetaArray = []; const producto = App.state.productos.find(p => p.id === datos.producto_id); 
-        if(producto) { for(let i=1; i<=20; i++) { const matId = producto[`mat_${i}`]; const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * cantidadNum; const uso = producto[`uso_${i}`] || 'Cuerpo'; if(matId && cantTeorica > 0) { recetaArray.push({ mat_id: matId, cant: cantTeorica, uso: uso }); const material = App.state.inventario.find(m => m.id === matId); if(material) { const nStock = parseFloat(material.stock_actual) - cantTeorica; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nStock } }); const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: "PENDIENTE", ref_tipo: "material", ref_id: material.id, cantidad: -cantTeorica, costo_unitario: material.costo_unitario||0, total: (-cantTeorica * (material.costo_unitario||0)), notas: "Stock Interno" }; nuevosMovs.push(mov); } } } } 
-        const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datosDetalle.id, estado: "pendiente", fecha_creacion: new Date().toISOString(), receta_personalizada: JSON.stringify(recetaArray) }; nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: m }); }); operaciones.push({ action: "guardar_fila", nombreHoja: "pedidos", datos: datosPedido }, { action: "guardar_fila", nombreHoja: "pedido_detalle", datos: datosDetalle }, { action: "guardar_fila", nombreHoja: "ordenes_produccion", datos: nuevaOrden }); 
-       const res = await App.safeOps.runLoteSeguro(operaciones, "Procesando...");
-if (res.status !== "success") return; await App.logic.cargarDatosIniciales();
-App.ui.toast("Orden creada");
-App.router.handleRoute();    },
-    async guardarTrabajoOrden(ordenId, data, esReparacion = false) { App.ui.showLoader("Asignando..."); const sanitizedTaskName = (data.tarea_nombre || "Trabajo").replace(/[^a-zA-Z0-9_ \-]/g, ""); const pagoObj = { id: "PAGO-" + Date.now() + "-" + sanitizedTaskName, artesano_id: data.artesano_id, orden_id: ordenId, monto_unitario: parseFloat(data.tarea_val), total: parseFloat(data.total), estado: "pendiente", fecha: new Date().toISOString() }; const res = await App.api.fetch("guardar_fila", { nombreHoja: "pago_artesanos", datos: pagoObj }); App.ui.hideLoader(); if(res.status === "success") { App.state.pago_artesanos.push(pagoObj); App.ui.toast("Asignado"); if(esReparacion) { App.router.handleRoute(); } else { App.views.modalEditarOrden(ordenId); } } else { App.ui.toast("Error"); App.router.handleRoute(); } },
-    async cerrarOrdenProduccion(datosFormulario) { 
-     const ordenId = datosFormulario.orden_id; const orden = App.state.ordenes_produccion.find(o => o.id === ordenId); const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id) || {}; const producto = App.state.productos.find(p => p.id === detalle.producto_id); let operaciones = [ { action: "actualizar_fila", nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: { estado: 'listo' } } ]; let nuevosMovs = []; 
-        for(let i=1; i<=20; i++) { const matId = datosFormulario[`mat_${i}_id`]; const consumoTeorico = parseFloat(datosFormulario[`mat_${i}_teorico`]); const consumoReal = parseFloat(datosFormulario[`mat_${i}_real`]); if(matId && !isNaN(consumoTeorico) && !isNaN(consumoReal)) { const material = App.state.inventario.find(m => m.id === matId); if(material) { const diferencia = consumoReal - consumoTeorico; if(diferencia !== 0) { const stockAjustado = parseFloat(material.stock_actual) - diferencia; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: stockAjustado } }); const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: diferencia > 0 ? "salida_merma" : "entrada_ajuste", origen: "orden", origen_id: ordenId, ref_tipo: "material", ref_id: material.id, cantidad: -diferencia, costo_unitario: material.costo_unitario||0, total: (-diferencia * (material.costo_unitario||0)), notas: "Ajuste por consumo en taller" }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); } } } } 
-        if (datosFormulario.sumar_stock === "1" && producto) { let matHamaca = App.state.inventario.find(m => m.nombre === producto.nombre && m.tipo === 'reventa'); if(matHamaca) { let nStock = parseFloat(matHamaca.stock_actual) + 1; operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: matHamaca.id, datosNuevos: { stock_actual: nStock } });  } else { let nMat = { id: "MAT-" + Date.now() + "REV", nombre: producto.nombre, tipo: "reventa", unidad: "Pzas", stock_actual: 1, fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "materiales", datos: nMat });  } App.ui.toast("Guardado en Bodega"); } 
-        if(detalle && detalle.pedido_id) { const pedidoMaster = App.state.pedidos.find(p => p.id === detalle.pedido_id); if(pedidoMaster && pedidoMaster.cliente_id !== "STOCK_INTERNO" && pedidoMaster.estado !== 'pagado') { operaciones.push({ action: "actualizar_fila", nombreHoja: "pedidos", idFila: pedidoMaster.id, datosNuevos: { estado: 'listo para entregar' } }); } }
-        const res = await App.safeOps.runLoteSeguro(operaciones, "Finalizando...");
-if (res.status !== "success") return;  await App.logic.cargarDatosIniciales();
-App.ui.toast("¡Terminado!");
-App.router.handleRoute();
+        if (res.status !== "success") return;
+
+        await App.logic.cargarDatosIniciales();
+        App.ui.toast("Enviado a taller");
+        App.router.navigate('produccion');
     },
-   async procesarCambioOrden(ordenId, datos) {
-    if (datos.estado === 'listo') {
-        App.views.formCerrarOrden(ordenId);
-    } else {
+
+    async guardarOrdenStock(datos) {
+        const pedidoId = "PED-STOCK-" + Date.now();
+        const cantidadNum = parseInt(datos.cantidad) || 1;
+        const datosPedido = {
+            id: pedidoId,
+            cliente_id: "STOCK_INTERNO",
+            total: 0,
+            anticipo: 0,
+            notas: "Producción Interna",
+            fecha_entrega: "",
+            fecha_creacion: new Date().toISOString()
+        };
+
+        const datosDetalle = {
+            id: "PDET-" + Date.now(),
+            pedido_id: pedidoId,
+            producto_id: datos.producto_id,
+            cantidad: cantidadNum,
+            precio_unitario: 0
+        };
+
+        let operaciones = [];
+        let nuevosMovs = [];
+        let recetaArray = [];
+        const producto = App.state.productos.find(p => p.id === datos.producto_id);
+
+        if (producto) {
+            for (let i = 1; i <= 20; i++) {
+                const matId = producto[`mat_${i}`];
+                const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * cantidadNum;
+                const uso = producto[`uso_${i}`] || 'Cuerpo';
+
+                if (matId && cantTeorica > 0) {
+                    recetaArray.push({ mat_id: matId, cant: cantTeorica, uso: uso });
+                    const material = App.state.inventario.find(m => m.id === matId);
+
+                    if (material) {
+                        const nStock = parseFloat(material.stock_actual) - cantTeorica;
+                        operaciones.push({
+                            action: "actualizar_fila",
+                            nombreHoja: "materiales",
+                            idFila: material.id,
+                            datosNuevos: { stock_actual: nStock }
+                        });
+
+                        nuevosMovs.push({
+                            id: "MOV-" + Date.now() + i,
+                            fecha: new Date().toISOString().split('T')[0],
+                            tipo_movimiento: "salida_produccion",
+                            origen: "orden",
+                            origen_id: "PENDIENTE",
+                            ref_tipo: "material",
+                            ref_id: material.id,
+                            cantidad: -cantTeorica,
+                            costo_unitario: material.costo_unitario || 0,
+                            total: (-cantTeorica * (material.costo_unitario || 0)),
+                            notas: "Stock Interno"
+                        });
+                    }
+                }
+            }
+        }
+
+        const nuevaOrden = {
+            id: "ORD-" + Date.now(),
+            pedido_detalle_id: datosDetalle.id,
+            estado: "pendiente",
+            fecha_creacion: new Date().toISOString(),
+            receta_personalizada: JSON.stringify(recetaArray)
+        };
+
+        nuevosMovs.forEach(m => {
+            m.origen_id = nuevaOrden.id;
+            operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: m });
+        });
+
+        operaciones.push(
+            { action: "guardar_fila", nombreHoja: "pedidos", datos: datosPedido },
+            { action: "guardar_fila", nombreHoja: "pedido_detalle", datos: datosDetalle },
+            { action: "guardar_fila", nombreHoja: "ordenes_produccion", datos: nuevaOrden }
+        );
+
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Procesando...");
+        if (res.status !== "success") return;
+
+        await App.logic.cargarDatosIniciales();
+        App.ui.toast("Orden creada");
+        App.router.handleRoute();
+    },
+
+    async guardarTrabajoOrden(ordenId, data, esReparacion = false) {
+        App.ui.showLoader("Asignando...");
+
+        const sanitizedTaskName = (data.tarea_nombre || "Trabajo").replace(/[^a-zA-Z0-9_ \-]/g, "");
+        const pagoObj = {
+            id: "PAGO-" + Date.now() + "-" + sanitizedTaskName,
+            artesano_id: data.artesano_id,
+            orden_id: ordenId,
+            monto_unitario: parseFloat(data.tarea_val),
+            total: parseFloat(data.total),
+            estado: "pendiente",
+            fecha: new Date().toISOString()
+        };
+
+        const res = await App.api.fetch("guardar_fila", {
+            nombreHoja: "pago_artesanos",
+            datos: pagoObj
+        });
+
+        App.ui.hideLoader();
+
+        if (res.status === "success") {
+            await App.logic.cargarDatosIniciales();
+            App.ui.toast("Asignado");
+            if (esReparacion) {
+                App.router.handleRoute();
+            } else {
+                App.views.modalEditarOrden(ordenId);
+            }
+        } else {
+            App.ui.toast("Error");
+            App.router.handleRoute();
+        }
+    },
+
+    async cerrarOrdenProduccion(datosFormulario) {
+        const ordenId = datosFormulario.orden_id;
+        const orden = App.state.ordenes_produccion.find(o => o.id === ordenId);
+        const detalle = orden ? App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id) || {} : {};
+        const producto = detalle.producto_id ? App.state.productos.find(p => p.id === detalle.producto_id) : null;
+
+        let operaciones = [
+            {
+                action: "actualizar_fila",
+                nombreHoja: "ordenes_produccion",
+                idFila: ordenId,
+                datosNuevos: { estado: 'listo' }
+            }
+        ];
+
+        for (let i = 1; i <= 20; i++) {
+            const matId = datosFormulario[`mat_${i}_id`];
+            const consumoTeorico = parseFloat(datosFormulario[`mat_${i}_teorico`]);
+            const consumoReal = parseFloat(datosFormulario[`mat_${i}_real`]);
+
+            if (matId && !isNaN(consumoTeorico) && !isNaN(consumoReal)) {
+                const material = App.state.inventario.find(m => m.id === matId);
+                if (material) {
+                    const diferencia = consumoReal - consumoTeorico;
+                    if (diferencia !== 0) {
+                        const stockAjustado = parseFloat(material.stock_actual) - diferencia;
+
+                        operaciones.push({
+                            action: "actualizar_fila",
+                            nombreHoja: "materiales",
+                            idFila: material.id,
+                            datosNuevos: { stock_actual: stockAjustado }
+                        });
+
+                        const mov = {
+                            id: "MOV-" + Date.now() + i,
+                            fecha: new Date().toISOString().split('T')[0],
+                            tipo_movimiento: diferencia > 0 ? "salida_merma" : "entrada_ajuste",
+                            origen: "orden",
+                            origen_id: ordenId,
+                            ref_tipo: "material",
+                            ref_id: material.id,
+                            cantidad: -diferencia,
+                            costo_unitario: material.costo_unitario || 0,
+                            total: (-diferencia * (material.costo_unitario || 0)),
+                            notas: "Ajuste por consumo en taller"
+                        };
+
+                        operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov });
+                    }
+                }
+            }
+        }
+
+        if (datosFormulario.sumar_stock === "1" && producto) {
+            const matHamaca = App.state.inventario.find(m => m.nombre === producto.nombre && m.tipo === 'reventa');
+
+            if (matHamaca) {
+                const nStock = parseFloat(matHamaca.stock_actual) + 1;
+                operaciones.push({
+                    action: "actualizar_fila",
+                    nombreHoja: "materiales",
+                    idFila: matHamaca.id,
+                    datosNuevos: { stock_actual: nStock }
+                });
+            } else {
+                const nMat = {
+                    id: "MAT-" + Date.now() + "REV",
+                    nombre: producto.nombre,
+                    tipo: "reventa",
+                    unidad: "Pzas",
+                    stock_actual: 1,
+                    fecha_creacion: new Date().toISOString()
+                };
+
+                operaciones.push({ action: "guardar_fila", nombreHoja: "materiales", datos: nMat });
+            }
+
+            App.ui.toast("Guardado en Bodega");
+        }
+
+        if (detalle && detalle.pedido_id) {
+            const pedidoMaster = App.state.pedidos.find(p => p.id === detalle.pedido_id);
+            if (pedidoMaster && pedidoMaster.cliente_id !== "STOCK_INTERNO" && pedidoMaster.estado !== 'pagado') {
+                operaciones.push({
+                    action: "actualizar_fila",
+                    nombreHoja: "pedidos",
+                    idFila: pedidoMaster.id,
+                    datosNuevos: { estado: 'listo para entregar' }
+                });
+            }
+        }
+
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Finalizando...");
+        if (res.status !== "success") return;
+
+        await App.logic.cargarDatosIniciales();
+        App.ui.toast("¡Terminado!");
+        App.router.handleRoute();
+    },
+
+    async procesarCambioOrden(ordenId, datos) {
+        if (datos.estado === 'listo') {
+            App.views.formCerrarOrden(ordenId);
+        } else {
+            App.ui.showLoader("Actualizando...");
+            const res = await App.api.fetch("actualizar_fila", {
+                nombreHoja: "ordenes_produccion",
+                idFila: ordenId,
+                datosNuevos: datos
+            });
+            App.ui.hideLoader();
+
+            if (res.status === "success") {
+                await App.logic.cargarDatosIniciales();
+                App.ui.toast("Actualizado");
+                App.router.handleRoute();
+            } else {
+                App.ui.toast("Error");
+            }
+        }
+    },
+
+    async liquidarNomina(artesanoId) {
+        const pagosPendientes = App.state.pago_artesanos.filter(
+            p => p.artesano_id === artesanoId && p.estado === 'pendiente'
+        );
+
+        let totalPagado = 0;
+        let operaciones = [];
+
+        for (let pago of pagosPendientes) {
+            operaciones.push({
+                action: "actualizar_fila",
+                nombreHoja: "pago_artesanos",
+                idFila: pago.id,
+                datosNuevos: { estado: 'pagado' }
+            });
+            totalPagado += parseFloat(pago.total || 0);
+        }
+
+        if (totalPagado > 0) {
+            const artesano = App.state.artesanos.find(a => a.id === artesanoId);
+            const gastoObj = {
+                id: "GAS-" + Date.now(),
+                descripcion: "Nómina - " + (artesano ? artesano.nombre : 'Artesano'),
+                categoria: "nomina",
+                monto: totalPagado,
+                fecha: new Date().toISOString().split('T')[0]
+            };
+
+            operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj });
+        }
+
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Liquidando...");
+        if (res.status !== "success") return;
+
+        await App.logic.cargarDatosIniciales();
+        App.ui.toast(`Liquidados $${totalPagado}`);
+        App.router.handleRoute();
+    },
+
+    async guardarNuevaCompra(datos) {
+        const compraId = "COM-" + Date.now();
+        const detallesCompra = [];
+        let operaciones = [];
+        const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []);
+        const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []);
+        const precios = Array.isArray(datos.precio_u) ? datos.precio_u : (datos.precio_u ? [datos.precio_u] : []);
+        let gastoPorTipo = {};
+
+        for (let i = 0; i < mats.length; i++) {
+            const matId = mats[i];
+            const cant = parseFloat(cants[i] || 0);
+            const precioUnitario = parseFloat(precios[i] || 0);
+            const totalFila = cant * precioUnitario;
+
+            if (matId && cant > 0) {
+                const material = App.state.inventario.find(m => m.id === matId);
+                if (material) {
+                    const tipoMat = material.tipo || 'otro';
+                    let catGasto = 'otro';
+
+                    if (tipoMat === 'hilo') catGasto = 'hilos';
+                    else if (tipoMat === 'accesorio') catGasto = 'accesorios';
+                    else if (tipoMat === 'reventa') catGasto = 'reventa';
+
+                    gastoPorTipo[catGasto] = (gastoPorTipo[catGasto] || 0) + totalFila;
+
+                    detallesCompra.push({
+                        mat_id: matId,
+                        nombre: material.nombre,
+                        cantidad: cant,
+                        costo_unitario: precioUnitario
+                    });
+
+                    const nuevoStock = parseFloat(material.stock_actual) + cant;
+
+                    operaciones.push({
+                        action: "actualizar_fila",
+                        nombreHoja: "materiales",
+                        idFila: material.id,
+                        datosNuevos: { stock_actual: nuevoStock, costo_unitario: precioUnitario }
+                    });
+
+                    if (material.tipo === 'reventa') {
+                        const existeProd = App.state.productos.find(
+                            p => p.mat_1 === material.id || p.nombre.toLowerCase() === material.nombre.toLowerCase()
+                        );
+
+                        if (!existeProd) {
+                            const nuevoProd = {
+                                id: "PROD-" + Date.now() + i,
+                                nombre: material.nombre,
+                                categoria: "reventa",
+                                clasificacion: "Reventa",
+                                precio_venta: 0,
+                                mat_1: material.id,
+                                cant_1: 1,
+                                uso_1: "Completo",
+                                activo: "TRUE",
+                                fecha_creacion: new Date().toISOString()
+                            };
+
+                            operaciones.push({ action: "guardar_fila", nombreHoja: "productos", datos: nuevoProd });
+                        } else if (existeProd.mat_1 !== material.id) {
+                            operaciones.push({
+                                action: "actualizar_fila",
+                                nombreHoja: "productos",
+                                idFila: existeProd.id,
+                                datosNuevos: { mat_1: material.id }
+                            });
+                        }
+                    }
+
+                    const mov = {
+                        id: "MOV-" + Date.now() + i,
+                        fecha: datos.fecha,
+                        tipo_movimiento: "entrada_compra",
+                        origen: "compra",
+                        origen_id: compraId,
+                        ref_tipo: "material",
+                        ref_id: material.id,
+                        cantidad: cant,
+                        costo_unitario: precioUnitario,
+                        total: totalFila,
+                        notas: "Compra a proveedor"
+                    };
+
+                    operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov });
+                }
+            }
+        }
+
+        const compra = {
+            id: compraId,
+            proveedor_id: datos.proveedor_id,
+            fecha: datos.fecha,
+            total: parseFloat(datos.total),
+            monto_pagado: parseFloat(datos.total),
+            estado: "pagado",
+            detalles: JSON.stringify(detallesCompra),
+            fecha_creacion: new Date().toISOString()
+        };
+
+        operaciones.push({ action: "guardar_fila", nombreHoja: "compras", datos: compra });
+
+        const proveedor = App.state.proveedores.find(p => p.id === datos.proveedor_id);
+        const nombreProv = proveedor ? proveedor.nombre : "Proveedor";
+
+        Object.keys(gastoPorTipo).forEach((cat, idx) => {
+            const nuevoGasto = {
+                id: "GAS-" + Date.now() + "-" + idx,
+                categoria: cat,
+                descripcion: `Compra a ${nombreProv} (${compraId})`,
+                monto: gastoPorTipo[cat],
+                fecha: datos.fecha
+            };
+
+            operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto });
+        });
+
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Comprando...");
+        if (res.status !== "success") return;
+
+        await App.logic.cargarDatosIniciales();
+        App.ui.toast("Compra registrada");
+        App.router.handleRoute();
+    },
+
+    async guardarMultiplesGastos(datos) {
+        const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion];
+        const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto];
+        let operaciones = [];
+
+        for (let i = 0; i < descripciones.length; i++) {
+            if (!descripciones[i]) continue;
+
+            const gastoObj = {
+                id: "GAS-" + Date.now() + "-" + i,
+                categoria: datos.categoria,
+                descripcion: descripciones[i],
+                monto: parseFloat(montos[i]),
+                fecha: datos.fecha
+            };
+
+            operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj });
+        }
+
+        const res = await App.safeOps.runLoteSeguro(operaciones, "Registrando Gastos...");
+        if (res.status !== "success") return;
+
+        await App.logic.cargarDatosIniciales();
+        App.ui.toast("¡Gastos registrados!");
+        App.router.handleRoute();
+    },
+
+    async guardarNuevaReparacion(datos) {
+        App.ui.showLoader("Registrando...");
+        datos.id = "REP-" + Date.now();
+        datos.estado = "recibida";
+        datos.fecha_creacion = new Date().toISOString();
+
+        const res = await App.api.fetch("guardar_fila", {
+            nombreHoja: "reparaciones",
+            datos: datos
+        });
+
+        App.ui.hideLoader();
+
+        if (res.status === "success") {
+            await App.logic.cargarDatosIniciales();
+            App.ui.toast("Reparación guardada");
+            App.router.handleRoute();
+        } else {
+            App.ui.toast("Error al guardar.");
+        }
+    },
+
+    async actualizarReparacion(repId, estado) {
         App.ui.showLoader("Actualizando...");
         const res = await App.api.fetch("actualizar_fila", {
-            nombreHoja: "ordenes_produccion",
-            idFila: ordenId,
-            datosNuevos: datos
+            nombreHoja: "reparaciones",
+            idFila: repId,
+            datosNuevos: { estado: estado }
         });
         App.ui.hideLoader();
 
@@ -406,86 +1170,103 @@ App.router.handleRoute();
         } else {
             App.ui.toast("Error");
         }
-    }
-},
-    async liquidarNomina(artesanoId) { 
-        App.ui.showLoader("Liquidando..."); const pagosPendientes = App.state.pago_artesanos.filter(p => p.artesano_id === artesanoId && p.estado === 'pendiente'); let totalPagado = 0; let operaciones = []; 
-        for (let pago of pagosPendientes) { operaciones.push({ action: "actualizar_fila", nombreHoja: "pago_artesanos", idFila: pago.id, datosNuevos: { estado: 'pagado' } });  totalPagado += parseFloat(pago.total || 0); } 
-        if (totalPagado > 0) { const artesano = App.state.artesanos.find(a => a.id === artesanoId); const gastoObj = { id: "GAS-" + Date.now(), descripcion: "Nómina - " + (artesano ? artesano.nombre : 'Artesano'), categoria: "nomina", monto: totalPagado, fecha: new Date().toISOString().split('T')[0] }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj });  } 
-        const res = await App.safeOps.runLoteSeguro(operaciones, "Liquidando...");
-if (res.status !== "success") return;
-await App.logic.cargarDatosIniciales();
-App.ui.toast(`Liquidados $${totalPagado}`);
-App.router.handleRoute(); 
     },
-    
-   async guardarNuevaCompra(datos) { 
-        const compraId = "COM-" + Date.now(); const detallesCompra = []; let operaciones = []; let nuevosMovs = []; const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); const precios = Array.isArray(datos.precio_u) ? datos.precio_u : (datos.precio_u ? [datos.precio_u] : []);
-        let gastoPorTipo = {}; // Para separar hilos, accesorios, reventa
-        for(let i=0; i<mats.length; i++) { 
-            const matId = mats[i]; const cant = parseFloat(cants[i] || 0); const precioUnitario = parseFloat(precios[i] || 0); const totalFila = cant * precioUnitario; 
-            if(matId && cant > 0) { 
-                const material = App.state.inventario.find(m => m.id === matId); 
-                if(material) { 
-                    const tipoMat = material.tipo || 'otro'; let catGasto = 'otro';
-                    if(tipoMat === 'hilo') catGasto = 'hilos'; else if(tipoMat === 'accesorio') catGasto = 'accesorios'; else if(tipoMat === 'reventa') catGasto = 'reventa';
-                    gastoPorTipo[catGasto] = (gastoPorTipo[catGasto] || 0) + totalFila;
-                    detallesCompra.push({ mat_id: matId, nombre: material.nombre, cantidad: cant, costo_unitario: precioUnitario }); 
-                    const nuevoStock = parseFloat(material.stock_actual) + cant; 
-                    operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_actual: nuevoStock, costo_unitario: precioUnitario } }); 
-                    
-                    if (material.tipo === 'reventa') { 
-                        const existeProd = App.state.productos.find(p => p.mat_1 === material.id || p.nombre.toLowerCase() === material.nombre.toLowerCase()); 
-                        if(!existeProd) { 
-                            const nuevoProd = { id: "PROD-" + Date.now() + i, nombre: material.nombre, categoria: "reventa", clasificacion: "Reventa", precio_venta: 0, mat_1: material.id, cant_1: 1, uso_1: "Completo", activo: "TRUE", fecha_creacion: new Date().toISOString() }; 
-                            operaciones.push({ action: "guardar_fila", nombreHoja: "productos", datos: nuevoProd }); 
-                        } else if (existeProd.mat_1 !== material.id) { operaciones.push({ action: "actualizar_fila", nombreHoja: "productos", idFila: existeProd.id, datosNuevos: { mat_1: material.id } }); }
-                    } 
-                    const mov = { id: "MOV-" + Date.now() + i, fecha: datos.fecha, tipo_movimiento: "entrada_compra", origen: "compra", origen_id: compraId, ref_tipo: "material", ref_id: material.id, cantidad: cant, costo_unitario: precioUnitario, total: totalFila, notas: "Compra a proveedor" }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); 
-                } 
-            } 
-        } 
-        const compra = { id: compraId, proveedor_id: datos.proveedor_id, fecha: datos.fecha, total: parseFloat(datos.total), monto_pagado: parseFloat(datos.total), estado: "pagado", detalles: JSON.stringify(detallesCompra), fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "compras", datos: compra }); const proveedor = App.state.proveedores.find(p => p.id === datos.proveedor_id); const nombreProv = proveedor ? proveedor.nombre : "Proveedor"; 
-        Object.keys(gastoPorTipo).forEach((cat, idx) => {
-            const nuevoGasto = { id: "GAS-" + Date.now() + "-" + idx, categoria: cat, descripcion: `Compra a ${nombreProv} (${compraId})`, monto: gastoPorTipo[cat], fecha: datos.fecha }; 
-            operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto }); 
-        });
-        const res = await App.safeOps.runLoteSeguro(operaciones, "Comprando...");
-if (res.status !== "success") return;
-await App.logic.cargarDatosIniciales();
-App.ui.toast("Compra registrada");
-App.router.handleRoute();},
-    
-    async guardarMultiplesGastos(datos) { const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; let operaciones = []; let nuevosGastos = []; for(let i=0; i<descripciones.length; i++) { if(!descripciones[i]) continue; const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; nuevosGastos.push(gastoObj); operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); } const res = await App.safeOps.runLoteSeguro(operaciones, "Registrando Gastos...");
-if (res.status !== "success") return; await App.logic.cargarDatosIniciales();
-App.ui.toast("¡Gastos registrados!");
-App.router.handleRoute();},
-    
-    // MEJORA: GUARDAR Y EDITAR REPARACIÓN UNIFICADO
-    async guardarNuevaReparacion(datos) { 
-        App.ui.showLoader("Registrando..."); 
-        datos.id = "REP-" + Date.now(); datos.estado = "recibida"; datos.fecha_creacion = new Date().toISOString(); 
-        const res = await App.api.fetch("guardar_fila", { nombreHoja: "reparaciones", datos: datos }); 
-        App.ui.hideLoader(); 
-        if (res.status === "success") { App.state.reparaciones.push(datos); App.ui.toast("Reparación guardada"); App.router.handleRoute(); } 
-        else { App.ui.toast("Error al guardar."); } 
-    },
-    async actualizarReparacion(repId, estado) { App.ui.showLoader("Actualizando..."); await App.api.fetch("actualizar_fila", { nombreHoja: "reparaciones", idFila: repId, datosNuevos: { estado: estado } }); const rep = App.state.reparaciones.find(r => r.id === repId); if(rep) rep.estado = estado; App.ui.hideLoader(); App.ui.toast("Actualizado"); App.router.handleRoute(); },
-    
-    async guardarAbono(datos) { 
+
+    async guardarAbono(datos) {
         const pedidoObj = App.state.pedidos.find(p => p.id === datos.pedido_id);
-        if(pedidoObj) { const abonosPrevios = App.state.abonos.filter(a => a.pedido_id === pedidoObj.id).reduce((s, a) => s + parseFloat(a.monto || 0), 0); const saldoPendiente = parseFloat(pedidoObj.total) - parseFloat(pedidoObj.anticipo) - abonosPrevios; const nuevoMonto = parseFloat(datos.monto) || 0; if(nuevoMonto > saldoPendiente + 0.1) { alert("❌ Validación: El monto a abonar es superior a la deuda. ¡Revisa la cantidad!"); return; } }
-        App.ui.showLoader("Registrando Pago..."); const nuevoAbono = { id: "ABO-" + Date.now(), pedido_id: datos.pedido_id, cliente_id: datos.cliente_id, monto: parseFloat(datos.monto) || 0, nota: datos.nota, fecha: new Date().toISOString() }; const res = await App.api.fetch("guardar_fila", { nombreHoja: "abonos_clientes", datos: nuevoAbono }); 
-        if (res.status === "success") { App.state.abonos.push(nuevoAbono); if(pedidoObj) { const abonosTotales = App.state.abonos.filter(a => a.pedido_id === pedidoObj.id).reduce((s, a) => s + parseFloat(a.monto || 0), 0); const saldoRealFinal = parseFloat(pedidoObj.total) - parseFloat(pedidoObj.anticipo) - abonosTotales; if(saldoRealFinal <= 0 && pedidoObj.estado !== 'pagado') { await App.api.fetch("actualizar_fila", { nombreHoja: "pedidos", idFila: pedidoObj.id, datosNuevos: { estado: 'pagado' } }); pedidoObj.estado = 'pagado'; } } App.ui.hideLoader(); App.ui.toast("Pago registrado exitosamente"); App.router.handleRoute(); } else { App.ui.hideLoader(); App.ui.toast("Error al guardar pago"); }
+
+        if (pedidoObj) {
+            const abonosPrevios = App.state.abonos
+                .filter(a => a.pedido_id === pedidoObj.id)
+                .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+
+            const saldoPendiente = parseFloat(pedidoObj.total) - parseFloat(pedidoObj.anticipo) - abonosPrevios;
+            const nuevoMonto = parseFloat(datos.monto) || 0;
+
+            if (nuevoMonto > saldoPendiente + 0.1) {
+                alert("❌ Validación: El monto a abonar es superior a la deuda. ¡Revisa la cantidad!");
+                return;
+            }
+        }
+
+        App.ui.showLoader("Registrando Pago...");
+
+        const nuevoAbono = {
+            id: "ABO-" + Date.now(),
+            pedido_id: datos.pedido_id,
+            cliente_id: datos.cliente_id,
+            monto: parseFloat(datos.monto) || 0,
+            nota: datos.nota,
+            fecha: new Date().toISOString()
+        };
+
+        const res = await App.api.fetch("guardar_fila", {
+            nombreHoja: "abonos_clientes",
+            datos: nuevoAbono
+        });
+
+        if (res.status === "success") {
+            if (pedidoObj) {
+                const abonosPrevios = App.state.abonos
+                    .filter(a => a.pedido_id === pedidoObj.id)
+                    .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+
+                const saldoRealFinal =
+                    parseFloat(pedidoObj.total) -
+                    parseFloat(pedidoObj.anticipo) -
+                    abonosPrevios -
+                    (parseFloat(datos.monto) || 0);
+
+                if (saldoRealFinal <= 0 && pedidoObj.estado !== 'pagado') {
+                    await App.api.fetch("actualizar_fila", {
+                        nombreHoja: "pedidos",
+                        idFila: pedidoObj.id,
+                        datosNuevos: { estado: 'pagado' }
+                    });
+                }
+            }
+
+            App.ui.hideLoader();
+            await App.logic.cargarDatosIniciales();
+            App.ui.toast("Pago registrado exitosamente");
+            App.router.handleRoute();
+        } else {
+            App.ui.hideLoader();
+            App.ui.toast("Error al guardar pago");
+        }
     },
+
     verDiagnostico() {
         let html = `<table style="width:100%; font-size:0.85rem; border-collapse:collapse;"><tr style="border-bottom:1px solid #ccc; text-align:left;"><th>Tabla (Hoja)</th><th>Estado</th><th>Registros</th></tr>`;
-        const tablas = [ { nombre: "materiales", state: "inventario" }, { nombre: "clientes", state: "clientes" }, { nombre: "productos", state: "productos" }, { nombre: "pedidos", state: "pedidos" }, { nombre: "pedido_detalle", state: "pedido_detalle" }, { nombre: "ordenes_produccion", state: "ordenes_produccion" }, { nombre: "artesanos", state: "artesanos" }, { nombre: "abonos_clientes", state: "abonos" }, { nombre: "gastos", state: "gastos" }, { nombre: "compras", state: "compras" }, { nombre: "proveedores", state: "proveedores" }, { nombre: "tarifas_artesano", state: "tarifas_artesano" }, { nombre: "pago_artesanos", state: "pago_artesanos" }, { nombre: "movimientos_inventario", state: "movimientos_inventario" } ];
-        tablas.forEach(t => { const arr = App.state[t.state]; const count = arr ? arr.length : 0; const status = arr ? "✅ OK" : "❌ Error"; html += `<tr style="border-bottom:1px dashed #eee;"><td style="padding:5px 0;">${t.nombre}</td><td>${status}</td><td>${count}</td></tr>`; });
+        const tablas = [
+            { nombre: "materiales", state: "inventario" },
+            { nombre: "clientes", state: "clientes" },
+            { nombre: "productos", state: "productos" },
+            { nombre: "pedidos", state: "pedidos" },
+            { nombre: "pedido_detalle", state: "pedido_detalle" },
+            { nombre: "ordenes_produccion", state: "ordenes_produccion" },
+            { nombre: "artesanos", state: "artesanos" },
+            { nombre: "abonos_clientes", state: "abonos" },
+            { nombre: "gastos", state: "gastos" },
+            { nombre: "compras", state: "compras" },
+            { nombre: "proveedores", state: "proveedores" },
+            { nombre: "tarifas_artesano", state: "tarifas_artesano" },
+            { nombre: "pago_artesanos", state: "pago_artesanos" },
+            { nombre: "movimientos_inventario", state: "movimientos_inventario" }
+        ];
+
+        tablas.forEach(t => {
+            const arr = App.state[t.state];
+            const count = arr ? arr.length : 0;
+            const status = arr ? "✅ OK" : "❌ Error";
+            html += `<tr style="border-bottom:1px dashed #eee;"><td style="padding:5px 0;">${t.nombre}</td><td>${status}</td><td>${count}</td></tr>`;
+        });
+
         html += `</table><button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="App.ui.closeSheet()">Cerrar</button>`;
         App.ui.openSheet("Diagnóstico de Base de Datos", html);
     },
-    
+
+
 renderGraficasFinanzas(filtro) {
         const cont = document.getElementById('finanzas-contenedor'); if(!cont) return; const hoy = new Date(); let mesActual = hoy.getMonth(); let anioActual = hoy.getFullYear(); let mesPasado = mesActual - 1; let anioPasado = anioActual; if(mesPasado < 0) { mesPasado = 11; anioPasado--; } let triActual = Math.floor(mesActual / 3);
         const filtrarFecha = (str) => { if(filtro === 'todo') return true; if(!str) return false; const f = new Date(str); if(filtro === 'mes_actual') return f.getMonth() === mesActual && f.getFullYear() === anioActual; if(filtro === 'mes_pasado') return f.getMonth() === mesPasado && f.getFullYear() === anioPasado; if(filtro === 'trimestre_actual') return Math.floor(f.getMonth() / 3) === triActual && f.getFullYear() === anioActual; if(filtro === 'anio_actual') return f.getFullYear() === anioActual; return true; };
