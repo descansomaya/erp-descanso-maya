@@ -82,50 +82,129 @@ App.views.finanzas = function() { document.getElementById('bottom-nav').style.di
 
 App.views.detalleFinanzas = function(tipo, filtro) { 
     const hoy = new Date(); let mesActual = hoy.getMonth(); let anioActual = hoy.getFullYear(); let mesPasado = mesActual - 1; let anioPasado = anioActual; if(mesPasado < 0) { mesPasado = 11; anioPasado--; } let triActual = Math.floor(mesActual / 3); 
-    const filtrarFecha = (str) => { if(filtro === 'todo') return true; if(!str) return false; const f = new Date(str); if(filtro === 'mes_actual') return f.getMonth() === mesActual && f.getFullYear() === anioActual; if(filtro === 'mes_pasado') return f.getMonth() === mesPasado && f.getFullYear() === anioPasado; if(filtro === 'trimestre_actual') return Math.floor(f.getMonth() / 3) === triActual && f.getFullYear() === anioActual; if(filtro === 'anio_actual') return f.getFullYear() === anioActual; return true; }; 
-    const pedFiltrados = App.state.pedidos.filter(p => filtrarFecha(p.fecha_creacion)); const aboFiltrados = App.state.abonos.filter(a => filtrarFecha(a.fecha)); const gasFiltrados = App.state.gastos.filter(g => filtrarFecha(g.fecha)); const repFiltradas = App.state.reparaciones.filter(r => filtrarFecha(r.fecha_creacion));
+    const filtrarFecha = (str) => { if(filtro === 'todo') return true; if(!str) return false; const f = new Date(str); if(isNaN(f.getTime())) return false; if(filtro === 'mes_actual') return f.getMonth() === mesActual && f.getFullYear() === anioActual; if(filtro === 'mes_pasado') return f.getMonth() === mesPasado && f.getFullYear() === anioPasado; if(filtro === 'trimestre_actual') return Math.floor(f.getMonth() / 3) === triActual && f.getFullYear() === anioActual; if(filtro === 'anio_actual') return f.getFullYear() === anioActual; return true; }; 
+    const pedFiltrados = (App.state.pedidos || []).filter(p => filtrarFecha(p.fecha_creacion)); const aboFiltrados = (App.state.abonos || []).filter(a => filtrarFecha(a.fecha)); const gasFiltrados = (App.state.gastos || []).filter(g => filtrarFecha(g.fecha)); const repFiltradas = (App.state.reparaciones || []).filter(r => filtrarFecha(r.fecha_creacion));
+    
+    // Función de ayuda para etiquetar si es Stock o Pedido normal
+    const getEtiqueta = (clienteId) => clienteId === 'STOCK_INTERNO' ? '<span style="color:#D69E2E;">(Bodega)</span>' : '<span style="color:#3182CE;">(Pedido)</span>';
+
     let html = '<ul style="list-style:none; padding:0; margin:0;">'; 
     if (tipo === 'ventas') { 
         if(pedFiltrados.length===0 && repFiltradas.length===0) html += '<li>No hay ventas ni reparaciones registradas.</li>'; 
-        pedFiltrados.forEach(p => { html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${(p.id||'').replace('PED-','')}</strong><br><small>${p.fecha_creacion.split('T')[0]}</small></span><span style="color:var(--primary); font-weight:bold;">$${p.total}</span></li>`; }); 
-        repFiltradas.forEach(r => { html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${(r.id||'').replace('REP-','')} (Rep)</strong><br><small>${r.fecha_creacion.split('T')[0]}</small></span><span style="color:var(--primary); font-weight:bold;">$${r.precio}</span></li>`; }); 
+        pedFiltrados.forEach(p => { 
+            const fecha = p.fecha_creacion ? String(p.fecha_creacion).split('T')[0] : '';
+            html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${(p.id||'').replace('PED-','')} ${getEtiqueta(p.cliente_id)}</strong><br><small>${fecha}</small></span><span style="color:var(--primary); font-weight:bold;">$${parseFloat(p.total||0).toFixed(2)}</span></li>`; 
+        }); 
+        repFiltradas.forEach(r => { 
+            const fecha = r.fecha_creacion ? String(r.fecha_creacion).split('T')[0] : '';
+            html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${(r.id||'').replace('REP-','')} <span style="color:#805AD5;">(Rep)</span></strong><br><small>${fecha}</small></span><span style="color:var(--primary); font-weight:bold;">$${parseFloat(r.precio||0).toFixed(2)}</span></li>`; 
+        }); 
     } else if (tipo === 'ingresos') { 
-        const ants = pedFiltrados.filter(p => parseFloat(p.anticipo)>0); const antsRep = repFiltradas.filter(r => parseFloat(r.anticipo)>0);
+        const ants = pedFiltrados.filter(p => parseFloat(p.anticipo||0)>0); const antsRep = repFiltradas.filter(r => parseFloat(r.anticipo||0)>0);
         if(ants.length===0 && aboFiltrados.length===0 && antsRep.length===0) html += '<li>No hay ingresos.</li>'; 
-        ants.forEach(p => { html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>Anticipo ${(p.id||'').replace('PED-','')}</strong><br><small>${p.fecha_creacion.split('T')[0]}</small></span><span style="color:var(--success); font-weight:bold;">$${p.anticipo}</span></li>`; }); 
-        antsRep.forEach(r => { html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>Pago de ${(r.id||'').replace('REP-','')}</strong><br><small>${r.fecha_creacion.split('T')[0]}</small></span><span style="color:var(--success); font-weight:bold;">$${r.anticipo}</span></li>`; }); 
-        aboFiltrados.forEach(a => { html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>Abono a ${(a.pedido_id||'').replace('PED-','')}</strong><br><small>${a.fecha.split('T')[0]}</small></span><span style="color:var(--success); font-weight:bold;">$${a.monto}</span></li>`; }); 
+        ants.forEach(p => { 
+            const fecha = p.fecha_creacion ? String(p.fecha_creacion).split('T')[0] : '';
+            html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>Anticipo ${(p.id||'').replace('PED-','')} ${getEtiqueta(p.cliente_id)}</strong><br><small>${fecha}</small></span><span style="color:var(--success); font-weight:bold;">$${parseFloat(p.anticipo||0).toFixed(2)}</span></li>`; 
+        }); 
+        antsRep.forEach(r => { 
+            const fecha = r.fecha_creacion ? String(r.fecha_creacion).split('T')[0] : '';
+            html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>Pago ${(r.id||'').replace('REP-','')} <span style="color:#805AD5;">(Rep)</span></strong><br><small>${fecha}</small></span><span style="color:var(--success); font-weight:bold;">$${parseFloat(r.anticipo||0).toFixed(2)}</span></li>`; 
+        }); 
+        aboFiltrados.forEach(a => { 
+            const fecha = a.fecha ? String(a.fecha).split('T')[0] : '';
+            const p = (App.state.pedidos || []).find(x => x.id === a.pedido_id) || {};
+            html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>Abono a ${(a.pedido_id||'').replace('PED-','')} ${getEtiqueta(p.cliente_id)}</strong><br><small>${fecha}</small></span><span style="color:var(--success); font-weight:bold;">$${parseFloat(a.monto||0).toFixed(2)}</span></li>`; 
+        }); 
     } else if (tipo === 'gastos') { 
         if(gasFiltrados.length===0) html += '<li>No hay gastos registrados.</li>'; 
-        gasFiltrados.forEach(g => { html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between; align-items:center;"><span><strong>${App.ui.escapeHTML(g.descripcion)}</strong><br><small>${g.fecha.split('T')[0]}</small></span><div style="text-align:right;"><span style="color:var(--danger); font-weight:bold; display:block; margin-bottom:5px;">$${g.monto}</span><button class="btn btn-secondary" style="padding:2px 6px; font-size:0.7rem; margin-right:4px;" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formGasto('${g.id}'), 300)">✏️</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:0.7rem; color:red; border-color:red;" onclick="App.ui.closeSheet(); App.logic.eliminarRegistroGenerico('gastos', '${g.id}', 'gastos')">🗑️</button></div></li>`; }); 
+        gasFiltrados.forEach(g => { 
+            const fecha = g.fecha ? String(g.fecha).split('T')[0] : '';
+            html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between; align-items:center;"><span><strong>${App.ui.escapeHTML(g.descripcion || '')}</strong><br><small>${fecha}</small></span><div style="text-align:right;"><span style="color:var(--danger); font-weight:bold; display:block; margin-bottom:5px;">$${parseFloat(g.monto||0).toFixed(2)}</span><button class="btn btn-secondary" style="padding:2px 6px; font-size:0.7rem; margin-right:4px;" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formGasto('${g.id}'), 300)">✏️</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:0.7rem; color:red; border-color:red;" onclick="App.ui.closeSheet(); App.logic.eliminarRegistroGenerico('gastos', '${g.id}', 'gastos')">🗑️</button></div></li>`; 
+        }); 
     } else if (tipo === 'por_cobrar') { 
         let hayCobros = false; 
-        App.state.pedidos.forEach(p => { const abonos = App.state.abonos.filter(a => a.pedido_id === p.id).reduce((s,a)=>s+parseFloat(a.monto||0),0); const saldo = parseFloat(p.total||0) - parseFloat(p.anticipo||0) - abonos; if(saldo > 0) { hayCobros=true; html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${(p.id||'').replace('PED-','')}</strong><br><small>${p.fecha_creacion.split('T')[0]}</small></span><span style="color:#D69E2E; font-weight:bold;">$${saldo}</span></li>`; } }); 
-        App.state.reparaciones.forEach(r => { const saldo = parseFloat(r.precio||0) - parseFloat(r.anticipo||0); if(saldo > 0) { hayCobros=true; html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${(r.id||'').replace('REP-','')} (Reparación)</strong><br><small>${r.fecha_creacion.split('T')[0]}</small></span><span style="color:#D69E2E; font-weight:bold;">$${saldo}</span></li>`; } });
-        if(!hayCobros) html += '<li>No hay saldo pendiente a tu favor.</li>'; 
+        (App.state.pedidos || []).forEach(p => { 
+            const abonos = (App.state.abonos || []).filter(a => a.pedido_id === p.id).reduce((s,a)=>s+parseFloat(a.monto||0),0); 
+            const saldo = parseFloat(p.total||0) - parseFloat(p.anticipo||0) - abonos; 
+            if(saldo > 0) { 
+                hayCobros=true; 
+                const fecha = p.fecha_creacion ? String(p.fecha_creacion).split('T')[0] : '';
+                html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${(p.id||'').replace('PED-','')} ${getEtiqueta(p.cliente_id)}</strong><br><small>${fecha}</small></span><span style="color:#D69E2E; font-weight:bold;">$${saldo.toFixed(2)}</span></li>`; 
+            } 
+        }); 
+        (App.state.reparaciones || []).forEach(r => { 
+            const saldo = parseFloat(r.precio||0) - parseFloat(r.anticipo||0); 
+            if(saldo > 0) { 
+                hayCobros=true; 
+                const fecha = r.fecha_creacion ? String(r.fecha_creacion).split('T')[0] : '';
+                html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${(r.id||'').replace('REP-','')} <span style="color:#805AD5;">(Rep)</span></strong><br><small>${fecha}</small></span><span style="color:#D69E2E; font-weight:bold;">$${saldo.toFixed(2)}</span></li>`; 
+            } 
+        });
+        if(!hayCobros) html += '<li>No hay saldo pendiente.</li>'; 
     } else if (tipo === 'por_pagar') { 
         let hayDeudas = false; 
-        App.state.pago_artesanos.forEach(pa => { if(pa.estado === 'pendiente') { hayDeudas=true; const a = App.state.artesanos.find(x => x.id === pa.artesano_id); html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${a ? App.ui.escapeHTML(a.nombre) : 'Artesano'} (Nómina)</strong><br><small>${pa.fecha.split('T')[0]}</small></span><span style="color:#E53E3E; font-weight:bold;">$${pa.total}</span></li>`; } }); 
-        App.state.compras.forEach(c => { const deuda = parseFloat(c.total||0) - parseFloat(c.monto_pagado||c.total); if(deuda > 0) { hayDeudas=true; const pv = App.state.proveedores.find(x => x.id === c.proveedor_id); html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${pv ? App.ui.escapeHTML(pv.nombre) : 'Proveedor'} (Compra)</strong><br><small>${c.fecha.split('T')[0]}</small></span><span style="color:#E53E3E; font-weight:bold;">$${deuda}</span></li>`; } });
+        (App.state.pago_artesanos || []).forEach(pa => { 
+            if(pa.estado === 'pendiente') { 
+                hayDeudas=true; 
+                const a = (App.state.artesanos || []).find(x => x.id === pa.artesano_id); 
+                const fecha = pa.fecha ? String(pa.fecha).split('T')[0] : '';
+                html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${a?a.nombre:'Artesano'} (Nómina)</strong><br><small>${fecha}</small></span><span style="color:#E53E3E; font-weight:bold;">$${parseFloat(pa.total||0).toFixed(2)}</span></li>`; 
+            } 
+        }); 
+        (App.state.compras || []).forEach(c => { 
+            const deuda = parseFloat(c.total||0) - parseFloat(c.monto_pagado||c.total||0); 
+            if(deuda > 0) { 
+                hayDeudas=true; 
+                const pv = (App.state.proveedores || []).find(x => x.id === c.proveedor_id); 
+                const fecha = c.fecha ? String(c.fecha).split('T')[0] : '';
+                html += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${pv?pv.nombre:'Proveedor'} (Compra)</strong><br><small>${fecha}</small></span><span style="color:#E53E3E; font-weight:bold;">$${deuda.toFixed(2)}</span></li>`; 
+            } 
+        });
         if(!hayDeudas) html += '<li>No hay deudas por pagar. ¡Estás al día!</li>'; 
     }
+    
     html += '</ul><button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="App.ui.closeSheet()">Cerrar</button>'; 
-    App.ui.openSheet(tipo === 'ventas' ? "Detalle de Ventas" : tipo === 'ingresos' ? "Detalle de Ingresos" : tipo === 'gastos' ? "Detalle de Gastos" : "Saldos Históricos", html); 
+    App.ui.openSheet(tipo === 'ventas' ? "Detalle de Ventas" : tipo === 'ingresos' ? "Detalle de Ingresos" : tipo === 'gastos' ? "Detalle de Gastos" : tipo === 'por_pagar' ? "Saldos por Pagar" : "Saldos Históricos", html); 
 };
 
 App.views.mas = function() { return `<div class="grid-2"><div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('clientes')"><div class="label" style="margin-top:0;">👥 Clientes</div></div><div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('proveedores')"><div class="label" style="margin-top:0;">🚚 Proveedores</div></div><div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('artesanos')"><div class="label" style="margin-top:0;">🧑‍🎨 Artesanos / Tareas</div></div><div class="card stat-card" style="cursor:pointer; background: #F0FFF4;" onclick="App.router.navigate('inventario')"><div class="label" style="margin-top:0; color:#276749;">📦 Bodega / Insumos</div></div><div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('productos')"><div class="label" style="margin-top:0;">🧶 Productos / Recetas</div></div><div class="card stat-card" style="cursor:pointer; background: #EBF8FF;" onclick="App.router.navigate('compras')"><div class="label" style="margin-top:0; color:#3182CE;">🛒 Ingresar Compra</div></div><div class="card stat-card" style="cursor:pointer; background: #FAF5FF;" onclick="App.router.navigate('reparaciones')"><div class="label" style="margin-top:0; color:#6B46C1;">🪡 Reparaciones</div></div><div class="card stat-card" style="cursor:pointer; background: #EEF2FF;" onclick="App.router.navigate('cotizaciones')"><div class="label" style="margin-top:0; color:#4C51BF;">📝 Cotizaciones</div></div><div class="card stat-card" style="cursor:pointer; background: #EDF2F7; grid-column: span 2;" onclick="App.router.navigate('configuracion')"><div class="label" style="margin-top:0; color: #4A5568;">⚙️ Configuración</div></div></div>`; };
 
 App.views.modalEstadoCuenta = function(clienteId) { 
-    const cliente = App.state.clientes.find(c => c.id === clienteId); if(!cliente) return;
-    const pedCli = App.state.pedidos.filter(p => p.cliente_id === clienteId); 
+    const cliente = (App.state.clientes || []).find(c => c.id === clienteId); if(!cliente) return;
+    const pedCli = (App.state.pedidos || []).filter(p => p.cliente_id === clienteId); 
+    const repCli = (App.state.reparaciones || []).filter(r => r.cliente_id === clienteId); // NUEVO: Traer reparaciones
+    
     let totalComprado = 0; let saldoPendiente = 0; let listaPedidos = ''; 
+    
+    // Procesar Pedidos
     pedCli.forEach(p => { 
-        totalComprado += parseFloat(p.total||0); const abonos = App.state.abonos.filter(a => a.pedido_id === p.id).reduce((s,a)=>s+parseFloat(a.monto||0),0); const deuda = parseFloat(p.total||0) - parseFloat(p.anticipo||0) - abonos; if(deuda > 0) saldoPendiente += deuda; 
-        const detalle = App.state.pedido_detalle.find(d => d.pedido_id === p.id); const prod = detalle ? App.state.productos.find(x => x.id === detalle.producto_id) : null; const nombreProd = prod ? App.ui.escapeHTML(prod.nombre) : 'Artículo especial';
-        listaPedidos += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${(p.id || '').replace('PED-','')}</strong> - <small style="color:var(--primary); font-weight:bold;">${nombreProd}</small><br><small>${p.fecha_creacion.split('T')[0]}</small></span><span style="color:var(--primary); font-weight:bold;">$${p.total}</span></li>`; 
+        totalComprado += parseFloat(p.total||0); 
+        const abonos = (App.state.abonos || []).filter(a => a.pedido_id === p.id).reduce((s,a)=>s+parseFloat(a.monto||0),0); 
+        const deuda = parseFloat(p.total||0) - parseFloat(p.anticipo||0) - abonos; 
+        if(deuda > 0) saldoPendiente += deuda; 
+        
+        const detalle = (App.state.pedido_detalle || []).find(d => d.pedido_id === p.id); 
+        const prod = detalle ? (App.state.productos || []).find(x => x.id === detalle.producto_id) : null; 
+        const nombreProd = prod ? App.ui.escapeHTML(prod.nombre) : 'Artículo especial';
+        const fecha = p.fecha_creacion ? String(p.fecha_creacion).split('T')[0] : '';
+        
+        listaPedidos += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${(p.id || '').replace('PED-','')} (Pedido)</strong> - <small style="color:var(--primary); font-weight:bold;">${nombreProd}</small><br><small>${fecha}</small></span><span style="color:var(--primary); font-weight:bold;">$${parseFloat(p.total||0).toFixed(2)}</span></li>`; 
     }); 
-    if(listaPedidos === '') listaPedidos = '<li style="padding:10px; color:var(--text-muted);">No tiene pedidos registrados.</li>'; 
-    let html = `<div class="grid-2" style="margin-bottom:15px;"><div class="card stat-card" style="background:#EBF8FF;"><div class="label" style="color:#2B6CB0;">Total Comprado</div><div class="value" style="color:#3182CE; font-size:1.2rem;">$${totalComprado.toFixed(2)}</div></div><div class="card stat-card" style="background:#FFF5F5;"><div class="label" style="color:#C53030;">Saldo Pendiente</div><div class="value" style="color:#E53E3E; font-size:1.2rem;">$${saldoPendiente.toFixed(2)}</div></div></div><h4 style="margin-bottom:10px; color:var(--text-main);">Historial de Pedidos</h4><ul style="list-style:none; padding:0; margin:0; max-height:250px; overflow-y:auto; background:#f9f9f9; border-radius:8px; padding:10px; border:1px solid var(--border);">${listaPedidos}</ul><button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="App.ui.closeSheet()">Cerrar Perfil</button>`; App.ui.openSheet(`👤 ${App.ui.escapeHTML(cliente.nombre)}`, html); 
+
+    // Procesar Reparaciones (NUEVO)
+    repCli.forEach(r => {
+        totalComprado += parseFloat(r.precio||0);
+        const deuda = parseFloat(r.precio||0) - parseFloat(r.anticipo||0);
+        if(deuda > 0) saldoPendiente += deuda;
+
+        const fecha = r.fecha_creacion ? String(r.fecha_creacion).split('T')[0] : '';
+        listaPedidos += `<li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;"><span><strong>${(r.id || '').replace('REP-','')} (Reparación)</strong> - <small style="color:#805AD5; font-weight:bold;">${App.ui.escapeHTML(r.descripcion || 'Servicio')}</small><br><small>${fecha}</small></span><span style="color:var(--primary); font-weight:bold;">$${parseFloat(r.precio||0).toFixed(2)}</span></li>`; 
+    });
+    
+    if(listaPedidos === '') listaPedidos = '<li style="padding:10px; color:var(--text-muted);">No tiene historial de compras ni reparaciones.</li>'; 
+    
+    let html = `<div class="grid-2" style="margin-bottom:15px;"><div class="card stat-card" style="background:#EBF8FF;"><div class="label" style="color:#2B6CB0;">Total Comprado</div><div class="value" style="color:#3182CE; font-size:1.2rem;">$${totalComprado.toFixed(2)}</div></div><div class="card stat-card" style="background:#FFF5F5;"><div class="label" style="color:#C53030;">Saldo Pendiente</div><div class="value" style="color:#E53E3E; font-size:1.2rem;">$${saldoPendiente.toFixed(2)}</div></div></div><h4 style="margin-bottom:10px; color:var(--text-main);">Historial del Cliente</h4><ul style="list-style:none; padding:0; margin:0; max-height:250px; overflow-y:auto; background:#f9f9f9; border-radius:8px; padding:10px; border:1px solid var(--border);">${listaPedidos}</ul><button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="App.ui.closeSheet()">Cerrar Perfil</button>`; 
+    App.ui.openSheet(`👤 ${App.ui.escapeHTML(cliente.nombre)}`, html); 
 };
 
 App.views.clientes = function() { document.getElementById('bottom-nav').style.display = 'flex'; let html = `<div class="card"><h3 class="card-title">Directorio de Clientes</h3><button class="btn btn-secondary" style="width:100%; margin-bottom:15px; border-color:#38A169; color:#38A169; background:transparent;" onclick="window.exportarAExcel(App.state.clientes, 'Clientes_DescansoMaya')">📥 Descargar Tabla en Excel</button><input type="text" id="bus-cli" onkeyup="window.filtrarLista('bus-cli', 'tarj-cli')" placeholder="🔍 Buscar cliente..." style="width:100%; padding:8px; margin-bottom:15px; border-radius:6px; border:1px solid var(--border);">`; App.state.clientes.forEach(c => { html += `<div class="card tarj-cli" style="border: 1px solid var(--border); padding: 10px; margin-bottom: 8px; display:flex; justify-content:space-between; align-items:center;"><div><strong>${App.ui.escapeHTML(c.nombre)}</strong><br><small style="color: var(--text-muted);">📞 ${c.telefono || 'N/A'}</small></div><div><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; margin-right:4px; border-color:var(--primary); color:var(--primary); background:transparent;" onclick="App.views.modalEstadoCuenta('${c.id}')">📋 Perfil y Compras</button><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; margin-right:4px;" onclick="App.views.formCliente('${c.id}')">✏️</button><button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; color:red; border-color:red;" onclick="App.logic.eliminarRegistroGenerico('clientes', '${c.id}', 'clientes')">🗑️</button></div></div>`; }); html += `</div><button class="fab" onclick="App.views.formCliente()">+</button>`; return html; };
