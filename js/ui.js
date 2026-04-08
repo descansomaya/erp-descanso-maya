@@ -1,5 +1,5 @@
 // ==========================================
-// 3. INTERFAZ Y ALERTAS (ui.js)
+// 3. INTERFAZ Y ALERTAS (ui.js) - CON SEGURIDAD
 // ==========================================
 
 App.ui = {
@@ -19,5 +19,16 @@ App.ui = {
         document.getElementById('sheet-close').onclick = this.closeSheet.bind(this); document.getElementById('sheet-bg').onclick = this.closeSheet.bind(this); const fab = document.querySelector('.fab'); if(fab) fab.style.display = 'none'; const form = document.getElementById('dynamic-form'); 
         if(form && onSaveCallback) { form.onsubmit = (e) => { e.preventDefault(); const formData = new FormData(form); const data = {}; for (let [key, value] of formData.entries()) { const isArray = key.endsWith('[]'); const cleanKey = isArray ? key.slice(0, -2) : key; if (data[cleanKey] !== undefined) { if (!Array.isArray(data[cleanKey])) data[cleanKey] = [data[cleanKey]]; data[cleanKey].push(value); } else { data[cleanKey] = isArray ? [value] : value; } } this.closeSheet(); onSaveCallback(data); }; } 
     },
-    closeSheet() { this.container.innerHTML = ''; const fab = document.querySelector('.fab'); if(fab) fab.style.display = 'flex'; }
+    closeSheet() { this.container.innerHTML = ''; const fab = document.querySelector('.fab'); if(fab) fab.style.display = 'flex'; },
+    
+    // 🛡️ NUEVO: Escudo "Sanitizador" contra inyección de código (XSS)
+    escapeHTML(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
 };
