@@ -3,50 +3,258 @@
  * ACTUALIZADO: PDFs simétricos con teléfono, mejoras en Reparaciones (edición y limpieza de nómina), Historial de clientes detallado y corrección en Tarifas.
  */
 
-window.onerror = function(message, source, lineno) { alert("Hubo un error al cargar: \n" + message + "\nLínea: " + lineno); };
-window.cargarTarifas = function(artesanoId) { const tarifas = App.state.tarifas_artesano.filter(t => t.artesano_id === artesanoId); const select = document.getElementById('select-tarifas'); if(!select) return; select.innerHTML = '<option value="">-- Seleccione Trabajo --</option>' + tarifas.map(t => `<option value="${t.monto || 0}">${t.clasificacion || 'Tarea'} ($${t.monto || 0})</option>`).join(''); };
+window.onerror = function(message, source, lineno) {
+    alert("Hubo un error al cargar: \n" + message + "\nLínea: " + lineno);
+};
 
-window.calcTotalTrabajo = function() { const sel = document.getElementById('select-tarifas'); const cant = document.getElementById('cant-trabajo').value; const tot = document.getElementById('total-trabajo'); if(sel && cant && tot && sel.value) { tot.value = (parseFloat(sel.value) * parseFloat(cant)).toFixed(2); document.getElementById('tarea_nombre').value = sel.options[sel.selectedIndex].text.split(' ($')[0]; } };
-window.filtrarLista = function(inputId, claseItem) { const filtro = document.getElementById(inputId).value.toLowerCase(); const items = document.querySelectorAll('.' + claseItem); items.forEach(item => { const texto = item.innerText.toLowerCase(); item.style.display = texto.includes(filtro) ? '' : 'none'; }); };
-window.calcularTotalPedido = function() { const prodSelect = document.querySelector('select[name="producto_id"]'); const cantInput = document.querySelector('input[name="cantidad"]'); const mayoreoCheck = document.querySelector('input[name="es_mayoreo"]'); const totalInput = document.querySelector('input[name="total"]'); const infoExtra = document.getElementById('info-extra-prod'); if(prodSelect && cantInput && totalInput && prodSelect.value) { const prod = App.state.productos.find(p => p.id === prodSelect.value); if(prod) { const cant = parseFloat(cantInput.value) || 1; const usaMayoreo = mayoreoCheck && mayoreoCheck.checked; const precioBase = usaMayoreo && parseFloat(prod.precio_mayoreo) > 0 ? parseFloat(prod.precio_mayoreo) : parseFloat(prod.precio_venta); totalInput.value = (precioBase * cant).toFixed(2); if(infoExtra) infoExtra.innerHTML = `<small style="color:var(--primary);"><strong>Clasificación:</strong> ${prod.clasificacion || 'N/A'} | <strong>Tamaño:</strong> ${prod.tamano || 'N/A'} | <strong>Color:</strong> ${prod.color || 'N/A'}</small>`; } } else { if(infoExtra) infoExtra.innerHTML = ''; } };
+window.cargarTarifas = function(artesanoId) {
+    const tarifas = App.state.tarifas_artesano.filter(t => t.artesano_id === artesanoId);
+    const select = document.getElementById('select-tarifas');
+    if (!select) return;
 
-window.agregarFilaReceta = function() { const cont = document.getElementById('cont-receta'); const opcMat = App.state.inventario.map(m => `<option value="${m.id}">${m.nombre} (${m.unidad})</option>`).join(''); const div = document.createElement('div'); div.className = 'grid-3 fila-dinamica'; div.style.marginBottom = '5px'; div.innerHTML = `<div class="form-group" style="margin:0;"><select name="mat_id[]" required><option value="">-- Insumo --</option>${opcMat}</select></div><div class="form-group" style="margin:0;"><input type="number" step="0.1" name="cant[]" placeholder="Cant" required></div><div class="form-group" style="margin:0; display:flex; gap:5px;"><select name="uso[]" required><option value="Cuerpo">Cuerpo</option><option value="Brazos">Brazos</option><option value="Adicional">Otro</option></select><button type="button" onclick="this.parentElement.parentElement.remove()" style="background:var(--danger); color:white; border:none; border-radius:4px; padding:0 10px;">X</button></div>`; cont.appendChild(div); };
+    select.innerHTML =
+        '<option value="">-- Seleccione Trabajo --</option>' +
+        tarifas.map(t => `<option value="${t.monto || 0}">${t.clasificacion || 'Tarea'} ($${t.monto || 0})</option>`).join('');
+};
+
+window.calcTotalTrabajo = function() {
+    const sel = document.getElementById('select-tarifas');
+    const cant = document.getElementById('cant-trabajo');
+    const tot = document.getElementById('total-trabajo');
+    const tarea = document.getElementById('tarea_nombre');
+
+    if (sel && cant && tot && sel.value) {
+        tot.value = (parseFloat(sel.value) * parseFloat(cant.value || 0)).toFixed(2);
+        if (tarea) tarea.value = sel.options[sel.selectedIndex].text.split(' ($')[0];
+    }
+};
+
+window.filtrarLista = function(inputId, claseItem) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+
+    const filtro = input.value.toLowerCase();
+    const items = document.querySelectorAll('.' + claseItem);
+
+    items.forEach(item => {
+        const texto = item.innerText.toLowerCase();
+        item.style.display = texto.includes(filtro) ? '' : 'none';
+    });
+};
+
+window.calcularTotalPedido = function() {
+    const prodSelect = document.querySelector('select[name="producto_id"]');
+    const cantInput = document.querySelector('input[name="cantidad"]');
+    const mayoreoCheck = document.querySelector('input[name="es_mayoreo"]');
+    const totalInput = document.querySelector('input[name="total"]');
+    const infoExtra = document.getElementById('info-extra-prod');
+
+    if (prodSelect && cantInput && totalInput && prodSelect.value) {
+        const prod = App.state.productos.find(p => p.id === prodSelect.value);
+        if (prod) {
+            const cant = parseFloat(cantInput.value) || 1;
+            const usaMayoreo = mayoreoCheck && mayoreoCheck.checked;
+            const precioBase =
+                usaMayoreo && parseFloat(prod.precio_mayoreo) > 0
+                    ? parseFloat(prod.precio_mayoreo)
+                    : parseFloat(prod.precio_venta);
+
+            totalInput.value = (precioBase * cant).toFixed(2);
+
+            if (infoExtra) {
+                infoExtra.innerHTML = `<small style="color:var(--primary);"><strong>Clasificación:</strong> ${prod.clasificacion || 'N/A'} | <strong>Tamaño:</strong> ${prod.tamano || 'N/A'} | <strong>Color:</strong> ${prod.color || 'N/A'}</small>`;
+            }
+        }
+    } else {
+        if (infoExtra) infoExtra.innerHTML = '';
+    }
+};
+
+window.agregarFilaReceta = function() {
+    const cont = document.getElementById('cont-receta');
+    if (!cont) return;
+
+    const opcMat = App.state.inventario
+        .map(m => `<option value="${m.id}">${m.nombre} (${m.unidad})</option>`)
+        .join('');
+
+    const div = document.createElement('div');
+    div.className = 'grid-3 fila-dinamica';
+    div.style.marginBottom = '5px';
+    div.innerHTML = `
+        <div class="form-group" style="margin:0;">
+            <select name="mat_id[]" required>
+                <option value="">-- Insumo --</option>
+                ${opcMat}
+            </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+            <input type="number" step="0.1" name="cant[]" placeholder="Cant" required>
+        </div>
+        <div class="form-group" style="margin:0; display:flex; gap:5px;">
+            <select name="uso[]" required>
+                <option value="Cuerpo">Cuerpo</option>
+                <option value="Brazos">Brazos</option>
+                <option value="Adicional">Otro</option>
+            </select>
+            <button type="button" onclick="this.parentElement.parentElement.remove()" style="background:var(--danger); color:white; border:none; border-radius:4px; padding:0 10px;">X</button>
+        </div>
+    `;
+    cont.appendChild(div);
+};
 
 window.calcTotalCompra = function() {
-    const cants = document.querySelectorAll('input[name="cant[]"]'); const precios = document.querySelectorAll('input[name="precio_u[]"]'); const totalesFila = document.querySelectorAll('input[name="total_fila[]"]'); let granTotal = 0;
-    for(let i=0; i<cants.length; i++) { const c = parseFloat(cants[i].value) || 0; const p = parseFloat(precios[i].value) || 0; const t = c * p; if(totalesFila[i]) totalesFila[i].value = t.toFixed(2); granTotal += t; }
-    const inputGranTotal = document.querySelector('input[name="total"]'); if(inputGranTotal) inputGranTotal.value = granTotal.toFixed(2);
+    const cants = document.querySelectorAll('input[name="cant[]"]');
+    const precios = document.querySelectorAll('input[name="precio_u[]"]');
+    const totalesFila = document.querySelectorAll('input[name="total_fila[]"]');
+    let granTotal = 0;
+
+    for (let i = 0; i < cants.length; i++) {
+        const c = parseFloat(cants[i].value) || 0;
+        const p = parseFloat(precios[i].value) || 0;
+        const t = c * p;
+        if (totalesFila[i]) totalesFila[i].value = t.toFixed(2);
+        granTotal += t;
+    }
+
+    const inputGranTotal = document.querySelector('input[name="total"]');
+    if (inputGranTotal) inputGranTotal.value = granTotal.toFixed(2);
 };
 
-window.agregarFilaCompra = function() { 
-    const cont = document.getElementById('cont-compras'); const opcMat = App.state.inventario.map(m => `<option value="${m.id}">${m.nombre} (Stock: ${m.stock_actual})</option>`).join(''); const div = document.createElement('div'); div.className = 'fila-compra'; div.style.cssText = 'background: white; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0; margin-bottom: 10px;'; 
-    div.innerHTML = `<div style="margin-bottom: 5px;"><select name="mat_id[]" required style="width: 100%;"><option value="">-- Selecciona Insumo --</option>${opcMat}</select></div><div style="display: flex; gap: 5px; align-items: center;"><input type="number" step="0.1" name="cant[]" placeholder="Cant." required oninput="window.calcTotalCompra()" style="flex: 1; padding: 6px; min-width: 0;"><input type="number" step="0.01" name="precio_u[]" placeholder="$ Unit." required oninput="window.calcTotalCompra()" style="flex: 1; padding: 6px; min-width: 0;"><input type="number" step="0.01" name="total_fila[]" placeholder="$ Tot" readonly style="flex: 1; padding: 6px; background: #edf2f7; min-width: 0;"><button type="button" onclick="this.parentElement.parentElement.remove(); window.calcTotalCompra();" style="background: var(--danger); color: white; border: none; border-radius: 4px; padding: 6px 10px; font-weight: bold;">X</button></div>`; cont.appendChild(div); 
+window.agregarFilaCompra = function() {
+    const cont = document.getElementById('cont-compras');
+    if (!cont) return;
+
+    const opcMat = App.state.inventario
+        .map(m => `<option value="${m.id}">${m.nombre} (Stock: ${m.stock_actual})</option>`)
+        .join('');
+
+    const div = document.createElement('div');
+    div.className = 'fila-compra';
+    div.style.cssText = 'background: white; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0; margin-bottom: 10px;';
+    div.innerHTML = `
+        <div style="margin-bottom: 5px;">
+            <select name="mat_id[]" required style="width: 100%;">
+                <option value="">-- Selecciona Insumo --</option>
+                ${opcMat}
+            </select>
+        </div>
+        <div style="display: flex; gap: 5px; align-items: center;">
+            <input type="number" step="0.1" name="cant[]" placeholder="Cant." required oninput="window.calcTotalCompra()" style="flex: 1; padding: 6px; min-width: 0;">
+            <input type="number" step="0.01" name="precio_u[]" placeholder="$ Unit." required oninput="window.calcTotalCompra()" style="flex: 1; padding: 6px; min-width: 0;">
+            <input type="number" step="0.01" name="total_fila[]" placeholder="$ Tot" readonly style="flex: 1; padding: 6px; background: #edf2f7; min-width: 0;">
+            <button type="button" onclick="this.parentElement.parentElement.remove(); window.calcTotalCompra();" style="background: var(--danger); color: white; border: none; border-radius: 4px; padding: 6px 10px; font-weight: bold;">X</button>
+        </div>
+    `;
+    cont.appendChild(div);
 };
 
-window.agregarFilaGasto = function() { const cont = document.getElementById('cont-gastos'); const div = document.createElement('div'); div.className = 'grid-2 fila-dinamica'; div.style.marginBottom = '5px'; div.innerHTML = `<div class="form-group" style="margin:0;"><input type="text" name="descripcion[]" placeholder="Descripción" required></div><div class="form-group" style="margin:0; display:flex; gap:5px;"><input type="number" step="0.01" name="monto[]" placeholder="$ Monto" required><button type="button" onclick="this.parentElement.parentElement.remove()" style="background:var(--danger); color:white; border:none; border-radius:4px; padding:0 10px;">X</button></div>`; cont.appendChild(div); };
-window.generarFilaRecetaProd = function(matId, cant, uso) { const opcMat = App.state.inventario.map(m => `<option value="${m.id}" ${matId === m.id ? 'selected':''}>${m.nombre} (${m.stock_actual} en bodega)</option>`).join(''); return `<div class="grid-3 fila-dinamica" style="margin-bottom: 5px;"><div class="form-group" style="margin:0;"><select name="mat_id[]" required><option value="">-- Insumo --</option>${opcMat}</select></div><div class="form-group" style="margin:0;"><input type="number" step="0.1" name="cant[]" value="${cant||''}" placeholder="Cant" required></div><div class="form-group" style="margin:0; display:flex; gap:5px;"><select name="uso[]" required><option value="Cuerpo" ${uso==='Cuerpo'?'selected':''}>Cuerpo</option><option value="Brazos" ${uso==='Brazos'?'selected':''}>Brazos</option><option value="Adicional" ${uso==='Adicional'?'selected':''}>Otro</option></select><button type="button" onclick="this.parentElement.parentElement.remove()" style="background:var(--danger); color:white; border:none; border-radius:4px; padding:0 10px;">X</button></div></div>`; };
-window.agregarFilaRecetaProd = function() { const cont = document.getElementById('cont-receta-prod'); cont.insertAdjacentHTML('beforeend', window.generarFilaRecetaProd('', '', 'Cuerpo')); };
-window.exportarAExcel = function(datos, nombreArchivo) { if(!datos || datos.length === 0) return alert("No hay datos para exportar"); const cabeceras = Object.keys(datos[0]).join(','); const filas = datos.map(obj => Object.values(obj).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')); const csv = ["\uFEFF" + cabeceras, ...filas].join('\n'); const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = nombreArchivo + '.csv'; a.click(); };
+window.agregarFilaGasto = function() {
+    const cont = document.getElementById('cont-gastos');
+    if (!cont) return;
+
+    const div = document.createElement('div');
+    div.className = 'grid-2 fila-dinamica';
+    div.style.marginBottom = '5px';
+    div.innerHTML = `
+        <div class="form-group" style="margin:0;">
+            <input type="text" name="descripcion[]" placeholder="Descripción" required>
+        </div>
+        <div class="form-group" style="margin:0; display:flex; gap:5px;">
+            <input type="number" step="0.01" name="monto[]" placeholder="$ Monto" required>
+            <button type="button" onclick="this.parentElement.parentElement.remove()" style="background:var(--danger); color:white; border:none; border-radius:4px; padding:0 10px;">X</button>
+        </div>
+    `;
+    cont.appendChild(div);
+};
+
+window.generarFilaRecetaProd = function(matId, cant, uso) {
+    const opcMat = App.state.inventario
+        .map(m => `<option value="${m.id}" ${matId === m.id ? 'selected' : ''}>${m.nombre} (${m.stock_actual} en bodega)</option>`)
+        .join('');
+
+    return `
+        <div class="grid-3 fila-dinamica" style="margin-bottom: 5px;">
+            <div class="form-group" style="margin:0;">
+                <select name="mat_id[]" required>
+                    <option value="">-- Insumo --</option>
+                    ${opcMat}
+                </select>
+            </div>
+            <div class="form-group" style="margin:0;">
+                <input type="number" step="0.1" name="cant[]" value="${cant || ''}" placeholder="Cant" required>
+            </div>
+            <div class="form-group" style="margin:0; display:flex; gap:5px;">
+                <select name="uso[]" required>
+                    <option value="Cuerpo" ${uso === 'Cuerpo' ? 'selected' : ''}>Cuerpo</option>
+                    <option value="Brazos" ${uso === 'Brazos' ? 'selected' : ''}>Brazos</option>
+                    <option value="Adicional" ${uso === 'Adicional' ? 'selected' : ''}>Otro</option>
+                </select>
+                <button type="button" onclick="this.parentElement.parentElement.remove()" style="background:var(--danger); color:white; border:none; border-radius:4px; padding:0 10px;">X</button>
+            </div>
+        </div>
+    `;
+};
+
+window.agregarFilaRecetaProd = function() {
+    const cont = document.getElementById('cont-receta-prod');
+    if (!cont) return;
+    cont.insertAdjacentHTML('beforeend', window.generarFilaRecetaProd('', '', 'Cuerpo'));
+};
+
+window.exportarAExcel = function(datos, nombreArchivo) {
+    if (!datos || datos.length === 0) {
+        alert("No hay datos para exportar");
+        return;
+    }
+
+    const cabeceras = Object.keys(datos[0]).join(',');
+    const filas = datos.map(obj =>
+        Object.values(obj).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
+    );
+    const csv = ["\uFEFF" + cabeceras, ...filas].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombreArchivo + '.csv';
+    a.click();
+};
 
 window.switchTabProd = function(tabId, btn) {
     document.querySelectorAll('.tab-content-prod').forEach(el => el.style.display = 'none');
     document.querySelectorAll('.tab-btn-prod').forEach(el => {
-        el.style.background = 'transparent'; el.style.color = 'var(--text-muted)'; el.style.borderBottom = '2px solid transparent';
+        el.style.background = 'transparent';
+        el.style.color = 'var(--text-muted)';
+        el.style.borderBottom = '2px solid transparent';
     });
-    document.getElementById('tab-' + tabId).style.display = 'block';
-    btn.style.color = 'var(--primary)'; btn.style.borderBottom = '2px solid var(--primary)'; btn.style.background = '#F3F0FF';
+
+    const tab = document.getElementById('tab-' + tabId);
+    if (tab) tab.style.display = 'block';
+
+    btn.style.color = 'var(--primary)';
+    btn.style.borderBottom = '2px solid var(--primary)';
+    btn.style.background = '#F3F0FF';
 };
 
 window.switchTabPed = function(tabId, btn) {
     document.querySelectorAll('.tab-content-ped').forEach(el => el.style.display = 'none');
     document.querySelectorAll('.tab-btn-ped').forEach(el => {
-        el.style.background = 'transparent'; el.style.color = 'var(--text-muted)'; el.style.borderBottom = '2px solid transparent';
+        el.style.background = 'transparent';
+        el.style.color = 'var(--text-muted)';
+        el.style.borderBottom = '2px solid transparent';
     });
-    document.getElementById('tab-' + tabId).style.display = 'block';
-    btn.style.color = 'var(--primary)'; btn.style.borderBottom = '2px solid var(--primary)'; btn.style.background = '#F3F0FF';
+
+    const tab = document.getElementById('tab-' + tabId);
+    if (tab) tab.style.display = 'block';
+
+    btn.style.color = 'var(--primary)';
+    btn.style.borderBottom = '2px solid var(--primary)';
+    btn.style.background = '#F3F0FF';
 };
 
-const App = { views: {} }; 
+const App = { views: {} };
 
 App.state = {
     config: {
@@ -87,8 +295,7 @@ App.api = {
                 })
             });
 
-            const data = await response.json();
-            return data;
+            return await response.json();
         } catch (error) {
             return { status: "error", message: "Fallo de conexión." };
         }
@@ -108,18 +315,22 @@ App.api = {
             const data = await response.json();
 
             if (
-    data.status === "error" &&
-    (
-        data.code === "AUTH_REQUIRED" ||
-        data.code === "SESSION_EXPIRED" ||
-        data.code === "SESSION_INVALID"
-    )
-) {
-    localStorage.removeItem('erp_session_token');
-    App.state.sessionToken = null;
-    App.router.handleRoute();
-    return data;
-}
+                data.status === "error" &&
+                (
+                    data.code === "AUTH_REQUIRED" ||
+                    data.code === "SESSION_EXPIRED" ||
+                    data.code === "SESSION_INVALID"
+                )
+            ) {
+                localStorage.removeItem('erp_session_token');
+                App.state.sessionToken = null;
+
+                if (App.router && typeof App.router.handleRoute === "function") {
+                    App.router.handleRoute();
+                }
+
+                return data;
+            }
 
             return data;
         } catch (error) {
@@ -163,31 +374,135 @@ App.safeOps = {
 
 App.ui = {
     container: null,
-    init() { 
-        this.container = document.getElementById('overlays'); const toastCont = document.createElement('div'); toastCont.className = 'toast-container'; toastCont.id = 'toast-container'; document.body.appendChild(toastCont); const loader = document.createElement('div'); loader.id = 'global-loader'; loader.innerHTML = `<div class="spinner"></div><h2 style="margin: 0; font-weight: 600;">Descanso Maya</h2><p id="loader-text" style="margin-top: 10px; opacity: 0.8; font-size: 0.9rem;">Sincronizando...</p><button id="btn-reintentar" class="btn btn-secondary hidden" style="margin-top: 20px;" onclick="location.reload()">Reintentar</button>`; document.body.appendChild(loader); 
-        const estiloFix = document.createElement('style'); estiloFix.innerHTML = `.fab { position: fixed !important; bottom: 85px !important; right: 20px !important; z-index: 999 !important; width: 56px !important; height: 56px !important; border-radius: 50% !important; background: var(--primary) !important; color: white !important; font-size: 28px !important; box-shadow: 0 4px 10px rgba(0,0,0,0.4) !important; display: flex !important; align-items: center !important; justify-content: center !important; border: none !important; cursor: pointer !important; } .fab:active { transform: scale(0.95); }`; document.head.appendChild(estiloFix);
-        const script = document.createElement('script'); script.src = 'https://cdn.jsdelivr.net/npm/chart.js'; document.head.appendChild(script);
+
+    init() {
+        this.container = document.getElementById('overlays');
+
+        const toastCont = document.createElement('div');
+        toastCont.className = 'toast-container';
+        toastCont.id = 'toast-container';
+        document.body.appendChild(toastCont);
+
+        const loader = document.createElement('div');
+        loader.id = 'global-loader';
+        loader.innerHTML = `
+            <div class="spinner"></div>
+            <h2 style="margin: 0; font-weight: 600;">Descanso Maya</h2>
+            <p id="loader-text" style="margin-top: 10px; opacity: 0.8; font-size: 0.9rem;">Sincronizando...</p>
+            <button id="btn-reintentar" class="btn btn-secondary hidden" style="margin-top: 20px;" onclick="location.reload()">Reintentar</button>
+        `;
+        document.body.appendChild(loader);
+
+        const estiloFix = document.createElement('style');
+        estiloFix.innerHTML = `
+            .fab {
+                position: fixed !important;
+                bottom: 85px !important;
+                right: 20px !important;
+                z-index: 999 !important;
+                width: 56px !important;
+                height: 56px !important;
+                border-radius: 50% !important;
+                background: var(--primary) !important;
+                color: white !important;
+                font-size: 28px !important;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.4) !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                border: none !important;
+                cursor: pointer !important;
+            }
+            .fab:active {
+                transform: scale(0.95);
+            }
+        `;
+        document.head.appendChild(estiloFix);
+
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+        document.head.appendChild(script);
     },
-    toast(message) { const cont = document.getElementById('toast-container'); const t = document.createElement('div'); t.className = 'toast'; t.textContent = message; cont.appendChild(t); setTimeout(() => t.remove(), 4000); },
-    showLoader(mensaje = "Procesando...") { const loader = document.getElementById('global-loader'); if(loader) { document.getElementById('loader-text').textContent = mensaje; loader.classList.remove('hidden'); } },
-    hideLoader() { const loader = document.getElementById('global-loader'); if(loader) loader.classList.add('hidden'); },
-    openSheet(title, contentHTML, onSaveCallback) { 
-        this.container.innerHTML = `<div class="overlay-bg active" id="sheet-bg" style="z-index: 1000;"></div><div class="bottom-sheet active" id="sheet-content" style="z-index: 1001;"><div class="sheet-header"><h3>${title}</h3><button class="sheet-close" id="sheet-close">&times;</button></div><div class="sheet-body">${contentHTML}</div></div>`; 
-        document.getElementById('sheet-close').onclick = this.closeSheet.bind(this); document.getElementById('sheet-bg').onclick = this.closeSheet.bind(this); 
-        const fab = document.querySelector('.fab'); if(fab) fab.style.display = 'none'; 
-        const form = document.getElementById('dynamic-form'); 
-        if(form && onSaveCallback) { 
-            form.onsubmit = (e) => { 
-                e.preventDefault(); const formData = new FormData(form); const data = {};
+
+    toast(message) {
+        const cont = document.getElementById('toast-container');
+        if (!cont) return;
+
+        const t = document.createElement('div');
+        t.className = 'toast';
+        t.textContent = message;
+        cont.appendChild(t);
+        setTimeout(() => t.remove(), 4000);
+    },
+
+    showLoader(mensaje = "Procesando...") {
+        const loader = document.getElementById('global-loader');
+        const loaderText = document.getElementById('loader-text');
+
+        if (loader && loaderText) {
+            loaderText.textContent = mensaje;
+            loader.classList.remove('hidden');
+        }
+    },
+
+    hideLoader() {
+        const loader = document.getElementById('global-loader');
+        if (loader) loader.classList.add('hidden');
+    },
+
+    openSheet(title, contentHTML, onSaveCallback) {
+        if (!this.container) return;
+
+        this.container.innerHTML = `
+            <div class="overlay-bg active" id="sheet-bg" style="z-index: 1000;"></div>
+            <div class="bottom-sheet active" id="sheet-content" style="z-index: 1001;">
+                <div class="sheet-header">
+                    <h3>${title}</h3>
+                    <button class="sheet-close" id="sheet-close">&times;</button>
+                </div>
+                <div class="sheet-body">${contentHTML}</div>
+            </div>
+        `;
+
+        const closeBtn = document.getElementById('sheet-close');
+        const bg = document.getElementById('sheet-bg');
+
+        if (closeBtn) closeBtn.onclick = this.closeSheet.bind(this);
+        if (bg) bg.onclick = this.closeSheet.bind(this);
+
+        const fab = document.querySelector('.fab');
+        if (fab) fab.style.display = 'none';
+
+        const form = document.getElementById('dynamic-form');
+        if (form && onSaveCallback) {
+            form.onsubmit = (e) => {
+                e.preventDefault();
+                const formData = new FormData(form);
+                const data = {};
+
                 for (let [key, value] of formData.entries()) {
-                    const isArray = key.endsWith('[]'); const cleanKey = isArray ? key.slice(0, -2) : key;
-                    if (data[cleanKey] !== undefined) { if (!Array.isArray(data[cleanKey])) data[cleanKey] = [data[cleanKey]]; data[cleanKey].push(value); } else { data[cleanKey] = isArray ? [value] : value; }
+                    const isArray = key.endsWith('[]');
+                    const cleanKey = isArray ? key.slice(0, -2) : key;
+
+                    if (data[cleanKey] !== undefined) {
+                        if (!Array.isArray(data[cleanKey])) data[cleanKey] = [data[cleanKey]];
+                        data[cleanKey].push(value);
+                    } else {
+                        data[cleanKey] = isArray ? [value] : value;
+                    }
                 }
-                this.closeSheet(); onSaveCallback(data); 
-            }; 
-        } 
+
+                this.closeSheet();
+                onSaveCallback(data);
+            };
+        }
     },
-    closeSheet() { this.container.innerHTML = ''; const fab = document.querySelector('.fab'); if(fab) fab.style.display = 'flex'; }
+
+    closeSheet() {
+        if (this.container) this.container.innerHTML = '';
+        const fab = document.querySelector('.fab');
+        if (fab) fab.style.display = 'flex';
+    }
 };
 
 App.logic = {
