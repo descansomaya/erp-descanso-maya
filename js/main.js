@@ -23,12 +23,19 @@ App.router = {
     init() { window.addEventListener('hashchange', () => this.handleRoute()); this.handleRoute(); }, 
     navigate(route) { window.location.hash = route; }, 
     handleRoute() { 
-        if (!App.state.pinAcceso) { App.ui.hideLoader(); document.getElementById('app-content').innerHTML = App.views.login(); document.getElementById('header-title').textContent = "Acceso Restringido"; return; } 
+        if (!App.state.sessionToken) { App.ui.hideLoader(); document.getElementById('app-content').innerHTML = App.views.login(); document.getElementById('header-title').textContent = "Acceso Restringido"; return; } 
         let hash = window.location.hash.substring(1) || 'inicio'; const contentDiv = document.getElementById('app-content'); const titleEl = document.getElementById('header-title'); document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active')); const activeNav = document.querySelector(`.nav-item[data-view="${hash}"]`); if(activeNav) activeNav.classList.add('active'); 
         if (App.views[hash]) { contentDiv.innerHTML = App.views[hash](); titleEl.textContent = hash.charAt(0).toUpperCase() + hash.slice(1); } 
         else { contentDiv.innerHTML = `<div class="card"><p style="text-align:center; padding:20px;">Módulo no encontrado.</p></div>`; } 
     } 
 };
 
-App.start = function() { this.ui.init(); if (!this.state.pinAcceso) { this.router.init(); } else { this.logic.cargarDatosIniciales(); } };
+App.start = function() { 
+    this.ui.init(); 
+    if (!this.state.sessionToken) { 
+        this.router.init(); 
+    } else { 
+        this.logic.cargarDatosIniciales(); 
+    } 
+};
 document.addEventListener('DOMContentLoaded', () => App.start());
