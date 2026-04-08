@@ -224,11 +224,10 @@ App.logic = {
         const q = String(query).toLowerCase();
         let resultados = [];
         
-        // 1. Buscar en Clientes (forzando que el teléfono se lea como texto)
+        // 1. Buscar en Clientes
         (App.state.clientes || []).forEach(c => {
             const nombre = String(c.nombre || '').toLowerCase();
             const telefono = String(c.telefono || '').toLowerCase();
-            
             if(nombre.includes(q) || telefono.includes(q)) {
                 resultados.push(`<div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display: flex; align-items: center; gap: 10px;" onclick="App.ui.closeSheet(); App.router.navigate('clientes'); setTimeout(()=>App.views.modalEstadoCuenta('${c.id}'), 500);"><span style="font-size: 1.5rem;">👤</span> <div><strong style="color:var(--text-main);">${App.ui.escapeHTML(c.nombre)}</strong><br><small style="color:var(--text-muted);">Cliente (Ver estado de cuenta)</small></div></div>`);
             }
@@ -238,7 +237,6 @@ App.logic = {
         (App.state.pedidos || []).forEach(p => {
             const idPed = String(p.id || '').toLowerCase();
             const notas = String(p.notas || '').toLowerCase();
-            
             if(idPed.includes(q) || notas.includes(q)) {
                 resultados.push(`<div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display: flex; align-items: center; gap: 10px;" onclick="App.ui.closeSheet(); App.router.navigate('pedidos');"><span style="font-size: 1.5rem;">📦</span> <div><strong style="color:var(--primary);">${p.id}</strong><br><small style="color:var(--text-muted);">Pedido en estado: ${p.estado}</small></div></div>`);
             }
@@ -247,9 +245,26 @@ App.logic = {
         // 3. Buscar en Productos
         (App.state.productos || []).forEach(p => {
             const nombreProd = String(p.nombre || '').toLowerCase();
-            
             if(nombreProd.includes(q)) {
                 resultados.push(`<div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display: flex; align-items: center; gap: 10px;" onclick="App.ui.closeSheet(); App.router.navigate('productos');"><span style="font-size: 1.5rem;">🧶</span> <div><strong style="color:var(--success);">${App.ui.escapeHTML(p.nombre)}</strong><br><small style="color:var(--text-muted);">Producto del catálogo</small></div></div>`);
+            }
+        });
+
+        // 4. Buscar en Artesanos (NUEVO)
+        (App.state.artesanos || []).forEach(a => {
+            const nombreArt = String(a.nombre || '').toLowerCase();
+            const telArt = String(a.telefono || '').toLowerCase();
+            if(nombreArt.includes(q) || telArt.includes(q)) {
+                resultados.push(`<div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display: flex; align-items: center; gap: 10px;" onclick="App.ui.closeSheet(); App.router.navigate('artesanos');"><span style="font-size: 1.5rem;">🧑‍🎨</span> <div><strong style="color:#D69E2E;">${App.ui.escapeHTML(a.nombre)}</strong><br><small style="color:var(--text-muted);">Artesano</small></div></div>`);
+            }
+        });
+
+        // 5. Buscar en Proveedores (NUEVO)
+        (App.state.proveedores || []).forEach(prv => {
+            const nombreProv = String(prv.nombre || '').toLowerCase();
+            const telProv = String(prv.telefono || '').toLowerCase();
+            if(nombreProv.includes(q) || telProv.includes(q)) {
+                resultados.push(`<div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display: flex; align-items: center; gap: 10px;" onclick="App.ui.closeSheet(); App.router.navigate('proveedores');"><span style="font-size: 1.5rem;">🚚</span> <div><strong style="color:#805AD5;">${App.ui.escapeHTML(prv.nombre)}</strong><br><small style="color:var(--text-muted);">Proveedor</small></div></div>`);
             }
         });
         
