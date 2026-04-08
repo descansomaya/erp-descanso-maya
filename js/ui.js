@@ -4,11 +4,20 @@
 
 App.ui = {
     container: null,
-    init() { 
+  init() { 
         this.container = document.getElementById('overlays'); 
         const toastCont = document.createElement('div'); toastCont.className = 'toast-container'; toastCont.id = 'toast-container'; document.body.appendChild(toastCont); 
         const loader = document.createElement('div'); loader.id = 'global-loader'; loader.innerHTML = `<div class="spinner"></div><h2 style="margin: 0; font-weight: 600;">Descanso Maya</h2><p id="loader-text" style="margin-top: 10px; opacity: 0.8; font-size: 0.9rem;">Sincronizando...</p><button id="btn-reintentar" class="btn btn-secondary hidden" style="margin-top: 20px;" onclick="location.reload()">Reintentar</button>`; document.body.appendChild(loader); 
-        const estiloFix = document.createElement('style'); estiloFix.innerHTML = `.fab { position: fixed !important; bottom: 85px !important; right: 20px !important; z-index: 999 !important; width: 56px !important; height: 56px !important; border-radius: 50% !important; background: var(--primary) !important; color: white !important; font-size: 28px !important; box-shadow: 0 4px 10px rgba(0,0,0,0.4) !important; display: flex !important; align-items: center !important; justify-content: center !important; border: none !important; cursor: pointer !important; } .fab:active { transform: scale(0.95); }`; document.head.appendChild(estiloFix);
+        const estiloFix = document.createElement('style'); 
+        // 🪄 MAGIA VISUAL: Aquí agregamos las animaciones fluidas
+        estiloFix.innerHTML = `
+            .fab { position: fixed !important; bottom: 85px !important; right: 20px !important; z-index: 999 !important; width: 56px !important; height: 56px !important; border-radius: 50% !important; background: var(--primary) !important; color: white !important; font-size: 28px !important; box-shadow: 0 4px 10px rgba(0,0,0,0.4) !important; display: flex !important; align-items: center !important; justify-content: center !important; border: none !important; cursor: pointer !important; transition: transform 0.2s; } 
+            .fab:active { transform: scale(0.90); }
+            #app-content { animation: fadeIn 0.3s ease-out; }
+            .bottom-sheet { transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important; }
+            @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        `; 
+        document.head.appendChild(estiloFix);
         const script = document.createElement('script'); script.src = 'https://cdn.jsdelivr.net/npm/chart.js'; document.head.appendChild(script);
     },
     toast(message) { const cont = document.getElementById('toast-container'); const t = document.createElement('div'); t.className = 'toast'; t.textContent = message; cont.appendChild(t); setTimeout(() => t.remove(), 4000); },
