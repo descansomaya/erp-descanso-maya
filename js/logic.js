@@ -3,24 +3,33 @@
 // ==========================================
 
 App.logic = {
-    async verificarPIN(pin) { App.ui.showLoader("Verificando..."); App.state.pinAcceso = pin; const res = await App.api.fetch("ping"); if (res.status === "success") { localStorage.setItem('erp_pin', pin); App.ui.toast("¡Acceso concedido!"); this.cargarDatosIniciales(); } else { App.state.pinAcceso = null; App.ui.hideLoader(); App.ui.toast("PIN Incorrecto."); } },
-  async cargarDatosIniciales() { 
+    async verificarPIN(pin) { 
+        App.ui.showLoader("Verificando..."); 
+        const res = await App.api.fetch("login", { pin: pin }); 
+        if (res.status === "success" && res.data.sessionToken) { 
+            App.state.sessionToken = res.data.sessionToken;
+            localStorage.setItem('erp_session_token', res.data.sessionToken); 
+            App.ui.toast("¡Acceso concedido!"); 
+            this.cargarDatosIniciales(); 
+        } else { 
+            App.state.sessionToken = null; 
+            App.ui.hideLoader(); 
+            App.ui.toast(res.message || "PIN Incorrecto."); 
+        } 
+    },
+    async cargarDatosIniciales() { 
         App.ui.showLoader("Sincronizando Base de Datos..."); 
         try { 
+            if (!App.state.sessionToken) { App.ui.hideLoader(); return; } // Freno de seguridad
             const hojas = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "movimientos_inventario"]; 
             const res = await App.api.fetch("leer_todo", { hojas: hojas }); 
-            
-            // 🛑 FRENO DE EMERGENCIA: Si la base de datos rechaza el PIN, detenemos la carga.
-            if (!App.state.pinAcceso) { App.ui.hideLoader(); return; }
-
             if (res.status === "error") throw new Error(res.message); 
             const bd = res.data;
             App.state.inventario = bd["materiales"] || []; App.state.clientes = bd["clientes"] || []; App.state.productos = bd["productos"] || []; App.state.pedidos = bd["pedidos"] || []; App.state.pedido_detalle = bd["pedido_detalle"] || []; App.state.ordenes_produccion = bd["ordenes_produccion"] || []; App.state.artesanos = bd["artesanos"] || []; App.state.abonos = bd["abonos_clientes"] || []; App.state.gastos = bd["gastos"] || []; App.state.compras = bd["compras"] || []; App.state.proveedores = bd["proveedores"] || []; App.state.reparaciones = bd["reparaciones"] || []; App.state.tarifas_artesano = bd["tarifas_artesano"] || []; App.state.pago_artesanos = bd["pago_artesanos"] || []; App.state.movimientos_inventario = bd["movimientos_inventario"] || []; 
             App.ui.hideLoader(); App.router.init(); 
         } catch (error) { 
             console.error("Fallo de conexión:", error); 
-            // 🛑 Solo reintentar si el PIN sigue siendo válido
-            if (App.state.pinAcceso) {
+            if (App.state.sessionToken) {
                 App.ui.toast("Señal débil. Reintentando..."); 
                 setTimeout(() => App.logic.cargarDatosIniciales(), 3000); 
             } else {
