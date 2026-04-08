@@ -216,31 +216,39 @@ App.logic = {
         let htmlNota = `<html><head><title>Recepción de Reparación</title><style>body{font-family:sans-serif;background:#f9f9f9;padding:20px;color:#333;}.ticket{background:white;max-width:380px;margin:0 auto;padding:25px;border-radius:8px;box-shadow:0 4px 15px rgba(0,0,0,0.05);}.header{text-align:center;border-bottom:2px dashed #cbd5e0;padding-bottom:15px;margin-bottom:15px;position:relative;}.header img.logo{max-height:80px;margin:0 auto 10px auto;display:block;}.header h1{margin:0;color:#2d3748;font-size:24px;text-transform:uppercase;}.header p.subtitle{margin:4px 0; color:#4a5568; font-size:14px;}.info-p{margin:4px 0;font-size:14px;}table{width:100%;border-collapse:collapse;margin-top:15px;margin-bottom:15px;}th{border-bottom:1px solid #e2e8f0;padding:8px 0;text-align:left;font-size:13px;color:#718096;}td{padding:8px 0;font-size:14px;color:#2d3748;}.totales{border-top:2px solid #cbd5e0;padding-top:15px;}.totales-row{display:flex;justify-content:space-between;margin-bottom:5px;font-size:14px;}.saldo-final{display:flex;justify-content:space-between;margin-top:10px;font-size:18px;font-weight:bold;color:#D69E2E;background:#FFFBEB;padding:10px;border-radius:6px;}.footer{text-align:center;margin-top:30px;font-size:12px;color:#a0aec0;}@media print{body{background:white;padding:0;}.ticket{box-shadow:none;border:none;max-width:100%;}}</style></head><body><div class="ticket"><div class="header"><img class="logo" src="${App.state.config.logoUrl}" onerror="this.style.display='none'"><h1>${App.state.config.empresa}</h1><p class="subtitle">Recepción de Reparación</p></div><div style="margin-bottom:20px;"><p class="info-p"><strong>Folio:</strong> ${r.id.replace('REP-','')}</p><p class="info-p"><strong>Fecha:</strong> ${new Date(r.fecha_creacion).toLocaleDateString()}</p><p class="info-p"><strong>Cliente:</strong> ${c?App.ui.escapeHTML(c.nombre):'Cliente'}</p></div><div style="background:#f7fafc; padding:10px; border-radius:6px; margin-bottom:15px; border:1px solid #e2e8f0;"><p style="margin:0; font-size:14px; color:#4a5568;"><strong>Problema a reparar:</strong><br>${App.ui.escapeHTML(r.descripcion)}</p></div><div class="totales"><div class="totales-row"><span>Costo Estimado:</span> <span>$${r.precio}</span></div><div class="totales-row"><span>Anticipo Dejado:</span> <span style="color:#e53e3e;">-$${r.anticipo}</span></div><div class="saldo-final"><span>SALDO PENDIENTE:</span><span>$${saldoReal>0?saldoReal:0}</span></div></div><div class="footer"><p>Guarde este comprobante para recoger su artículo.</p><p style="margin-top:10px;font-weight:bold;color:#4A5568;">${App.state.config.redesSociales}</p></div></div><script>setTimeout(()=>{window.print();},500);<\/script></body></html>`;
         ventana.document.write(htmlNota); ventana.document.close();
     },
-    ejecutarBusquedaGlobal(query) {
+   ejecutarBusquedaGlobal(query) {
         const cont = document.getElementById('resultados-busqueda-global');
         if(!cont) return;
-        if(!query || query.length < 2) { cont.innerHTML = 'Escribe al menos 2 letras...'; return; }
+        if(!query || query.length < 2) { cont.innerHTML = 'Escribe al menos 2 letras para empezar a buscar...'; return; }
         
-        const q = query.toLowerCase();
+        const q = String(query).toLowerCase();
         let resultados = [];
         
-        // 1. Buscar en Clientes
-        App.state.clientes.forEach(c => {
-            if(c.nombre.toLowerCase().includes(q) || (c.telefono||'').includes(q)) {
+        // 1. Buscar en Clientes (forzando que el teléfono se lea como texto)
+        (App.state.clientes || []).forEach(c => {
+            const nombre = String(c.nombre || '').toLowerCase();
+            const telefono = String(c.telefono || '').toLowerCase();
+            
+            if(nombre.includes(q) || telefono.includes(q)) {
                 resultados.push(`<div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display: flex; align-items: center; gap: 10px;" onclick="App.ui.closeSheet(); App.router.navigate('clientes'); setTimeout(()=>App.views.modalEstadoCuenta('${c.id}'), 500);"><span style="font-size: 1.5rem;">👤</span> <div><strong style="color:var(--text-main);">${App.ui.escapeHTML(c.nombre)}</strong><br><small style="color:var(--text-muted);">Cliente (Ver estado de cuenta)</small></div></div>`);
             }
         });
         
         // 2. Buscar en Pedidos
-        App.state.pedidos.forEach(p => {
-            if(p.id.toLowerCase().includes(q) || (p.notas||'').toLowerCase().includes(q)) {
+        (App.state.pedidos || []).forEach(p => {
+            const idPed = String(p.id || '').toLowerCase();
+            const notas = String(p.notas || '').toLowerCase();
+            
+            if(idPed.includes(q) || notas.includes(q)) {
                 resultados.push(`<div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display: flex; align-items: center; gap: 10px;" onclick="App.ui.closeSheet(); App.router.navigate('pedidos');"><span style="font-size: 1.5rem;">📦</span> <div><strong style="color:var(--primary);">${p.id}</strong><br><small style="color:var(--text-muted);">Pedido en estado: ${p.estado}</small></div></div>`);
             }
         });
         
         // 3. Buscar en Productos
-        App.state.productos.forEach(p => {
-            if(p.nombre.toLowerCase().includes(q)) {
+        (App.state.productos || []).forEach(p => {
+            const nombreProd = String(p.nombre || '').toLowerCase();
+            
+            if(nombreProd.includes(q)) {
                 resultados.push(`<div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display: flex; align-items: center; gap: 10px;" onclick="App.ui.closeSheet(); App.router.navigate('productos');"><span style="font-size: 1.5rem;">🧶</span> <div><strong style="color:var(--success);">${App.ui.escapeHTML(p.nombre)}</strong><br><small style="color:var(--text-muted);">Producto del catálogo</small></div></div>`);
             }
         });
