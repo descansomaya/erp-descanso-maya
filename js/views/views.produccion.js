@@ -39,6 +39,35 @@ function generarListaProd(estadoFiltro) {
         
         let estColor = o.estado === 'listo' ? 'dm-badge-success' : (o.estado === 'proceso' ? 'dm-badge-warning' : 'dm-badge-info'); 
 
+        // 3. MAGIA FINANCIERA: Calcular Utilidad y Leer Hilos
+        let costoMateriales = 0;
+        let listaHilosHTML = '';
+        let receta = [];
+        try {
+            receta = JSON.parse(o.receta_personalizada || '[]');
+        } catch(e) {}
+
+        if (receta.length > 0) {
+            listaHilosHTML += `<ul style="margin: 5px 0 0 20px; padding: 0; font-size: 13px; color: var(--dm-muted);">`;
+            receta.forEach(item => {
+                let mat = (App.state.inventario || []).find(m => m.id === item.mat_id);
+                if (mat) {
+                    let costoItem = parseFloat(mat.costo_unitario || 0) * parseFloat(item.cant || 0);
+                    costoMateriales += costoItem;
+                    listaHilosHTML += `<li>${item.cant}x ${mat.nombre} (${item.uso})</li>`;
+                }
+            });
+            listaHilosHTML += `</ul>`;
+        } else {
+            listaHilosHTML = `<div class="dm-text-sm dm-muted dm-mt-1"><i>Sin hilos asignados</i></div>`;
+        }
+
+        // Calculamos los dineros
+        let precioVenta = parseFloat(pDetalle.precio_unitario || 0) * parseFloat(pDetalle.cantidad || 1);
+        let pagoArtesano = parseFloat(o.pago_estimado || 0);
+        let utilidad = precioVenta - costoMateriales - pagoArtesano;
+        let colorUtilidad = utilidad > 0 ? 'var(--dm-success)' : (utilidad === 0 ? 'var(--dm-warning)' : 'var(--dm-danger)');
+
         html += `
         <div class="dm-list-card">
             <div class="dm-list-card-top">
@@ -53,7 +82,24 @@ function generarListaProd(estadoFiltro) {
             
             <div class="dm-list-card-meta dm-mt-3 dm-mb-3" style="background:var(--dm-surface-2); padding:10px; border-radius:var(--dm-radius-md);">
                 <div class="dm-mb-2">🧑‍🎨 <strong>Artesano:</strong> ${nombreArtesano}</div>
-                ${o.pago_estimado ? `<div>💰 <strong>Pago Asignado:</strong> $${o.pago_estimado}</div>` : ''}
+                ${o.pago_estimado ? `<div>💰 <strong>Pago Asignado:</strong> $${pagoArtesano.toFixed(2)}</div>` : ''}
+                
+                <div class="dm-mt-2">🧶 <strong>Hilos Asignados:</strong>
+                    ${listaHilosHTML}
+                </div>
+                
+                <hr style="border: 0; border-top: 1px dashed var(--dm-border); margin: 10px 0;">
+                
+                <div class="dm-row-between" style="align-items: center;">
+                    <div class="dm-text-sm dm-muted">
+                        Venta: $${precioVenta.toFixed(2)}<br>
+                        Insumos: $${costoMateriales.toFixed(2)}
+                    </div>
+                    <div style="text-align: right;">
+                        <span class="dm-text-sm dm-muted">Utilidad Neta</span><br>
+                        <strong style="color: ${colorUtilidad}; font-size: 16px;">$${utilidad.toFixed(2)}</strong>
+                    </div>
+                </div>
             </div>
             
             <div class="dm-list-card-actions">
