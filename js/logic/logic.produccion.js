@@ -42,50 +42,56 @@ App.logic.cambiarEstadoProduccion = function(ordenId, nuevoEstado) {
     App.logic.actualizarRegistroGenerico('ordenes_produccion', ordenId, dataToUpdate, 'produccion');
 };
 
-// 2. GUARDAR RECETA Y DESCONTAR INVENTARIO (KARDEX)
+// 2. GUARDAR RECETA Y DESCONTAR INVENTARIO (CORREGIDO)
 App.logic.guardarRecetaProduccion = async function(ordenId, recetaArray) {
-    App.ui.showLoader("Descontando inventario...");
+    App.ui.showLoader("Procesando taller...");
     const orden = App.state.ordenes_produccion.find(o => o.id === ordenId);
     if(!orden) { App.ui.hideLoader(); return; }
+
+    // 1. LIGAR MOVIMIENTOS: Buscamos el ID del Pedido original
+    const detalle = App.state.pedido_detalle.find(d => d.id === orden.pedido_detalle_id);
+    const pedidoIdLigar = detalle ? detalle.pedido_id : ordenId;
+
+    // 2. CANDADO ANTI-DOBLE DESCUENTO: 
+    // Buscamos si ya se descontaron hilos para este pedido en la tabla de movimientos
+    const hilosYaDescontados = (App.state.movimientos_inventario || []).some(m => 
+        (m.origen_id === ordenId || m.origen_id === pedidoIdLigar) && m.tipo_movimiento === 'salida_produccion'
+    );
 
     const recetaJson = JSON.stringify(recetaArray);
     const promesasMovimientos = [];
     const fechaHoy = new Date().toISOString().split('T')[0];
 
-    // Por cada hilo usado, hacemos un movimiento de salida
-    recetaArray.forEach(item => {
-        const mat = App.state.inventario.find(m => m.id === item.mat_id);
-        if(mat) {
-            const cantDeducir = parseFloat(item.cant);
-            // 2.1 Actualizar stock real localmente
-            mat.stock_real = (parseFloat(mat.stock_real || 0) - cantDeducir).toFixed(2);
+    if (hilosYaDescontados) {
+        console.log("Los hilos ya habían sido descontados. Solo se guarda receta visualmente.");
+    } else {
+        // Descontar inventario (Solo si es la primera vez)
+        recetaArray.forEach(item => {
+            const mat = App.state.inventario.find(m => m.id === item.mat_id);
+            if(mat && parseFloat(item.cant) > 0) {
+                const cantDeducir = parseFloat(item.cant);
+                mat.stock_real = (parseFloat(mat.stock_real || 0) - cantDeducir).toFixed(2);
 
-            // 2.2 Crear el registro exacto para tu Excel (movimientos_inventario)
-            const id_mov = 'MOV-' + Date.now() + Math.floor(Math.random() * 1000);
-            const costoItem = parseFloat(mat.costo_unitario || 0);
-            const totalCosto = -(cantDeducir * costoItem);
-
-            const mov = {
-                id: id_mov,
-                fecha: fechaHoy,
-                tipo_movimiento: 'salida_produccion',
-                origen: 'orden',
-                origen_id: ordenId,
-                ref_tipo: 'material',
-                ref_id: item.mat_id,
-                cantidad: -cantDeducir,
-                costo_unitario: costoItem,
-                total: totalCosto,
-                notas: `Envío a taller de pedido ${(orden.pedido_detalle_id||'').replace('PDET-','')}`
-            };
-            
-            App.state.movimientos_inventario.push(mov);
-            
-            // Mandar a guardar a Sheets (Movimiento + Actualización de Material)
-            promesasMovimientos.push(App.api.fetch("guardar_nuevo", { hoja: "movimientos_inventario", datos: mov }));
-            promesasMovimientos.push(App.api.fetch("actualizar_registro", { hoja: "materiales", id: mat.id, datos: { stock_real: mat.stock_real } }));
-        }
-    });
+                const mov = {
+                    id: 'MOV-' + Date.now() + Math.floor(Math.random() * 1000),
+                    fecha: fechaHoy,
+                    tipo_movimiento: 'salida_produccion',
+                    origen: 'pedido', // AQUÍ LIGAMOS AL PEDIDO (Antes decía 'orden')
+                    origen_id: pedidoIdLigar, // ESTE ES EL ID DEL PEDIDO
+                    ref_tipo: 'material',
+                    ref_id: item.mat_id,
+                    cantidad: -cantDeducir,
+                    costo_unitario: parseFloat(mat.costo_unitario || 0),
+                    total: -(cantDeducir * parseFloat(mat.costo_unitario || 0)),
+                    notas: `Envío a taller de pedido ${pedidoIdLigar}`
+                };
+                
+                App.state.movimientos_inventario.push(mov);
+                promesasMovimientos.push(App.api.fetch("guardar_nuevo", { hoja: "movimientos_inventario", datos: mov }));
+                promesasMovimientos.push(App.api.fetch("actualizar_registro", { hoja: "materiales", id: mat.id, datos: { stock_real: mat.stock_real } }));
+            }
+        });
+    }
 
     // 3. Guardar la receta en la orden de producción
     promesasMovimientos.push(App.api.fetch("actualizar_registro", { hoja: "ordenes_produccion", id: ordenId, datos: { receta_personalizada: recetaJson } }));
@@ -94,13 +100,13 @@ App.logic.guardarRecetaProduccion = async function(ordenId, recetaArray) {
     try {
         await Promise.all(promesasMovimientos);
         App.ui.hideLoader();
-        App.ui.toast("Inventario descontado y receta guardada");
+        App.ui.toast(hilosYaDescontados ? "Receta Taller guardada (Sin doble descuento)" : "Inventario descontado y receta guardada");
         App.ui.closeSheet();
         App.router.handleRoute(); // Refrescar la pantalla
     } catch (error) {
         console.error("Error al descontar:", error);
         App.ui.hideLoader();
-        App.ui.toast("Error al guardar movimientos en la nube", "danger");
+        App.ui.toast("Error al guardar en la nube", "danger");
     }
 };
 
