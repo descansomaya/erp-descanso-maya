@@ -1,5 +1,5 @@
 // ==========================================
-// 4. NAVEGACIÓN Y ARRANQUE (main.js)
+// 4. NAVEGACIÓN Y ARRANQUE (main.js) - ADAPTADO AL DESIGN SYSTEM
 // ==========================================
 
 window.onerror = function(message, source, lineno) { alert("Hubo un error al cargar: \n" + message + "\nLínea: " + lineno); };
@@ -9,41 +9,69 @@ window.calcTotalTrabajo = function() { const sel = document.getElementById('sele
 window.filtrarLista = function(inputId, claseItem) { const filtro = document.getElementById(inputId).value.toLowerCase(); const items = document.querySelectorAll('.' + claseItem); items.forEach(item => { const texto = item.innerText.toLowerCase(); item.style.display = texto.includes(filtro) ? '' : 'none'; }); };
 window.calcularTotalPedido = function() { const prodSelect = document.querySelector('select[name="producto_id"]'); const cantInput = document.querySelector('input[name="cantidad"]'); const mayoreoCheck = document.querySelector('input[name="es_mayoreo"]'); const totalInput = document.querySelector('input[name="total"]'); const infoExtra = document.getElementById('info-extra-prod'); if(prodSelect && cantInput && totalInput && prodSelect.value) { const prod = App.state.productos.find(p => p.id === prodSelect.value); if(prod) { const cant = parseFloat(cantInput.value) || 1; const pb = mayoreoCheck && mayoreoCheck.checked && parseFloat(prod.precio_mayoreo) > 0 ? parseFloat(prod.precio_mayoreo) : parseFloat(prod.precio_venta); totalInput.value = (pb * cant).toFixed(2); if(infoExtra) infoExtra.innerHTML = `<small style="color:var(--primary);"><strong>Clasificación:</strong> ${prod.clasificacion || 'N/A'} | <strong>Tamaño:</strong> ${prod.tamano || 'N/A'} | <strong>Color:</strong> ${prod.color || 'N/A'}</small>`; } } else { if(infoExtra) infoExtra.innerHTML = ''; } };
 
-window.agregarFilaReceta = function() { const cont = document.getElementById('cont-receta'); const opcMat = App.state.inventario.map(m => `<option value="${m.id}">${m.nombre} (${m.unidad})</option>`).join(''); const div = document.createElement('div'); div.className = 'grid-3 fila-dinamica'; div.style.marginBottom = '5px'; div.innerHTML = `<div class="form-group" style="margin:0;"><select name="mat_id[]" required><option value="">-- Insumo --</option>${opcMat}</select></div><div class="form-group" style="margin:0;"><input type="number" step="0.1" name="cant[]" placeholder="Cant" required></div><div class="form-group" style="margin:0; display:flex; gap:5px;"><select name="uso[]" required><option value="Cuerpo">Cuerpo</option><option value="Brazos">Brazos</option><option value="Adicional">Otro</option></select><button type="button" onclick="this.parentElement.parentElement.remove()" style="background:var(--danger); color:white; border:none; border-radius:4px; padding:0 10px;">X</button></div>`; cont.appendChild(div); };
+window.agregarFilaReceta = function() { const cont = document.getElementById('cont-receta'); const opcMat = App.state.inventario.map(m => `<option value="${m.id}">${m.nombre} (${m.unidad})</option>`).join(''); const div = document.createElement('div'); div.className = 'dm-row dm-mb-3 fila-dinamica'; div.innerHTML = `<div class="dm-w-full"><select class="dm-select" name="mat_id[]" required><option value="">-- Insumo --</option>${opcMat}</select></div><div style="width:100px;"><input type="number" step="0.1" class="dm-input" name="cant[]" placeholder="Cant" required></div><div><select class="dm-select" name="uso[]" required><option value="Cuerpo">Cuerpo</option><option value="Brazos">Brazos</option><option value="Adicional">Otro</option></select></div><button type="button" onclick="this.parentElement.remove()" class="dm-btn dm-btn-danger">X</button>`; cont.appendChild(div); };
 window.calcTotalCompra = function() { const cants = document.querySelectorAll('input[name="cant[]"]'); const precios = document.querySelectorAll('input[name="precio_u[]"]'); const totalesFila = document.querySelectorAll('input[name="total_fila[]"]'); let granTotal = 0; for(let i=0; i<cants.length; i++) { const t = (parseFloat(cants[i].value) || 0) * (parseFloat(precios[i].value) || 0); if(totalesFila[i]) totalesFila[i].value = t.toFixed(2); granTotal += t; } const inputGranTotal = document.querySelector('input[name="total"]'); if(inputGranTotal) inputGranTotal.value = granTotal.toFixed(2); const inputMontoPagado = document.querySelector('input[name="monto_pagado"]'); if(inputMontoPagado) inputMontoPagado.value = granTotal.toFixed(2); };
 
 window.agregarFilaCompra = function() { 
     const cont = document.getElementById('cont-compras'); 
-    // 👇 AQUI ESTABA EL ERROR: Cambiamos stock_actual por stock_real 👇
     const opcMat = App.state.inventario.map(m => `<option value="${m.id}">${m.nombre} (Físico: ${m.stock_real||0})</option>`).join(''); 
-    const div = document.createElement('div'); div.className = 'fila-compra'; div.style.cssText = 'background: white; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0; margin-bottom: 10px;'; div.innerHTML = `<div style="margin-bottom: 5px;"><select name="mat_id[]" required style="width: 100%;"><option value="">-- Selecciona Insumo --</option>${opcMat}</select></div><div style="display: flex; gap: 5px; align-items: center;"><input type="number" step="0.1" name="cant[]" placeholder="Cant." required oninput="window.calcTotalCompra()" style="flex: 1; padding: 6px; min-width: 0;"><input type="number" step="0.01" name="precio_u[]" placeholder="$ Unit." required oninput="window.calcTotalCompra()" style="flex: 1; padding: 6px; min-width: 0;"><input type="number" step="0.01" name="total_fila[]" placeholder="$ Tot" readonly style="flex: 1; padding: 6px; background: #edf2f7; min-width: 0;"><button type="button" onclick="this.parentElement.parentElement.remove(); window.calcTotalCompra();" style="background: var(--danger); color: white; border: none; border-radius: 4px; padding: 6px 10px; font-weight: bold;">X</button></div>`; cont.appendChild(div); 
+    const div = document.createElement('div'); div.className = 'fila-compra dm-card dm-mb-3'; div.style.padding = '10px'; div.innerHTML = `<div class="dm-mb-2"><select class="dm-select" name="mat_id[]" required><option value="">-- Selecciona Insumo --</option>${opcMat}</select></div><div class="dm-row"><input type="number" step="0.1" class="dm-input" name="cant[]" placeholder="Cant." required oninput="window.calcTotalCompra()"><input type="number" step="0.01" class="dm-input" name="precio_u[]" placeholder="$ Unit." required oninput="window.calcTotalCompra()"><input type="number" step="0.01" class="dm-input" name="total_fila[]" placeholder="$ Tot" readonly style="background:#f3f4f6;"><button type="button" onclick="this.parentElement.parentElement.remove(); window.calcTotalCompra();" class="dm-btn dm-btn-danger">X</button></div>`; cont.appendChild(div); 
 };
 
-window.agregarFilaGasto = function() { const cont = document.getElementById('cont-gastos'); const div = document.createElement('div'); div.className = 'grid-2 fila-dinamica'; div.style.marginBottom = '5px'; div.innerHTML = `<div class="form-group" style="margin:0;"><input type="text" name="descripcion[]" placeholder="Descripción" required></div><div class="form-group" style="margin:0; display:flex; gap:5px;"><input type="number" step="0.01" name="monto[]" placeholder="$ Monto" required><button type="button" onclick="this.parentElement.parentElement.remove()" style="background:var(--danger); color:white; border:none; border-radius:4px; padding:0 10px;">X</button></div>`; cont.appendChild(div); };
+window.agregarFilaGasto = function() { const cont = document.getElementById('cont-gastos'); const div = document.createElement('div'); div.className = 'dm-row dm-mb-3 fila-dinamica'; div.innerHTML = `<input type="text" class="dm-input" name="descripcion[]" placeholder="Descripción" required style="flex:2;"><input type="number" step="0.01" class="dm-input" name="monto[]" placeholder="$ Monto" required style="flex:1;"><button type="button" onclick="this.parentElement.remove()" class="dm-btn dm-btn-danger">X</button>`; cont.appendChild(div); };
 
 window.generarFilaRecetaProd = function(matId, cant, uso) { 
-    // 👇 AQUI ESTABA EL ERROR: Cambiamos stock_actual por stock_real 👇
     const opcMat = App.state.inventario.map(m => `<option value="${m.id}" ${matId === m.id ? 'selected':''}>${m.nombre} (${m.stock_real||0} físicos)</option>`).join(''); 
-    return `<div class="grid-3 fila-dinamica" style="margin-bottom: 5px;"><div class="form-group" style="margin:0;"><select name="mat_id[]" required><option value="">-- Insumo --</option>${opcMat}</select></div><div class="form-group" style="margin:0;"><input type="number" step="0.1" name="cant[]" value="${cant||''}" placeholder="Cant" required></div><div class="form-group" style="margin:0; display:flex; gap:5px;"><select name="uso[]" required><option value="Cuerpo" ${uso==='Cuerpo'?'selected':''}>Cuerpo</option><option value="Brazos" ${uso==='Brazos'?'selected':''}>Brazos</option><option value="Adicional" ${uso==='Adicional'?'selected':''}>Otro</option></select><button type="button" onclick="this.parentElement.parentElement.remove()" style="background:var(--danger); color:white; border:none; border-radius:4px; padding:0 10px;">X</button></div></div>`; 
+    return `<div class="dm-row dm-mb-3 fila-dinamica"><div class="dm-w-full"><select class="dm-select" name="mat_id[]" required><option value="">-- Insumo --</option>${opcMat}</select></div><div style="width:100px;"><input type="number" step="0.1" class="dm-input" name="cant[]" value="${cant||''}" placeholder="Cant" required></div><div><select class="dm-select" name="uso[]" required><option value="Cuerpo" ${uso==='Cuerpo'?'selected':''}>Cuerpo</option><option value="Brazos" ${uso==='Brazos'?'selected':''}>Brazos</option><option value="Adicional" ${uso==='Adicional'?'selected':''}>Otro</option></select></div><button type="button" onclick="this.parentElement.remove()" class="dm-btn dm-btn-danger">X</button></div>`; 
 };
 
 window.agregarFilaRecetaProd = function() { document.getElementById('cont-receta-prod').insertAdjacentHTML('beforeend', window.generarFilaRecetaProd('', '', 'Cuerpo')); };
 window.exportarAExcel = function(datos, nombreArchivo) { if(!datos || datos.length === 0) return alert("No hay datos para exportar"); const cabeceras = Object.keys(datos[0]).join(','); const filas = datos.map(obj => Object.values(obj).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')); const blob = new Blob(["\uFEFF" + cabeceras + '\n' + filas.join('\n')], { type: 'text/csv;charset=utf-8;' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nombreArchivo + '.csv'; a.click(); };
-window.switchTabProd = function(tabId, btn) { document.querySelectorAll('.tab-content-prod').forEach(el => el.style.display = 'none'); document.querySelectorAll('.tab-btn-prod').forEach(el => { el.style.background = 'transparent'; el.style.color = 'var(--text-muted)'; el.style.borderBottom = '2px solid transparent'; }); document.getElementById('tab-' + tabId).style.display = 'block'; btn.style.color = 'var(--primary)'; btn.style.borderBottom = '2px solid var(--primary)'; btn.style.background = '#F3F0FF'; };
-window.switchTabPed = function(tabId, btn) { document.querySelectorAll('.tab-content-ped').forEach(el => el.style.display = 'none'); document.querySelectorAll('.tab-btn-ped').forEach(el => { el.style.background = 'transparent'; el.style.color = 'var(--text-muted)'; el.style.borderBottom = '2px solid transparent'; }); document.getElementById('tab-' + tabId).style.display = 'block'; btn.style.color = 'var(--primary)'; btn.style.borderBottom = '2px solid var(--primary)'; btn.style.background = '#F3F0FF'; };
+window.switchTabProd = function(tabId, btn) { document.querySelectorAll('.tab-content-prod').forEach(el => el.style.display = 'none'); document.querySelectorAll('.tab-btn-prod').forEach(el => { el.classList.remove('active'); }); document.getElementById('tab-' + tabId).style.display = 'block'; btn.classList.add('active'); };
+window.switchTabPed = function(tabId, btn) { document.querySelectorAll('.tab-content-ped').forEach(el => el.style.display = 'none'); document.querySelectorAll('.tab-btn-ped').forEach(el => { el.classList.remove('active'); }); document.getElementById('tab-' + tabId).style.display = 'block'; btn.classList.add('active'); };
 
 App.router = { 
     init() { window.addEventListener('hashchange', () => this.handleRoute()); this.handleRoute(); }, 
     navigate(route) { window.location.hash = route; }, 
-  handleRoute() { 
-        if (!App.state.sessionToken) { App.ui.hideLoader(); document.getElementById('app-content').innerHTML = App.views.login(); document.getElementById('header-title').textContent = "Acceso Restringido"; document.getElementById('header-actions').innerHTML = ''; return; } 
-        let hash = window.location.hash.substring(1) || 'inicio'; const contentDiv = document.getElementById('app-content'); const titleEl = document.getElementById('header-title'); document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active')); const activeNav = document.querySelector(`.nav-item[data-view="${hash}"]`); if(activeNav) activeNav.classList.add('active'); 
+    handleRoute() { 
+        const contentDiv = document.getElementById('app-content');
+        const headerTitle = document.getElementById('app-header-title');
+        const headerSubtitle = document.getElementById('app-header-subtitle');
         
-        // 🔍 Inyectamos el botón del Buscador Global Inteligente
-        document.getElementById('header-actions').innerHTML = `<button onclick="App.views.modalBuscadorGlobal()" style="background:transparent; border:none; font-size:1.4rem; cursor:pointer;">🔍</button>`;
+        // MANEJO DE SESIÓN NO INICIADA
+        if (!App.state.sessionToken) { 
+            App.ui.hideLoader(); 
+            if(contentDiv) contentDiv.innerHTML = App.views.login(); 
+            if(headerTitle) headerTitle.textContent = "Acceso Restringido"; 
+            if(headerSubtitle) headerSubtitle.textContent = "Ingresa tu PIN";
+            return; 
+        } 
         
-        if (App.views[hash]) { contentDiv.innerHTML = App.views[hash](); titleEl.textContent = hash.charAt(0).toUpperCase() + hash.slice(1); } 
-        else { contentDiv.innerHTML = `<div class="card"><p style="text-align:center; padding:20px;">Módulo no encontrado.</p></div>`; } 
+        // OBTENER RUTA ACTUAL
+        let hash = window.location.hash.substring(1) || 'inicio'; 
+        
+        // ACTUALIZAR BOTONES ACTIVOS (MÓVIL Y DESKTOP)
+        document.querySelectorAll('.dm-bottom-nav a').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.dm-sidebar-link').forEach(el => el.classList.remove('active'));
+        
+        const activeMobile = document.querySelector(`.dm-bottom-nav a[onclick*="${hash}"]`);
+        const activeDesktop = document.querySelector(`.dm-sidebar-link[onclick*="${hash}"]`);
+        
+        if(activeMobile) activeMobile.classList.add('active');
+        if(activeDesktop) activeDesktop.classList.add('active');
+        
+        // RENDERIZAR VISTA
+        if (App.views[hash]) { 
+            if(contentDiv) contentDiv.innerHTML = App.views[hash](); 
+            
+            // Textos por defecto por si la vista no los sobreescribe
+            if(headerTitle && hash !== 'inicio' && hash !== 'inventario') {
+                headerTitle.textContent = hash.charAt(0).toUpperCase() + hash.slice(1);
+                headerSubtitle.textContent = "Gestión de " + hash;
+            }
+        } else { 
+            if(contentDiv) contentDiv.innerHTML = `<div class="dm-card"><p class="dm-center dm-muted">Módulo no encontrado.</p></div>`; 
+        } 
     }
 };
 
