@@ -75,7 +75,10 @@ App.views.detalleFinanzas = function(tipo, filtro) {
             } 
         }); 
         (App.state.compras || []).forEach(c => { 
-            const deuda = parseFloat(c.total||0) - parseFloat(c.monto_pagado||c.total||0); 
+            // 👇 SOLUCIÓN AL BUG DE CERO FALSO 👇
+            const pagado = c.monto_pagado !== undefined && c.monto_pagado !== "" ? parseFloat(c.monto_pagado) : parseFloat(c.total||0);
+            const deuda = parseFloat(c.total||0) - pagado; 
+            
             if(deuda > 0) { 
                 hayDeudas=true; 
                 const pv = (App.state.proveedores || []).find(x => x.id === c.proveedor_id); 
