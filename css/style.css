@@ -1380,3 +1380,13 @@ h1,h2,h3,h4,h5,h6,p{
     padding: 10px 12px;
   }
 }
+
+@media (max-width: 768px) {
+  .tabs-pedidos-mobile::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-btn-ped {
+    border-radius: 999px;
+  }
+}
