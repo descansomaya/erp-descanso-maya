@@ -3,28 +3,77 @@
 // ==========================================
 
 Object.assign(App.logic, {
-    async guardarNuevoPedido(datosFormulario) { 
-        App.ui.showLoader("Procesando pedido..."); const pedidoId = "PED-" + Date.now(); const totalNum = parseFloat(datosFormulario.total) || 0; const anticipoNum = parseFloat(datosFormulario.anticipo) || 0; const cantidadNum = parseInt(datosFormulario.cantidad) || 1; const fechaC = datosFormulario.fecha_creacion ? datosFormulario.fecha_creacion + "T12:00:00.000Z" : new Date().toISOString(); const producto = App.state.productos.find(p => p.id === datosFormulario.producto_id); const esReventa = producto && producto.categoria === 'reventa'; 
-        // 🤖 AUTOMATIZACIÓN: Si pagó el 100% de anticipo de una reventa, se va a pagado directo.
-        let estadoCalculado = esReventa ? "listo para entregar" : "nuevo";
-        if(esReventa && anticipoNum >= totalNum) estadoCalculado = "pagado";
+  async guardarNuevoPedido(datosFormulario) { 
+        App.ui.showLoader("Procesando pedido..."); 
+        const pedidoId = "PED-" + Date.now(); 
+        const totalNum = parseFloat(datosFormulario.total) || 0; 
+        const anticipoNum = parseFloat(datosFormulario.anticipo) || 0; 
+        const fechaC = datosFormulario.fecha_creacion ? datosFormulario.fecha_creacion + "T12:00:00.000Z" : new Date().toISOString(); 
         
-        const datosPedido = { id: pedidoId, cliente_id: datosFormulario.cliente_id, estado: estadoCalculado, total: totalNum, anticipo: anticipoNum, notas: datosFormulario.notas, fecha_entrega: datosFormulario.fecha_entrega, fecha_creacion: fechaC }; const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datosFormulario.producto_id, cantidad: cantidadNum, precio_unitario: totalNum / cantidadNum }; let operaciones = [ { action: "guardar_fila", nombreHoja: "pedidos", datos: datosPedido }, { action: "guardar_fila", nombreHoja: "pedido_detalle", datos: datosDetalle } ]; let nuevosMovs = [];
-        if (esReventa) { 
-            for(let i=1; i<=20; i++) { 
-                const matId = producto[`mat_${i}`]; const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * cantidadNum; 
-                if(matId && cantTeorica > 0) { 
-                    const material = App.state.inventario.find(m => m.id === matId); 
-                    if(material) { 
-                        const nReservado = parseFloat(material.stock_reservado||0) + cantTeorica; 
-                        operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_reservado: nReservado } }); 
-                        material.stock_reservado = nReservado; 
-                        const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "reserva_venta", origen: "pedido", origen_id: pedidoId, ref_tipo: "material", ref_id: material.id, cantidad: cantTeorica, costo_unitario: material.costo_unitario||0, total: (cantTeorica * (material.costo_unitario||0)), notas: `Apartado por venta` }; nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); 
+        // 🚀 ADAPTACIÓN MULTIPRODUCTO: Si le mandas un "carrito" desde la vista lo usa, 
+        // si no, usa el producto único tradicional para no romper tu vista actual.
+        let listaProductos = datosFormulario.carrito ? datosFormulario.carrito : [{
+            producto_id: datosFormulario.producto_id,
+            cantidad: parseInt(datosFormulario.cantidad) || 1,
+            precio_unitario: totalNum / (parseInt(datosFormulario.cantidad) || 1)
+        }];
+
+        // Verificamos si todos los productos del pedido son de reventa
+        const todosReventa = listaProductos.every(item => {
+            let p = App.state.productos.find(prod => prod.id === item.producto_id);
+            return p && p.categoria === 'reventa';
+        });
+
+        // 🤖 AUTOMATIZACIÓN: Estado calculado
+        let estadoCalculado = todosReventa ? "listo para entregar" : "nuevo";
+        if(todosReventa && anticipoNum >= totalNum) estadoCalculado = "pagado";
+        
+        const datosPedido = { id: pedidoId, cliente_id: datosFormulario.cliente_id, estado: estadoCalculado, total: totalNum, anticipo: anticipoNum, notas: datosFormulario.notas, fecha_entrega: datosFormulario.fecha_entrega, fecha_creacion: fechaC }; 
+        
+        let operaciones = [ { action: "guardar_fila", nombreHoja: "pedidos", datos: datosPedido } ]; 
+        let nuevosMovs = [];
+        let nuevosDetallesMemoria = [];
+
+        // Hacemos un ciclo por cada producto en el pedido (Multiproducto)
+        listaProductos.forEach((itemCarro, index) => {
+            const idDetalle = "PDET-" + Date.now() + index;
+            const datosDetalle = { id: idDetalle, pedido_id: pedidoId, producto_id: itemCarro.producto_id, cantidad: itemCarro.cantidad, precio_unitario: itemCarro.precio_unitario };
+            operaciones.push({ action: "guardar_fila", nombreHoja: "pedido_detalle", datos: datosDetalle });
+            nuevosDetallesMemoria.push(datosDetalle);
+
+            const producto = App.state.productos.find(p => p.id === itemCarro.producto_id);
+            if (producto && producto.categoria === 'reventa') { 
+                for(let i=1; i<=20; i++) { 
+                    const matId = producto[`mat_${i}`]; const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * itemCarro.cantidad; 
+                    if(matId && cantTeorica > 0) { 
+                        const material = App.state.inventario.find(m => m.id === matId); 
+                        if(material) { 
+                            const nReservado = parseFloat(material.stock_reservado||0) + cantTeorica; 
+                            operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_reservado: nReservado } }); 
+                            material.stock_reservado = nReservado; 
+                            const mov = { id: "MOV-" + Date.now() + i + index, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "reserva_venta", origen: "pedido", origen_id: pedidoId, ref_tipo: "material", ref_id: material.id, cantidad: cantTeorica, costo_unitario: material.costo_unitario||0, total: (cantTeorica * (material.costo_unitario||0)), notas: `Apartado por venta` }; 
+                            nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); 
+                        } 
                     } 
                 } 
+            }
+        });
+
+        const resPedido = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); 
+        if (resPedido.status === "success") { 
+            App.state.pedidos.push(datosPedido); 
+            App.state.pedido_detalle.push(...nuevosDetallesMemoria); // Guardamos la lista en memoria
+            if(nuevosMovs.length > 0) { 
+                if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; 
+                App.state.movimientos_inventario.push(...nuevosMovs); 
             } 
-        }
-        const resPedido = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); if (resPedido.status === "success") { App.state.pedidos.push(datosPedido); App.state.pedido_detalle.push(datosDetalle); if(nuevosMovs.length > 0) { if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); } App.ui.hideLoader(); App.ui.toast(esReventa ? "Pedido guardado y stock apartado" : "Guardado (Sin mandar a taller)"); App.router.handleRoute(); App.logic.revisarAlertasStock(); } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
+            App.ui.hideLoader(); 
+            App.ui.toast(todosReventa ? "Pedido guardado y stock apartado" : "Guardado (Sin mandar a taller)"); 
+            App.router.handleRoute(); 
+            App.logic.revisarAlertasStock(); 
+        } else { 
+            App.ui.hideLoader(); App.ui.toast("Error"); 
+        } 
     },
     async eliminarPedido(id) { 
         if(!confirm("⚠️ ¿Eliminar pedido por completo?\n\nLos insumos volverán a estar libres en el inventario.")) return; 
