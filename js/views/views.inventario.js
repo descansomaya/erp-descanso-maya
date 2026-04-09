@@ -12,7 +12,7 @@ App.views.inventario = function() {
     if (subtitle) subtitle.innerText = 'Insumos y reventa';
 
     let html = `
-        <div class="dm-section">
+           <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4">
                 <div class="dm-row-between">
                     <input
@@ -179,7 +179,7 @@ App.views.compras = function() {
     if (title) title.innerText = 'Compras';
     if (subtitle) subtitle.innerText = 'Cuentas por Pagar';
 
-    let html = `<div class="dm-section"><div class="dm-list">`;
+    let html = `<div class="dm-section" style="padding-bottom:90px;"><div class="dm-list">`;
     let compras = [...(App.state.compras || [])].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
     if (compras.length === 0) {
