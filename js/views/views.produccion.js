@@ -1,244 +1,297 @@
 // ==========================================
-// VISTAS: PRODUCCIÓN (TALLER) - COMPLETO Y CORREGIDO
+// VISTAS: INVENTARIO Y COMPRAS
 // ==========================================
 
-App.views.produccion = function() { 
-    document.getElementById('app-header-title').innerText = "Taller";
-    document.getElementById('app-header-subtitle').innerText = "Órdenes de producción";
+window.App = window.App || {};
+App.views = App.views || {};
 
-    let html = `<div class="dm-section">
-        <div class="dm-tabs dm-mb-4">
-            <button class="dm-tab active tab-btn-prod" onclick="window.switchTabProd('pendientes', this)">🕒 En Cola</button>
-            <button class="dm-tab tab-btn-prod" onclick="window.switchTabProd('proceso', this)">🔥 En Proceso</button>
-            <button class="dm-tab tab-btn-prod" onclick="window.switchTabProd('listas', this)">✅ Listas</button>
+App.views.inventario = function() {
+    const title = document.getElementById('app-header-title');
+    const subtitle = document.getElementById('app-header-subtitle');
+    if (title) title.innerText = 'Inventario';
+    if (subtitle) subtitle.innerText = 'Insumos y reventa';
+
+    let html = `
+        <div class="dm-section">
+            <div class="dm-card dm-mb-4">
+                <div class="dm-row-between">
+                    <input
+                        type="text"
+                        id="bus-inv"
+                        class="dm-input"
+                        onkeyup="window.filtrarLista('bus-inv', 'dm-list-card')"
+                        placeholder="🔍 Buscar insumo..."
+                    >
+                </div>
+            </div>
+
+            <div class="dm-list">
+    `;
+
+    if (!App.state.inventario || App.state.inventario.length === 0) {
+        html += `<div class="dm-alert dm-alert-info">No hay insumos.</div>`;
+    } else {
+        App.state.inventario.forEach(i => {
+            const real = parseFloat(i.stock_real || 0);
+            const reservado = parseFloat(i.stock_reservado || 0);
+            const comprometido = parseFloat(i.stock_comprometido || 0);
+            const libre = real - reservado - comprometido;
+
+            const badgeClass =
+                (parseFloat(i.stock_minimo || 0) > 0 && libre <= parseFloat(i.stock_minimo || 0))
+                    ? 'dm-badge-danger'
+                    : 'dm-badge-success';
+
+            html += `
+                <div class="dm-list-card">
+                    <div class="dm-list-card-top">
+                        <div>
+                            <div class="dm-list-card-title">${App.ui.escapeHTML(i.nombre)}</div>
+                            <div class="dm-list-card-subtitle">${App.ui.safe(i.tipo || 'OTRO')}</div>
+                        </div>
+                        <span class="dm-badge ${badgeClass}">
+                            Libre: ${libre} ${App.ui.safe(i.unidad || '')}
+                        </span>
+                    </div>
+
+                    <div class="dm-list-card-meta dm-grid-3 dm-mt-3 dm-mb-3" style="background:var(--dm-surface-2); padding:10px; border-radius:var(--dm-radius-md); text-align:center;">
+                        <div>
+                            <small class="dm-muted">Físico</small><br>
+                            <strong>${real}</strong>
+                        </div>
+                        <div>
+                            <small class="dm-muted">Apartado</small><br>
+                            <strong style="color:var(--dm-warning);">${reservado}</strong>
+                        </div>
+                        <div>
+                            <small class="dm-muted">Taller</small><br>
+                            <strong style="color:var(--dm-primary);">${comprometido}</strong>
+                        </div>
+                    </div>
+
+                    <div class="dm-list-card-actions">
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalKardex('${i.id}')">📋 Kardex</button>
+                        <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formMaterial('${i.id}')">✏️ Editar</button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    html += `
+            </div>
         </div>
-        <input type="text" id="bus-prod" class="dm-input dm-mb-4" onkeyup="window.filtrarLista('bus-prod', 'dm-list-card')" placeholder="🔍 Buscar orden o artesano...">
-        
-        <div id="tab-pendientes" class="tab-content-prod" style="display:block;">${generarListaProd('pendiente')}</div>
-        <div id="tab-proceso" class="tab-content-prod" style="display:none;">${generarListaProd('proceso')}</div>
-        <div id="tab-listas" class="tab-content-prod" style="display:none;">${generarListaProd('listo')}</div>
-    </div>`; 
-    return html; 
+
+        <button class="dm-fab" onclick="App.views.formMaterial()">+</button>
+    `;
+
+    return html;
 };
 
-function generarListaProd(estadoFiltro) { 
-    let ords = (App.state.ordenes_produccion || []).filter(o => o.estado === estadoFiltro); 
-    if(ords.length === 0) return `<div class="dm-alert dm-alert-info">No hay órdenes en esta sección.</div>`; 
-    
-    ords.sort((a,b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion)); 
-    let html = `<div class="dm-list">`; 
+App.views.formMaterial = function(id = null, callback = null) {
+    const obj = id ? (App.state.inventario || []).find(m => m.id === id) : null;
 
-    ords.forEach(o => { 
-        // 1. Buscamos al Artesano
-        const artesanoAsignado = App.state.artesanos.find(a => a.id === o.artesano_id);
-        const nombreArtesano = artesanoAsignado ? artesanoAsignado.nombre : '⚠️ Sin asignar';
-        
-        // 2. Buscamos el Producto y Pedido
-        const pDetalle = App.state.pedido_detalle.find(d => d.id === o.pedido_detalle_id) || {};
-        const producto = App.state.productos.find(p => p.id === pDetalle.producto_id) || {};
-        
-        let estColor = o.estado === 'listo' ? 'dm-badge-success' : (o.estado === 'proceso' ? 'dm-badge-warning' : 'dm-badge-info'); 
+    const formHTML = `
+        <form id="dynamic-form">
+            <div class="dm-form-group">
+                <label class="dm-label">Nombre</label>
+                <input type="text" class="dm-input" name="nombre" value="${obj ? App.ui.escapeHTML(obj.nombre) : ''}" required>
+            </div>
 
-        // 3. MAGIA FINANCIERA: Calcular Utilidad y Leer Hilos
-        let costoMateriales = 0;
-        let listaHilosHTML = '';
-        let receta = [];
-        try {
-            receta = JSON.parse(o.receta_personalizada || '[]');
-        } catch(e) {}
+            <div class="dm-form-row">
+                <div class="dm-form-group">
+                    <label class="dm-label">Tipo</label>
+                    <select class="dm-select" name="tipo">
+                        <option value="hilo" ${obj && obj.tipo === 'hilo' ? 'selected' : ''}>Hilo</option>
+                        <option value="accesorio" ${obj && obj.tipo === 'accesorio' ? 'selected' : ''}>Accesorio</option>
+                        <option value="reventa" ${obj && obj.tipo === 'reventa' ? 'selected' : ''}>Reventa</option>
+                    </select>
+                </div>
 
-        if (receta.length > 0) {
-            listaHilosHTML += `<ul style="margin: 5px 0 0 20px; padding: 0; font-size: 13px; color: var(--dm-muted);">`;
-            receta.forEach(item => {
-                let mat = (App.state.inventario || []).find(m => m.id === item.mat_id);
-                if (mat) {
-                    let costoItem = parseFloat(mat.costo_unitario || 0) * parseFloat(item.cant || 0);
-                    costoMateriales += costoItem;
-                    listaHilosHTML += `<li>${item.cant}x ${mat.nombre} (${item.uso})</li>`;
-                }
-            });
-            listaHilosHTML += `</ul>`;
-        } else {
-            listaHilosHTML = `<div class="dm-text-sm dm-muted dm-mt-1"><i>Sin hilos asignados</i></div>`;
-        }
+                <div class="dm-form-group">
+                    <label class="dm-label">Unidad</label>
+                    <select class="dm-select" name="unidad">
+                        <option value="Tubos" ${obj && obj.unidad === 'Tubos' ? 'selected' : ''}>Tubos</option>
+                        <option value="Kg" ${obj && obj.unidad === 'Kg' ? 'selected' : ''}>Kg</option>
+                        <option value="Pzas" ${obj && obj.unidad === 'Pzas' ? 'selected' : ''}>Pzas</option>
+                    </select>
+                </div>
+            </div>
 
-        // Calculamos los dineros
-        let precioVenta = parseFloat(pDetalle.precio_unitario || 0) * parseFloat(pDetalle.cantidad || 1);
-        let pagoArtesano = parseFloat(o.pago_estimado || 0);
-        let utilidad = precioVenta - costoMateriales - pagoArtesano;
-        let colorUtilidad = utilidad > 0 ? 'var(--dm-success)' : (utilidad === 0 ? 'var(--dm-warning)' : 'var(--dm-danger)');
+            <div class="dm-form-row">
+                <div class="dm-form-group">
+                    <label class="dm-label">Stock Físico</label>
+                    <input type="number" step="0.1" class="dm-input" name="stock_real" value="${obj ? obj.stock_real : '0'}" required>
+                </div>
+
+                <div class="dm-form-group">
+                    <label class="dm-label">Stock Mínimo</label>
+                    <input type="number" step="0.1" class="dm-input" name="stock_minimo" value="${obj ? obj.stock_minimo : '0'}" required>
+                </div>
+            </div>
+
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Guardar</button>
+        </form>
+    `;
+
+    App.ui.openSheet(obj ? 'Editar Insumo' : 'Nuevo Insumo', formHTML, (data) => {
+        if (obj) App.logic.actualizarRegistroGenerico('materiales', id, data, 'inventario');
+        else App.logic.guardarNuevoGenerico('materiales', data, 'MAT', 'inventario', callback);
+    });
+};
+
+App.views.modalKardex = function(matId) {
+    const movs = (App.state.movimientos_inventario || [])
+        .filter(m => m.material_id === matId)
+        .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+    let html = `<div class="dm-list">`;
+
+    if (movs.length === 0) {
+        html += `<div class="dm-alert dm-alert-info">No hay movimientos.</div>`;
+    }
+
+    movs.forEach(m => {
+        html += `
+            <div class="dm-list-card dm-mb-2" style="padding:10px;">
+                <div class="dm-row-between">
+                    <div>
+                        <strong style="color:${m.tipo === 'entrada' ? 'var(--dm-success)' : 'var(--dm-danger)'};">
+                            ${m.tipo === 'entrada' ? '+' : '-'} ${App.ui.safe(m.cantidad)}
+                        </strong><br>
+                        <small class="dm-muted">${App.ui.safe(m.motivo || '')}</small>
+                    </div>
+                    <div class="dm-right">
+                        <small class="dm-muted">${String(m.fecha || '').split('T')[0]}</small>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `</div>`;
+    App.ui.openSheet('Kardex', html);
+};
+
+App.views.compras = function() {
+    const title = document.getElementById('app-header-title');
+    const subtitle = document.getElementById('app-header-subtitle');
+    if (title) title.innerText = 'Compras';
+    if (subtitle) subtitle.innerText = 'Cuentas por Pagar';
+
+    let html = `<div class="dm-section"><div class="dm-list">`;
+    let compras = [...(App.state.compras || [])].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+    if (compras.length === 0) {
+        html += `<div class="dm-alert dm-alert-info">No hay compras registradas.</div>`;
+    }
+
+    compras.forEach(comp => {
+        const prov = (App.state.proveedores || []).find(x => x.id === comp.proveedor_id) || {};
+        const pag = parseFloat(comp.monto_pagado !== undefined ? comp.monto_pagado : comp.total || 0);
+        const tot = parseFloat(comp.total || 0);
+        const deu = tot - pag;
 
         html += `
-        <div class="dm-list-card">
-            <div class="dm-list-card-top">
-                <div>
-                    <div class="dm-list-card-title">${producto.nombre || 'Producto'}</div>
-                    <div class="dm-list-card-subtitle dm-mt-2">
-                        <span class="dm-badge ${estColor}">${o.estado.toUpperCase()}</span> 
-                        <span class="dm-badge dm-badge-primary">Folio: ${(pDetalle.pedido_id||'').replace('PED-','')}</span>
+            <div class="dm-list-card">
+                <div class="dm-list-card-top">
+                    <div>
+                        <div class="dm-list-card-title">${App.ui.safe(prov.nombre || 'Proveedor')}</div>
+                        <div class="dm-list-card-subtitle dm-mt-2">
+                            <span class="dm-badge ${deu > 0 ? 'dm-badge-danger' : 'dm-badge-success'}">
+                                ${deu > 0 ? 'DEUDA' : 'PAGADO'}
+                            </span>
+                        </div>
                     </div>
-                </div>
-            </div>
-            
-            <div class="dm-list-card-meta dm-mt-3 dm-mb-3" style="background:var(--dm-surface-2); padding:10px; border-radius:var(--dm-radius-md);">
-                <div class="dm-mb-2">🧑‍🎨 <strong>Artesano:</strong> ${nombreArtesano}</div>
-                ${o.pago_estimado ? `<div>💰 <strong>Pago Asignado:</strong> $${pagoArtesano.toFixed(2)}</div>` : ''}
-                
-                <div class="dm-mt-2">🧶 <strong>Hilos Asignados:</strong>
-                    ${listaHilosHTML}
-                </div>
-                
-                <hr style="border: 0; border-top: 1px dashed var(--dm-border); margin: 10px 0;">
-                
-                <div class="dm-row-between" style="align-items: center;">
-                    <div class="dm-text-sm dm-muted">
-                        Venta: $${precioVenta.toFixed(2)}<br>
-                        Insumos: $${costoMateriales.toFixed(2)}
-                    </div>
-                    <div style="text-align: right;">
-                        <span class="dm-text-sm dm-muted">Utilidad Neta</span><br>
-                        <strong style="color: ${colorUtilidad}; font-size: 16px;">$${utilidad.toFixed(2)}</strong>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="dm-list-card-actions">
-                <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="window.verDetallesProduccion('${o.id}')">👁️ Detalles y Asignar</button>
-                ${o.estado === 'pendiente' ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.logic.cambiarEstadoProduccion('${o.id}', 'proceso')">▶️ Iniciar</button>` : ''}
-                ${o.estado === 'proceso' ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.logic.cambiarEstadoProduccion('${o.id}', 'listo')">✅ Terminar</button>` : ''}
-                <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.eliminarRegistroGenerico('ordenes_produccion', '${o.id}', 'produccion')">🗑️</button>
-            </div>
-        </div>`; 
-    }); 
-    html += `</div>`; 
-    return html; 
-}
 
-// ==========================================
-// MODAL DETALLES CON TABULADOR DE ARTESANOS
-// ==========================================
-window.verDetallesProduccion = function(ordenId) {
-    const o = App.state.ordenes_produccion.find(x => x.id === ordenId);
-    if(!o) return;
-    
-    const pedDet = App.state.pedido_detalle.find(d => d.id === o.pedido_detalle_id) || {}; 
-    const p = App.state.pedidos.find(x => x.id === pedDet.pedido_id) || {}; 
-    const cliente = App.state.clientes.find(x => x.id === p.cliente_id) || {};
-    const prod = App.state.productos.find(x => x.id === pedDet.producto_id) || {};
-    const nomCliente = p.cliente_id === 'STOCK_INTERNO' ? 'STOCK BODEGA' : (cliente.nombre || 'Desconocido');
+                    <div class="dm-right">
+                        <div class="dm-fw-bold dm-text-lg">$${tot.toFixed(2)}</div>
+                        <div class="dm-text-sm dm-muted">
+                            Resta:
+                            <strong style="color:${deu > 0 ? 'var(--dm-danger)' : 'var(--dm-success)'};">
+                                $${deu.toFixed(2)}
+                            </strong>
+                        </div>
+                    </div>
+                </div>
 
-    let artesanosOpts = '<option value="">-- Sin Asignar --</option>';
-    (App.state.artesanos || []).forEach(art => {
-        artesanosOpts += `<option value="${art.id}" ${o.artesano_id === art.id ? 'selected' : ''}>${art.nombre}</option>`;
+                <div class="dm-list-card-actions">
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verDetallesCompra('${comp.id}')">Ver Detalles / Abonar</button>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `</div></div><button class="dm-fab" onclick="App.views.formCompra()">+</button>`;
+    return html;
+};
+
+App.views.formCompra = function() {
+    let hProv = '<option value="">-- Proveedor --</option>';
+    (App.state.proveedores || []).forEach(p => {
+        hProv += `<option value="${p.id}">${App.ui.safe(p.nombre)}</option>`;
     });
 
     let html = `
-    <div class="dm-list-card dm-mb-4" style="background:var(--dm-surface-2); padding:15px; border:none;">
-        <div class="dm-row-between dm-mb-2">
-            <span class="dm-text-sm dm-muted">Folio / Cliente:</span>
-            <strong style="color:var(--dm-primary);">${(p.id||'').replace('PED-','')} - ${nomCliente}</strong>
-        </div>
-        <div class="dm-row-between">
-            <span class="dm-text-sm dm-muted">Producto a tejer:</span>
-            <strong>${prod.nombre || 'No definido'}</strong>
-        </div>
-    </div>
-    
-    <div class="dm-form-group">
-        <label class="dm-label">Notas de Producción</label>
-        <div class="dm-alert dm-alert-warning" style="background:#fff;">
-            ${p.notas ? App.ui.escapeHTML(p.notas) : '<i>Sin instrucciones especiales.</i>'}
-        </div>
-    </div>
-
-    <form id="dynamic-form">
-        <input type="hidden" name="id" value="${o.id}">
-        <h4 class="dm-label dm-mb-3">Asignación y Tabulador</h4>
-        
-        <div class="dm-form-group">
-            <label class="dm-label">Seleccionar Artesano</label>
-            <select class="dm-select" name="artesano_id" id="select-artesano" onchange="window.cargarTarifas(this.value)" required>
-                ${artesanosOpts}
-            </select>
-        </div>
-
-        <div class="dm-form-row">
+        <form id="dynamic-form">
             <div class="dm-form-group">
-                <label class="dm-label">Tipo de Trabajo</label>
-                <select class="dm-select" id="select-tarifas" name="tarifa_artesano_id" onchange="window.calcTotalTrabajo()" required>
-                    <option value="">-- Seleccione Artesano Primero --</option>
-                </select>
-            </div>
-            
-            <div class="dm-form-group hidden">
-                <input type="number" id="cant-trabajo" value="1" oninput="window.calcTotalTrabajo()">
-                <input type="hidden" id="tarea_nombre" name="tarifa_nombre">
+                <label class="dm-label">Proveedor</label>
+                <select class="dm-select" name="proveedor_id" required>${hProv}</select>
             </div>
 
             <div class="dm-form-group">
-                <label class="dm-label">Pago Estimado ($)</label>
-                <input type="number" step="0.01" class="dm-input" id="total-trabajo" name="pago_estimado" value="${o.pago_estimado || ''}" readonly style="background:#f3f4f6;">
+                <label class="dm-label">Fecha</label>
+                <input type="date" class="dm-input" name="fecha" value="${new Date().toISOString().split('T')[0]}" required>
             </div>
-        </div>
 
-        <button type="submit" class="dm-btn dm-btn-primary dm-btn-block dm-mt-4">💾 Guardar Asignación</button>
-    </form>
-    
-    <div class="dm-row-between dm-mt-4">
-        <button class="dm-btn dm-btn-secondary" onclick="App.ui.closeSheet()">Cerrar</button>
-        ${o.estado !== 'listo' ? `<button class="dm-btn dm-btn-ghost" style="border:1px solid var(--dm-border);" onclick="App.views.modalMateriaPrima('${o.id}')">🧶 Asignar Hilos</button>` : ''}
-    </div>`;
+            <h4 class="dm-label dm-mb-2">Insumos</h4>
+            <div id="cont-compras"></div>
 
-    App.ui.openSheet("Detalle de Producción", html, (data) => {
-        App.logic.actualizarRegistroGenerico('ordenes_produccion', o.id, data, 'produccion');
-        App.ui.toast("Artesano y pago asignados correctamente");
-        setTimeout(() => App.ui.closeSheet(), 500);
-    });
+            <button type="button" class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="window.agregarFilaCompra()">+ Añadir Insumo</button>
 
-    if(o.artesano_id) {
-        setTimeout(() => {
-            window.cargarTarifas(o.artesano_id);
-            setTimeout(() => {
-                if(o.pago_estimado) {
-                    const selectTarifas = document.getElementById('select-tarifas');
-                    for(let i=0; i<selectTarifas.options.length; i++) {
-                        if(selectTarifas.options[i].value == o.pago_estimado) {
-                            selectTarifas.selectedIndex = i;
-                            break;
-                        }
-                    }
-                }
-            }, 100);
-        }, 200);
-    }
+            <div class="dm-form-row">
+                <div class="dm-form-group">
+                    <label class="dm-label">Total ($)</label>
+                    <input type="number" step="0.01" class="dm-input" name="total" readonly style="background:#f3f4f6;">
+                </div>
+
+                <div class="dm-form-group">
+                    <label class="dm-label">Pagado Hoy ($)</label>
+                    <input type="number" step="0.01" class="dm-input" name="monto_pagado" required>
+                </div>
+            </div>
+
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Registrar Compra</button>
+        </form>
+    `;
+
+    App.ui.openSheet('Nueva Compra', html, (d) => App.logic.guardarNuevaCompra(d));
+    setTimeout(() => window.agregarFilaCompra(), 200);
 };
 
-// ==========================================
-// MODAL HILOS
-// ==========================================
-App.views.modalMateriaPrima = function(ordenId) { 
-    const ord = App.state.ordenes_produccion.find(o => o.id === ordenId); if(!ord) return; 
-    let html = `<form id="dynamic-form"><input type="hidden" name="orden_id" value="${ordenId}"><div id="cont-receta-prod">`; 
-    
-    let receta = []; try { receta = JSON.parse(ord.receta_personalizada || '[]'); } catch(e){} 
-    
-    if(receta.length > 0) {
-        receta.forEach(r => { html += window.generarFilaRecetaProd(r.mat_id, r.cant, r.uso); }); 
-    } else {
-        html += window.generarFilaRecetaProd('', '', 'Cuerpo'); 
-    }
-    
-    html += `</div><button type="button" class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="window.agregarFilaRecetaProd()">+ Añadir hilo</button>
-    <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">💾 Guardar y Descontar Inventario</button></form>`; 
-    
-    App.ui.openSheet("Hilos Utilizados", html, (data) => { 
-        const matIds = Array.isArray(data['mat_id[]']) ? data['mat_id[]'] : [data['mat_id[]']]; 
-        const cants = Array.isArray(data['cant[]']) ? data['cant[]'] : [data['cant[]']]; 
-        const usos = Array.isArray(data['uso[]']) ? data['uso[]'] : [data['uso[]']]; 
-        let rFinal = []; 
-        for(let i=0; i<matIds.length; i++) { 
-            if(matIds[i]) rFinal.push({ mat_id: matIds[i], cant: cants[i], uso: usos[i] }); 
-        } 
-        App.logic.guardarRecetaProduccion(ordenId, rFinal); 
-    }); 
+App.views.verDetallesCompra = function(id) {
+    const c = (App.state.compras || []).find(x => x.id === id);
+    if (!c) return;
+
+    let html = `<div class="dm-list">`;
+
+    try {
+        const det = JSON.parse(c.detalles);
+        det.forEach(d => {
+            html += `
+                <div class="dm-list-card" style="padding:10px;">
+                    <div class="dm-row-between">
+                        <div>
+                            <strong>${App.ui.safe(d.nombre || 'Insumo')}</strong><br>
+                            <small class="dm-muted">${App.ui.safe(d.cantidad)} uds x $${parseFloat(d.costo_unitario || 0).toFixed(2)}</small>
+                        </div>
+                        <div class="dm-fw-bold">$${(parseFloat(d.cantidad || 0) * parseFloat(d.costo_unitario || 0)).toFixed(2)}</div>
+                    </div>
+                </div>
+            `;
+        });
+    } catch (e) {}
+
+    html += `</div>`;
+    App.ui.openSheet('Detalles de Compra', html);
 };
