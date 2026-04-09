@@ -1,3 +1,8 @@
+window.App = window.App || {};
+App.actions = App.actions || {};
+App.forms = App.forms || {};
+App.debug = App.debug || {};
+
 // ==========================================
 // 4. NAVEGACIÓN Y ARRANQUE (main.js) - ADAPTADO AL DESIGN SYSTEM
 // ==========================================
