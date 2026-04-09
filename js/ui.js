@@ -1,8 +1,13 @@
 // ==========================================
-// 4. MANEJO DE INTERFAZ DE USUARIO (ui.js) - REDISEÑADO
+// 4. MANEJO DE INTERFAZ DE USUARIO (ui.js) - CORREGIDO
 // ==========================================
 
 App.ui = {
+    init() {
+        // Esta función es requerida por main.js al arrancar la app
+        console.log("Interfaz gráfica iniciada correctamente.");
+    },
+
     showLoader(mensaje = "Cargando...") {
         const loader = document.getElementById('loader');
         if(loader) {
