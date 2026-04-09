@@ -4,6 +4,7 @@
 
 Object.assign(App.logic, {
     async guardarMultiplesGastos(datos) { App.ui.showLoader("Registrando Gastos..."); const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; let operaciones = []; let nuevosGastos = []; for(let i=0; i<descripciones.length; i++) { if(!descripciones[i]) continue; const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; nuevosGastos.push(gastoObj); operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); } await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.gastos.push(...nuevosGastos); App.ui.hideLoader(); App.ui.toast("¡Gastos registrados!"); App.router.handleRoute(); },
+    
     renderGraficasFinanzas(filtro) {
         const cont = document.getElementById('finanzas-contenedor'); if(!cont) return; const hoy = new Date(); let mesActual = hoy.getMonth(); let anioActual = hoy.getFullYear(); let mesPasado = mesActual - 1; let anioPasado = anioActual; if(mesPasado < 0) { mesPasado = 11; anioPasado--; } let triActual = Math.floor(mesActual / 3);
         const filtrarFecha = (str) => { if(filtro === 'todo') return true; if(!str) return false; const f = new Date(str); if(filtro === 'mes_actual') return f.getMonth() === mesActual && f.getFullYear() === anioActual; if(filtro === 'mes_pasado') return f.getMonth() === mesPasado && f.getFullYear() === anioPasado; if(filtro === 'trimestre_actual') return Math.floor(f.getMonth() / 3) === triActual && f.getFullYear() === anioActual; if(filtro === 'anio_actual') return f.getFullYear() === anioActual; return true; };
@@ -15,7 +16,14 @@ Object.assign(App.logic, {
 
         let xPagarGlobal = 0;
         App.state.pago_artesanos.forEach(pa => { if(pa.estado === 'pendiente') xPagarGlobal += parseFloat(pa.total || 0); });
-        App.state.compras.forEach(c => { const deuda = parseFloat(c.total || 0) - parseFloat(c.monto_pagado || c.total); if(deuda > 0) xPagarGlobal += deuda; });
+        
+        App.state.compras.forEach(c => { 
+            // 👇 SOLUCIÓN AL BUG DE CERO FALSO 👇
+            const pagado = c.monto_pagado !== undefined && c.monto_pagado !== "" ? parseFloat(c.monto_pagado) : parseFloat(c.total||0);
+            const deuda = parseFloat(c.total || 0) - pagado; 
+            
+            if(deuda > 0) xPagarGlobal += deuda; 
+        });
 
         const tVentasPed = pedFiltrados.reduce((acc, p) => acc + (parseFloat(p.total) || 0), 0); const tVentasRep = repFiltradas.reduce((acc, r) => acc + (parseFloat(r.precio) || 0), 0); const tVentas = tVentasPed + tVentasRep;
         const tAnticiposPed = pedFiltrados.reduce((acc, p) => acc + (parseFloat(p.anticipo) || 0), 0); const tAnticiposRep = repFiltradas.reduce((acc, r) => acc + (parseFloat(r.anticipo) || 0), 0); const tAbonos = aboFiltrados.reduce((acc, a) => acc + (parseFloat(a.monto) || 0), 0); const ingReales = tAnticiposPed + tAnticiposRep + tAbonos; 
