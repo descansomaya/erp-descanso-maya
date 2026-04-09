@@ -212,6 +212,7 @@ App.views.modalAbonos = function(pedidoId) {
                         <select class="dm-select" name="metodo_pago">
                             <option value="Efectivo">Efectivo</option>
                             <option value="Transferencia">Transferencia</option>
+                            <option value="Tarjeta">Tarjeta</option>
                         </select>
                     </div>
                 </div>
