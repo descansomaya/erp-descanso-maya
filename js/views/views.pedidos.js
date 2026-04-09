@@ -17,7 +17,11 @@ window.generarListaPedidos = function(tipo) {
         const abonos = (App.state.abonos||[]).filter(a=>a.pedido_id===p.id).reduce((s,a)=>s+parseFloat(a.monto),0); 
         const saldo = parseFloat(p.total||0) - parseFloat(p.anticipo||0) - abonos; 
         let estColor = p.estado === 'entregado' ? 'dm-badge-success' : (p.estado === 'listo para entregar' ? 'dm-badge-warning' : 'dm-badge-primary'); 
-        html += `<div class="dm-list-card"><div class="dm-list-card-top"><div><div class="dm-list-card-title">${(p.id||'')} - ${c.nombre||'STOCK'}</div><div class="dm-list-card-subtitle dm-mt-2"><span class="dm-badge ${estColor}">${p.estado.toUpperCase()}</span></div></div><div class="dm-right"><div class="dm-fw-bold dm-text-lg">$${parseFloat(p.total||0).toFixed(2)}</div><div class="dm-text-sm dm-muted">Saldo: <strong style="color:${saldo>0?'var(--dm-danger)':'var(--dm-success)'};">$${saldo.toFixed(2)}</strong></div></div></div><div class="dm-list-card-actions"><button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formPedido('${p.id}')">✏️ Editar</button><button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💳 Abonos</button></div></div>`; 
+        html += `<div class="dm-list-card"><div class="dm-list-card-top"><div><div class="dm-list-card-title">${(p.id||'')} - ${c.nombre||'STOCK'}</div><div class="dm-list-card-subtitle dm-mt-2"><span class="dm-badge ${estColor}">${p.estado.toUpperCase()}</span></div></div><div class="dm-right"><div class="dm-fw-bold dm-text-lg">$${parseFloat(p.total||0).toFixed(2)}</div><div class="dm-text-sm dm-muted">Saldo: <strong style="color:${saldo>0?'var(--dm-danger)':'var(--dm-success)'};">$${saldo.toFixed(2)}</strong></div></div></div><div class="dm-list-card-actions">
+    <button class="dm-btn dm-btn-info dm-btn-sm" onclick="App.views.modalDetallesPedido('${p.id}')">📦 Detalles</button>
+    <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formPedido('${p.id}')">✏️ Editar</button>
+    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💳 Abonos</button>
+</div>
     }); 
     html += `</div>`; return html; 
 };
