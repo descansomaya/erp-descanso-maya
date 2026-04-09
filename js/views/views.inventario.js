@@ -68,6 +68,8 @@ App.views.formMaterial = function(id = null, callback = null) {
                 <select class="dm-select" name="tipo" required>
                     <option value="hilo" ${obj && obj.tipo === 'hilo' ? 'selected' : ''}>Hilo</option>
                     <option value="accesorio" ${obj && obj.tipo === 'accesorio' ? 'selected' : ''}>Accesorio</option>
+                    <option value="reventa" ${obj && obj.tipo === 'reventa' ? 'selected' : ''}>Hamaca (Reventa)</option>
+                    <option value="otro" ${obj && obj.tipo === 'otro' ? 'selected' : ''}>Otro</option>
                 </select>
             </div>
             <div class="dm-form-group">
@@ -75,6 +77,7 @@ App.views.formMaterial = function(id = null, callback = null) {
                 <select class="dm-select" name="unidad">
                     <option value="Tubos" ${obj && obj.unidad === 'Tubos' ? 'selected' : ''}>Tubos</option>
                     <option value="Kg" ${obj && obj.unidad === 'Kg' ? 'selected' : ''}>Kg</option>
+                    <option value="Pzas" ${obj && obj.unidad === 'Pzas' ? 'selected' : ''}>Pzas</option>
                 </select>
             </div>
         </div>
