@@ -12,9 +12,9 @@ App.views.inventario = function() {
     if (subtitle) subtitle.innerText = 'Insumos y reventa';
 
     let html = `
-           <div class="dm-section" style="padding-bottom:90px;">
+        <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4">
-                <div class="dm-row-between">
+                <div class="dm-row-between" style="gap:10px;">
                     <input
                         type="text"
                         id="bus-inv"
@@ -44,17 +44,25 @@ App.views.inventario = function() {
 
             html += `
                 <div class="dm-list-card">
-                    <div class="dm-list-card-top">
-                        <div>
-                            <div class="dm-list-card-title">${App.ui.escapeHTML(i.nombre)}</div>
+                    <div class="dm-list-card-top" style="align-items:flex-start; gap:12px;">
+                        <div style="flex:1; min-width:0;">
+                            <div class="dm-list-card-title" style="word-break:break-word;">
+                                ${App.ui.escapeHTML(i.nombre)}
+                            </div>
                             <div class="dm-list-card-subtitle">${App.ui.safe(i.tipo || 'OTRO')}</div>
                         </div>
-                        <span class="dm-badge ${badgeClass}">
-                            Libre: ${libre} ${App.ui.safe(i.unidad || '')}
-                        </span>
+
+                        <div style="flex:0 0 auto;">
+                            <span class="dm-badge ${badgeClass}">
+                                Libre: ${libre} ${App.ui.safe(i.unidad || '')}
+                            </span>
+                        </div>
                     </div>
 
-                    <div class="dm-list-card-meta dm-grid-3 dm-mt-3 dm-mb-3" style="background:var(--dm-surface-2); padding:10px; border-radius:var(--dm-radius-md); text-align:center;">
+                    <div
+                        class="dm-list-card-meta dm-grid-3 dm-mt-3 dm-mb-3"
+                        style="background:var(--dm-surface-2); padding:10px; border-radius:var(--dm-radius-md); text-align:center;"
+                    >
                         <div>
                             <small class="dm-muted">Físico</small><br>
                             <strong>${real}</strong>
@@ -95,7 +103,13 @@ App.views.formMaterial = function(id = null, callback = null) {
         <form id="dynamic-form">
             <div class="dm-form-group">
                 <label class="dm-label">Nombre</label>
-                <input type="text" class="dm-input" name="nombre" value="${obj ? App.ui.escapeHTML(obj.nombre) : ''}" required>
+                <input
+                    type="text"
+                    class="dm-input"
+                    name="nombre"
+                    value="${obj ? App.ui.escapeHTML(obj.nombre) : ''}"
+                    required
+                >
             </div>
 
             <div class="dm-form-row">
@@ -121,12 +135,26 @@ App.views.formMaterial = function(id = null, callback = null) {
             <div class="dm-form-row">
                 <div class="dm-form-group">
                     <label class="dm-label">Stock Físico</label>
-                    <input type="number" step="0.1" class="dm-input" name="stock_real" value="${obj ? obj.stock_real : '0'}" required>
+                    <input
+                        type="number"
+                        step="0.1"
+                        class="dm-input"
+                        name="stock_real"
+                        value="${obj ? obj.stock_real : '0'}"
+                        required
+                    >
                 </div>
 
                 <div class="dm-form-group">
                     <label class="dm-label">Stock Mínimo</label>
-                    <input type="number" step="0.1" class="dm-input" name="stock_minimo" value="${obj ? obj.stock_minimo : '0'}" required>
+                    <input
+                        type="number"
+                        step="0.1"
+                        class="dm-input"
+                        name="stock_minimo"
+                        value="${obj ? obj.stock_minimo : '0'}"
+                        required
+                    >
                 </div>
             </div>
 
@@ -135,8 +163,11 @@ App.views.formMaterial = function(id = null, callback = null) {
     `;
 
     App.ui.openSheet(obj ? 'Editar Insumo' : 'Nuevo Insumo', formHTML, (data) => {
-        if (obj) App.logic.actualizarRegistroGenerico('materiales', id, data, 'inventario');
-        else App.logic.guardarNuevoGenerico('materiales', data, 'MAT', 'inventario', callback);
+        if (obj) {
+            App.logic.actualizarRegistroGenerico('materiales', id, data, 'inventario');
+        } else {
+            App.logic.guardarNuevoGenerico('materiales', data, 'MAT', 'inventario', callback);
+        }
     });
 };
 
@@ -154,7 +185,7 @@ App.views.modalKardex = function(matId) {
     movs.forEach(m => {
         html += `
             <div class="dm-list-card dm-mb-2" style="padding:10px;">
-                <div class="dm-row-between">
+                <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
                     <div>
                         <strong style="color:${m.tipo === 'entrada' ? 'var(--dm-success)' : 'var(--dm-danger)'};">
                             ${m.tipo === 'entrada' ? '+' : '-'} ${App.ui.safe(m.cantidad)}
@@ -177,7 +208,7 @@ App.views.compras = function() {
     const title = document.getElementById('app-header-title');
     const subtitle = document.getElementById('app-header-subtitle');
     if (title) title.innerText = 'Compras';
-    if (subtitle) subtitle.innerText = 'Cuentas por Pagar';
+    if (subtitle) subtitle.innerText = 'Cuentas por pagar';
 
     let html = `<div class="dm-section" style="padding-bottom:90px;"><div class="dm-list">`;
     let compras = [...(App.state.compras || [])].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
@@ -194,9 +225,11 @@ App.views.compras = function() {
 
         html += `
             <div class="dm-list-card">
-                <div class="dm-list-card-top">
-                    <div>
-                        <div class="dm-list-card-title">${App.ui.safe(prov.nombre || 'Proveedor')}</div>
+                <div class="dm-list-card-top" style="align-items:flex-start; gap:12px;">
+                    <div style="flex:1; min-width:0;">
+                        <div class="dm-list-card-title" style="word-break:break-word;">
+                            ${App.ui.safe(prov.nombre || 'Proveedor')}
+                        </div>
                         <div class="dm-list-card-subtitle dm-mt-2">
                             <span class="dm-badge ${deu > 0 ? 'dm-badge-danger' : 'dm-badge-success'}">
                                 ${deu > 0 ? 'DEUDA' : 'PAGADO'}
@@ -204,7 +237,7 @@ App.views.compras = function() {
                         </div>
                     </div>
 
-                    <div class="dm-right">
+                    <div class="dm-right" style="flex:0 0 auto;">
                         <div class="dm-fw-bold dm-text-lg">$${tot.toFixed(2)}</div>
                         <div class="dm-text-sm dm-muted">
                             Resta:
@@ -216,7 +249,9 @@ App.views.compras = function() {
                 </div>
 
                 <div class="dm-list-card-actions">
-                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verDetallesCompra('${comp.id}')">Ver Detalles / Abonar</button>
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verDetallesCompra('${comp.id}')">
+                        Ver Detalles / Abonar
+                    </button>
                 </div>
             </div>
         `;
@@ -247,7 +282,9 @@ App.views.formCompra = function() {
             <h4 class="dm-label dm-mb-2">Insumos</h4>
             <div id="cont-compras"></div>
 
-            <button type="button" class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="window.agregarFilaCompra()">+ Añadir Insumo</button>
+            <button type="button" class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="window.agregarFilaCompra()">
+                + Añadir Insumo
+            </button>
 
             <div class="dm-form-row">
                 <div class="dm-form-group">
@@ -280,9 +317,9 @@ App.views.verDetallesCompra = function(id) {
         det.forEach(d => {
             html += `
                 <div class="dm-list-card" style="padding:10px;">
-                    <div class="dm-row-between">
-                        <div>
-                            <strong>${App.ui.safe(d.nombre || 'Insumo')}</strong><br>
+                    <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
+                        <div style="flex:1; min-width:0;">
+                            <strong style="word-break:break-word;">${App.ui.safe(d.nombre || 'Insumo')}</strong><br>
                             <small class="dm-muted">${App.ui.safe(d.cantidad)} uds x $${parseFloat(d.costo_unitario || 0).toFixed(2)}</small>
                         </div>
                         <div class="dm-fw-bold">$${(parseFloat(d.cantidad || 0) * parseFloat(d.costo_unitario || 0)).toFixed(2)}</div>
