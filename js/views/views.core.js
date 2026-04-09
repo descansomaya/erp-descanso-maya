@@ -4,35 +4,71 @@
 
 App.views.login = function() { 
     return `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:80vh; text-align:center; padding:20px;">
-        <div style="background:var(--primary-light); color:var(--primary); width:90px; height:90px; border-radius:24px; display:flex; align-items:center; justify-content:center; font-size:2.5rem; margin-bottom:20px; box-shadow:var(--shadow-sm);">🔒</div>
-        <h2 style="margin-bottom:10px; font-weight:800; font-size:1.8rem; color:var(--text-main);">Descanso Maya</h2>
-        <p style="color:var(--text-muted); margin-bottom:30px;">Gestión y Control Operativo</p>
-        <div class="modern-card" style="width:100%; max-width:320px; padding:24px;">
-            <input type="password" id="pin-input" class="input-modern" placeholder="Ingresa tu PIN" style="text-align:center; font-size:1.2rem; letter-spacing:4px; font-weight:bold;">
-            <button class="btn-modern btn-primary" onclick="App.logic.verificarPIN(document.getElementById('pin-input').value)">Acceder al Sistema</button>
+        <div style="background:var(--dm-primary-soft); color:var(--dm-primary); width:90px; height:90px; border-radius:24px; display:flex; align-items:center; justify-content:center; font-size:2.5rem; margin-bottom:20px; box-shadow:var(--dm-shadow-sm);">🔒</div>
+        <h2 style="margin-bottom:10px; font-weight:800; font-size:1.8rem; color:var(--dm-text);">Descanso Maya</h2>
+        <p style="color:var(--dm-text-soft); margin-bottom:30px;">Gestión y Control Operativo</p>
+        <div class="dm-card" style="width:100%; max-width:320px; padding:24px;">
+            <input type="password" id="pin-input" class="dm-input" placeholder="Ingresa tu PIN" style="text-align:center; font-size:1.2rem; letter-spacing:4px; font-weight:bold; margin-bottom: 20px;">
+            <button class="dm-btn dm-btn-primary dm-btn-block" onclick="App.logic.verificarPIN(document.getElementById('pin-input').value)">Acceder al Sistema</button>
         </div>
     </div>`; 
 };
 
 App.views.inicio = function() { 
-    // Actualizar Header
     document.getElementById('app-header-title').innerText = "Dashboard";
-    document.getElementById('app-header-subtitle').innerText = "Resumen de operación";
+    document.getElementById('app-header-subtitle').innerText = "Resumen Operativo";
 
     const pedidosCount = App.state.pedidos ? App.state.pedidos.length : 0; 
     const prodCount = App.state.ordenes_produccion ? App.state.ordenes_produccion.filter(o => o.estado !== 'listo').length : 0; 
     
+    let alertasHTML = ''; 
+    const stockBajo = (App.state.inventario || []).filter(i => { 
+        const libre = parseFloat(i.stock_real||0) - parseFloat(i.stock_reservado||0) - parseFloat(i.stock_comprometido||0); 
+        return parseFloat(i.stock_minimo) > 0 && libre <= parseFloat(i.stock_minimo); 
+    }); 
+    
+    if(stockBajo.length > 0) { 
+        alertasHTML += `<div class="dm-alert dm-alert-danger dm-mb-4">
+            <strong>⚠️ Alerta de Insumos Críticos</strong>
+            <ul style="margin:8px 0 0 20px; font-size:var(--dm-fs-sm);">`; 
+        stockBajo.forEach(i => { 
+            const libre = parseFloat(i.stock_real||0) - parseFloat(i.stock_reservado||0) - parseFloat(i.stock_comprometido||0); 
+            alertasHTML += `<li>${App.ui.escapeHTML(i.nombre)}: Quedan ${libre} libres</li>`; 
+        }); 
+        alertasHTML += `</ul></div>`; 
+    } 
+    
+    let pedAtrasados = 0; let pedUrgentes = 0; const hoy = new Date(); hoy.setHours(0,0,0,0);
+    (App.state.pedidos || []).forEach(p => { 
+        if(p.estado !== 'entregado' && p.estado !== 'listo para entregar' && p.fecha_entrega) { 
+            const fEnt = new Date(p.fecha_entrega+'T00:00:00'); 
+            const diffDias = Math.ceil((fEnt - hoy)/(1000*60*60*24)); 
+            if(diffDias < 0) pedAtrasados++; 
+            else if(diffDias >= 0 && diffDias <= 3) pedUrgentes++; 
+        } 
+    });
+    
+    if(pedAtrasados > 0 || pedUrgentes > 0) {
+        alertasHTML += `<div class="dm-alert dm-alert-warning dm-mb-4">
+            <strong>🚨 Entregas Pendientes</strong>
+            <ul style="margin:8px 0 0 20px; font-size:var(--dm-fs-sm);">`;
+        if(pedAtrasados > 0) alertasHTML += `<li>¡Tienes <strong>${pedAtrasados} pedido(s) atrasado(s)</strong>!</li>`;
+        if(pedUrgentes > 0) alertasHTML += `<li>Hay ${pedUrgentes} pedido(s) a entregar pronto.</li>`;
+        alertasHTML += `</ul></div>`;
+    }
+
     return `
     <div class="dm-section">
+        ${alertasHTML}
         <div class="dm-section-header">
             <h2 class="dm-section-title">Métricas Principales</h2>
         </div>
         
         <div class="dm-grid dm-grid-kpi">
             <div class="dm-kpi" onclick="App.router.navigate('pedidos')" style="cursor:pointer;">
-                <div class="dm-kpi-label">Total Pedidos</div>
+                <div class="dm-kpi-label">Ventas Totales</div>
                 <div class="dm-kpi-value">${pedidosCount}</div>
-                <div class="dm-kpi-meta"><span class="dm-badge dm-badge-info">📦 Ventas</span></div>
+                <div class="dm-kpi-meta"><span class="dm-badge dm-badge-info">📦 Pedidos</span></div>
             </div>
             
             <div class="dm-kpi" onclick="App.router.navigate('produccion')" style="cursor:pointer;">
@@ -48,7 +84,7 @@ App.views.inicio = function() {
             </div>
             
             <div class="dm-kpi" onclick="App.router.navigate('finanzas')" style="cursor:pointer;">
-                <div class="dm-kpi-label">Flujo de Caja</div>
+                <div class="dm-kpi-label">Flujos</div>
                 <div class="dm-kpi-value" style="color:var(--dm-success);">Ver</div>
                 <div class="dm-kpi-meta"><span class="dm-badge dm-badge-success">📊 Finanzas</span></div>
             </div>
@@ -57,70 +93,74 @@ App.views.inicio = function() {
 };
 
 App.views.mas = function() { 
-    return `<div class="container-app">
-        <div class="top-header"><h2>Menú de Módulos</h2></div>
-        
-        <div class="modern-card" style="padding:0; overflow:hidden; margin-bottom:20px;">
-            <div class="list-item" style="padding:15px; cursor:pointer; background:var(--warning-bg);" onclick="App.router.navigate('cobranza')">
-                <div style="display:flex; align-items:center; gap:12px;"><div class="list-icon" style="background:#F6E05E; color:#975A16;">💰</div><strong style="color:#975A16; font-size:1.1rem;">Cobranza (CxC)</strong></div>
+    document.getElementById('app-header-title').innerText = "Menú Adicional";
+    document.getElementById('app-header-subtitle').innerText = "Catálogos y configuración";
+
+    return `<div class="dm-section">
+        <h4 class="dm-label dm-mb-3">Módulos Administrativos</h4>
+        <div class="dm-list dm-mb-5">
+            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('cobranza')">
+                <div class="dm-row"><div class="dm-badge dm-badge-warning" style="font-size:1.2rem; padding:10px;">💰</div><strong class="dm-text-lg">Cobranza (CxC)</strong></div>
             </div>
-            <div class="list-item" style="padding:15px; cursor:pointer; background:var(--primary-light);" onclick="App.router.navigate('reportes')">
-                <div style="display:flex; align-items:center; gap:12px;"><div class="list-icon" style="background:#E9D8FD; color:var(--primary-dark);">📊</div><strong style="color:var(--primary-dark); font-size:1.1rem;">Centro de Reportes (BI)</strong></div>
+            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('reportes')">
+                <div class="dm-row"><div class="dm-badge dm-badge-primary" style="font-size:1.2rem; padding:10px;">📊</div><strong class="dm-text-lg" style="color:var(--dm-primary);">Centro de Reportes (BI)</strong></div>
             </div>
         </div>
 
-        <h4 style="color:var(--text-muted); font-size:0.85rem; text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;">Catálogos y Operación</h4>
-        <div class="modern-card" style="padding:0; overflow:hidden; margin-bottom:20px;">
-            <div class="list-item" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('clientes')">
-                <div style="display:flex; align-items:center; gap:12px;"><div class="list-icon">👥</div><strong style="color:var(--text-main);">Clientes</strong></div>
+        <h4 class="dm-label dm-mb-3">Catálogos y Operación</h4>
+        <div class="dm-list dm-mb-5">
+            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('clientes')">
+                <div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">👥</div><strong class="dm-text-lg">Clientes</strong></div>
             </div>
-            <div class="list-item" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('proveedores')">
-                <div style="display:flex; align-items:center; gap:12px;"><div class="list-icon">🚚</div><strong style="color:var(--text-main);">Proveedores</strong></div>
+            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('proveedores')">
+                <div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🚚</div><strong class="dm-text-lg">Proveedores</strong></div>
             </div>
-            <div class="list-item" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('artesanos')">
-                <div style="display:flex; align-items:center; gap:12px;"><div class="list-icon">🧑‍🎨</div><strong style="color:var(--text-main);">Artesanos / Tareas</strong></div>
+            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('artesanos')">
+                <div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🧑‍🎨</div><strong class="dm-text-lg">Artesanos / Tareas</strong></div>
             </div>
-            <div class="list-item" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('productos')">
-                <div style="display:flex; align-items:center; gap:12px;"><div class="list-icon">🧶</div><strong style="color:var(--text-main);">Catálogo de Productos</strong></div>
+            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('productos')">
+                <div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🧶</div><strong class="dm-text-lg">Catálogo de Productos</strong></div>
             </div>
-            <div class="list-item" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('reparaciones')">
-                <div style="display:flex; align-items:center; gap:12px;"><div class="list-icon">🪡</div><strong style="color:var(--text-main);">Reparaciones</strong></div>
+            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('reparaciones')">
+                <div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🪡</div><strong class="dm-text-lg">Reparaciones</strong></div>
             </div>
         </div>
 
-        <h4 style="color:var(--text-muted); font-size:0.85rem; text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;">Gestión Externa</h4>
-        <div class="modern-card" style="padding:0; overflow:hidden; margin-bottom:20px;">
-            <div class="list-item" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('compras')">
-                <div style="display:flex; align-items:center; gap:12px;"><div class="list-icon" style="background:var(--success-bg); color:var(--success);">🛒</div><strong style="color:var(--success);">Ingresar Compra CxP</strong></div>
+        <h4 class="dm-label dm-mb-3">Gestión Externa</h4>
+        <div class="dm-list dm-mb-5">
+            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('compras')">
+                <div class="dm-row"><div class="dm-badge dm-badge-success" style="font-size:1.2rem; padding:10px;">🛒</div><strong class="dm-text-lg" style="color:var(--dm-success);">Ingresar Compra CxP</strong></div>
             </div>
-            <div class="list-item" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('cotizaciones')">
-                <div style="display:flex; align-items:center; gap:12px;"><div class="list-icon">📝</div><strong style="color:var(--text-main);">Cotizaciones</strong></div>
+            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('cotizaciones')">
+                <div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">📝</div><strong class="dm-text-lg">Cotizaciones</strong></div>
             </div>
-            <div class="list-item" style="padding:15px; cursor:pointer; background:#EDF2F7;" onclick="App.router.navigate('configuracion')">
-                <div style="display:flex; align-items:center; gap:12px;"><div class="list-icon" style="background:#E2E8F0; color:#4A5568;">⚙️</div><strong style="color:#4A5568;">Configuración del Sistema</strong></div>
+            <div class="dm-list-card" style="padding:15px; cursor:pointer; background:var(--dm-surface-2);" onclick="App.router.navigate('configuracion')">
+                <div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px; background:#D1D5DB; color:#374151;">⚙️</div><strong class="dm-text-lg" style="color:#374151;">Configuración del Sistema</strong></div>
             </div>
         </div>
     </div>`; 
 };
 
 App.views.configuracion = function() { 
-    return `<div class="container-app">
-        <div class="top-header"><h2>Configuración</h2></div>
-        <div class="modern-card">
-            <button class="btn-modern btn-outline" style="margin-bottom: 12px;" onclick="App.logic.descargarRespaldo()">💾 Descargar Respaldo JSON</button>
-            <button class="btn-modern btn-ghost" style="margin-bottom: 12px;" onclick="window.exportarAExcel(App.state.movimientos_inventario, 'Kardex_Completo')">📥 Descargar Kardex a Excel</button>
-            <button class="btn-modern btn-ghost" style="margin-bottom: 24px;" onclick="App.logic.verDiagnostico()">🛠️ Diagnóstico de Base de Datos</button>
-            <button class="btn-modern btn-danger" onclick="localStorage.removeItem('erp_session_token'); location.reload();">🔒 Cerrar Sesión Segura</button>
+    document.getElementById('app-header-title').innerText = "Configuración";
+    document.getElementById('app-header-subtitle').innerText = "Ajustes del sistema";
+
+    return `<div class="dm-section">
+        <div class="dm-card">
+            <button class="dm-btn dm-btn-secondary dm-btn-block dm-mb-3" onclick="App.logic.descargarRespaldo()">💾 Descargar Respaldo JSON</button>
+            <button class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="window.exportarAExcel(App.state.movimientos_inventario, 'Kardex_Completo')">📥 Descargar Kardex a Excel</button>
+            <button class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="App.logic.verDiagnostico()">🛠️ Diagnóstico de Base de Datos</button>
+            <button class="dm-btn dm-btn-danger dm-btn-block" onclick="localStorage.removeItem('erp_session_token'); location.reload();">🔒 Cerrar Sesión Segura</button>
         </div>
     </div>`; 
 };
 
 App.views.modalBuscadorGlobal = function() { 
     let html = `
-        <div style="margin-bottom:15px; position: sticky; top: 0; background: var(--surface); padding-bottom: 10px; z-index: 10;">
-            <input type="text" id="input-busqueda-global" class="input-modern" placeholder="Buscar folio, cliente o producto..." style="margin:0;" onkeyup="App.logic.ejecutarBusquedaGlobal(this.value)" autocomplete="off">
+        <div class="dm-mb-4" style="position: sticky; top: 0; background: var(--dm-surface); padding-bottom: 10px; z-index: 10;">
+            <input type="text" id="input-busqueda-global" class="dm-input" placeholder="Buscar folio, cliente o producto..." onkeyup="App.logic.ejecutarBusquedaGlobal(this.value)" autocomplete="off">
         </div>
-        <div id="resultados-busqueda-global" style="max-height:50vh; overflow-y:auto; padding-bottom: 20px; color: var(--text-muted); text-align: center;">
+        <div id="resultados-busqueda-global" style="max-height:50vh; overflow-y:auto; padding-bottom: 20px; color: var(--dm-text-soft); text-align: center;">
             Escribe al menos 2 letras para empezar a buscar...
         </div>
     `; 
