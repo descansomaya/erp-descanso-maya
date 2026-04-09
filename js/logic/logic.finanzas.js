@@ -1,17 +1,52 @@
 // ==========================================
-// LÓGICA: FINANZAS Y GASTOS (V64 - PLUGIN DE PORCENTAJES)
+// LÓGICA: FINANZAS Y GASTOS (V65 - RANGO CUSTOM + DONAS % + PÍLDORAS)
 // ==========================================
 
 Object.assign(App.logic, {
-    async guardarMultiplesGastos(datos) { App.ui.showLoader("Registrando Gastos..."); const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; let operaciones = []; let nuevosGastos = []; for(let i=0; i<descripciones.length; i++) { if(!descripciones[i]) continue; const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; nuevosGastos.push(gastoObj); operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); } await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.gastos.push(...nuevosGastos); App.ui.hideLoader(); App.ui.toast("¡Gastos registrados!"); App.router.handleRoute(); },
+    async guardarMultiplesGastos(datos) { 
+        App.ui.showLoader("Registrando Gastos..."); 
+        const descripciones = Array.isArray(datos.descripcion) ? datos.descripcion : [datos.descripcion]; 
+        const montos = Array.isArray(datos.monto) ? datos.monto : [datos.monto]; 
+        let operaciones = []; let nuevosGastos = []; 
+        for(let i=0; i<descripciones.length; i++) { 
+            if(!descripciones[i]) continue; 
+            const gastoObj = { id: "GAS-" + Date.now() + "-" + i, categoria: datos.categoria, descripcion: descripciones[i], monto: parseFloat(montos[i]), fecha: datos.fecha }; 
+            nuevosGastos.push(gastoObj); 
+            operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: gastoObj }); 
+        } 
+        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); 
+        App.state.gastos.push(...nuevosGastos); 
+        App.ui.hideLoader(); 
+        App.ui.toast("¡Gastos registrados!"); 
+        App.router.handleRoute(); 
+    },
     
     renderGraficasFinanzas(filtro) {
-        const cont = document.getElementById('finanzas-contenedor'); if(!cont) return; 
+        const cont = document.getElementById('finanzas-contenedor'); 
+        if(!cont) return; 
+        
         const hoy = new Date(); let mAct = hoy.getMonth(); let aAct = hoy.getFullYear(); 
+
+        // Leer fechas personalizadas si existen en la vista
+        const inputDesde = document.getElementById('fecha-desde');
+        const inputHasta = document.getElementById('fecha-hasta');
+        const fDesdeInput = inputDesde ? inputDesde.value : null;
+        const fHastaInput = inputHasta ? inputHasta.value : null;
 
         const clasificarFecha = (fechaStr) => {
             if(!fechaStr) return 'fuera';
             const f = new Date(fechaStr); if(isNaN(f.getTime())) return 'fuera';
+            
+            // 👇 LÓGICA PARA RANGO PERSONALIZADO 👇
+            if(filtro === 'custom') {
+                if(!fDesdeInput || !fHastaInput) return 'actual'; // Si no llenó fechas, cuenta todo para no fallar
+                // Se agrega tiempo para que cubra todo el día hasta las 23:59:59
+                const dInicio = new Date(fDesdeInput + 'T00:00:00');
+                const dFin = new Date(fHastaInput + 'T23:59:59');
+                if(f >= dInicio && f <= dFin) return 'actual';
+                return 'fuera';
+            }
+
             const m = f.getMonth(); const a = f.getFullYear();
             if(filtro === 'todo') return 'actual';
             if(filtro === 'mes_actual') { if(a === aAct && m === mAct) return 'actual'; let mPrev = mAct - 1; let aPrev = aAct; if(mPrev < 0) { mPrev = 11; aPrev--; } if(a === aPrev && m === mPrev) return 'previo'; }
@@ -20,6 +55,15 @@ Object.assign(App.logic, {
             if(filtro === 'anio_actual') { if(a === aAct) return 'actual'; if(a === aAct - 1) return 'previo'; }
             return 'fuera';
         };
+
+        // Etiquetas dinámicas para mostrar en pantalla
+        let etiquetaFiltro = "";
+        if (filtro === 'custom') {
+            etiquetaFiltro = (fDesdeInput && fHastaInput) ? `Del ${fDesdeInput} al ${fHastaInput}` : "Rango Personalizado";
+        } else {
+            const labels = { todo: "Todo el historial", mes_actual: "Este Mes", mes_pasado: "Mes Pasado", trimestre_actual: "Este Trimestre", anio_actual: "Este Año" };
+            etiquetaFiltro = labels[filtro] || filtro;
+        }
 
         let metrics = { actual: { ventas: 0, ingresos: 0, gastos: 0, neto: 0, desglGastos: {}, desglVentas: {} }, previo: { ventas: 0, ingresos: 0, gastos: 0, neto: 0 } };
 
@@ -76,7 +120,7 @@ Object.assign(App.logic, {
         (App.state.compras || []).forEach(c => { const pg = c.monto_pagado !== undefined && c.monto_pagado !== "" ? parseFloat(c.monto_pagado) : parseFloat(c.total||0); const deu = parseFloat(c.total||0)-pg; if(deu>0) xPagarGlobal+=deu; });
 
         const getTendencia = (act, prev, inverso = false) => {
-            if(filtro === 'todo') return ''; 
+            if(filtro === 'todo' || filtro === 'custom') return ''; // No comparamos en estos casos
             if(prev === 0 && act === 0) return '<span style="font-size:0.7rem; color:#718096; margin-left:5px;">Igual</span>';
             if(prev === 0 && act > 0) return `<span style="font-size:0.7rem; color:${inverso ? '#E53E3E' : '#38A169'}; margin-left:5px;">⬆️ 100%</span>`;
             const varPorc = ((act - prev) / prev) * 100; const dir = varPorc >= 0 ? '⬆️' : '⬇️'; let color = '#718096';
@@ -86,7 +130,10 @@ Object.assign(App.logic, {
 
         const act = metrics.actual; const prev = metrics.previo;
 
-        let html = `<h4 style="margin-bottom:10px; color:#2D3748; font-size:0.9rem;">1. Rendimiento del Periodo</h4>
+        // Se usa la nueva etiquetaFiltro aquí
+        let html = `<p style="color:var(--text-muted); font-size:0.85rem; margin-top:-10px; margin-bottom:15px; text-transform:uppercase; font-weight:bold;">Periodo: <strong style="color:var(--primary);">${etiquetaFiltro}</strong></p>`;
+        
+        html += `<h4 style="margin-bottom:10px; color:#2D3748; font-size:0.9rem;">1. Rendimiento del Periodo</h4>
         <div class="grid-2">
             <div class="card stat-card" style="background:#EBF8FF; cursor:pointer; padding:15px;" onclick="App.views.detalleFinanzas('ventas', '${filtro}')">
                 <div class="label" style="margin-bottom:2px;">Ventas Totales (Comercial)</div>
@@ -105,7 +152,7 @@ Object.assign(App.logic, {
             </div>
         </div>
         <div class="card stat-card" style="margin-top:10px; border:2px solid ${act.neto >= 0 ? '#38A169' : '#E53E3E'}; margin-bottom:25px; padding:15px;">
-            <div class="label" style="color:${act.neto >= 0 ? '#276749' : '#9B2C2C'};">Flujo Neto Efectivo (Lo que te quedó en la bolsa)</div>
+            <div class="label" style="color:${act.neto >= 0 ? '#276749' : '#9B2C2C'};">Flujo Neto Efectivo (Caja)</div>
             <div class="value" style="color:${act.neto >= 0 ? '#38A169' : '#E53E3E'}; font-size:1.5rem;">$${act.neto.toFixed(2)}</div>
             ${getTendencia(act.neto, prev.neto)}
         </div>`;
@@ -120,12 +167,16 @@ Object.assign(App.logic, {
             <div class="card stat-card" style="background:#FFF5F5; cursor:pointer; padding:15px;" onclick="App.views.detalleFinanzas('por_pagar', 'todo')">
                 <div class="label" style="color:#C53030;">Cuentas por Pagar (CxP)</div>
                 <div class="value" style="color:#E53E3E; font-size:1.2rem;">$${xPagarGlobal.toFixed(2)}</div>
-                <div style="font-size:0.7rem; color:#C53030; margin-top:5px;">Deuda a proveedores/taller</div>
+                <div style="font-size:0.7rem; color:#C53030; margin-top:5px;">Deuda proveedores/taller</div>
             </div>
         </div>`;
 
         html += `<div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px;"><canvas id="graficaFinanzas"></canvas></div>`;
-        html += `<div style="display:flex; flex-direction:column; gap:15px; margin-top:15px;"><div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px; display:flex; flex-direction:column; align-items:center;"><h4 style="text-align:center; margin-bottom:15px; color:var(--text-muted); font-size:0.9rem;">Categorías de Venta 📈</h4><div style="position:relative; width:100%; max-width:280px; aspect-ratio:1;"><canvas id="graficaVentasCanvas"></canvas></div></div><div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px; display:flex; flex-direction:column; align-items:center;"><h4 style="text-align:center; margin-bottom:15px; color:var(--text-muted); font-size:0.9rem;">Destino de los Gastos 📉</h4><div style="position:relative; width:100%; max-width:280px; aspect-ratio:1;"><canvas id="graficaGastosCanvas"></canvas></div></div></div><button class="btn btn-secondary" style="width:100%; margin-top:15px; border-color:#38A169; color:#38A169; font-weight:bold; background:transparent;" onclick="window.exportarAExcel(App.state.gastos, 'Gastos')">📥 Exportar Gastos a Excel</button>`;
+        html += `<div style="display:flex; flex-direction:column; gap:15px; margin-top:15px;">
+            <div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px; display:flex; flex-direction:column; align-items:center;"><h4 style="text-align:center; margin-bottom:15px; color:var(--text-muted); font-size:0.9rem;">Categorías de Venta 📈</h4><div style="position:relative; width:100%; max-width:280px; aspect-ratio:1;"><canvas id="graficaVentasCanvas"></canvas></div></div>
+            <div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px; display:flex; flex-direction:column; align-items:center;"><h4 style="text-align:center; margin-bottom:15px; color:var(--text-muted); font-size:0.9rem;">Destino de los Gastos 📉</h4><div style="position:relative; width:100%; max-width:280px; aspect-ratio:1;"><canvas id="graficaGastosCanvas"></canvas></div></div>
+        </div>
+        <button class="btn btn-secondary" style="width:100%; margin-top:15px; border-color:#38A169; color:#38A169; font-weight:bold; background:transparent;" onclick="window.exportarAExcel(App.state.gastos, 'Gastos_${etiquetaFiltro.replace(/ /g, '_')}')">📥 Exportar Gastos a Excel</button>`;
         
         cont.innerHTML = html;
         
@@ -133,14 +184,13 @@ Object.assign(App.logic, {
             if(window.Chart) { 
                 const colores = ['#4C51BF', '#ED8936', '#38B2AC', '#E53E3E', '#ECC94B', '#805AD5', '#3182CE'];
                 
-                // TEXTOS DEL LEGEND PARA DOUGHNUT (con porcentajes)
                 const totalVentasCat = Object.values(act.desglVentas).reduce((a,b)=>a+b, 0);
                 const labelsVentas = Object.keys(act.desglVentas).map(k => `${k} (${totalVentasCat>0 ? ((act.desglVentas[k]/totalVentasCat)*100).toFixed(1) : 0}%)`);
 
                 const totalGastosCat = Object.values(act.desglGastos).reduce((a,b)=>a+b, 0);
                 const labelsGastos = Object.keys(act.desglGastos).map(k => `${k} (${totalGastosCat>0 ? ((act.desglGastos[k]/totalGastosCat)*100).toFixed(1) : 0}%)`);
 
-                // 🎨 PLUGIN PARA PINTAR TEXTOS BLANCOS ADENTRO DE LAS DONAS 🎨
+                // PLUGIN para pintar en blanco los porcentajes adentro de la dona
                 const pluginPorcentajes = {
                     id: 'pluginPorcentajes',
                     afterDatasetsDraw(chart, args, options) {
@@ -150,7 +200,7 @@ Object.assign(App.logic, {
                         ctx.fillStyle = 'white';
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
-                        ctx.shadowColor = 'rgba(0,0,0,0.6)'; // Sombra para que se lea en celulares
+                        ctx.shadowColor = 'rgba(0,0,0,0.6)'; 
                         ctx.shadowBlur = 4;
                         
                         const meta = chart.getDatasetMeta(0);
@@ -160,7 +210,7 @@ Object.assign(App.logic, {
                             const val = data.datasets[0].data[index];
                             if (val > 0 && total > 0) {
                                 const porcentaje = Math.round((val / total) * 100);
-                                if (porcentaje > 4) { // Oculta textos muy encimados en rebanadas chicas (<4%)
+                                if (porcentaje > 4) { 
                                     const pos = element.tooltipPosition();
                                     ctx.fillText(porcentaje + '%', pos.x, pos.y);
                                 }
