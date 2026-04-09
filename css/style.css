@@ -1390,3 +1390,22 @@ h1,h2,h3,h4,h5,h6,p{
     border-radius: 999px;
   }
 }
+@media (max-width: 768px) {
+  .dm-list-card-top {
+    gap: 10px;
+  }
+
+  .dm-list-card-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .dm-list-card-actions .dm-btn {
+    width: 100%;
+  }
+
+  .dm-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
