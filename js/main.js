@@ -33,24 +33,30 @@ window.switchTabPed = function(tabId, btn) { document.querySelectorAll('.tab-con
 App.router = { 
     init() { window.addEventListener('hashchange', () => this.handleRoute()); this.handleRoute(); }, 
     navigate(route) { window.location.hash = route; }, 
-    handleRoute() { 
+  handleRoute() { 
         const contentDiv = document.getElementById('app-content');
         const headerTitle = document.getElementById('app-header-title');
         const headerSubtitle = document.getElementById('app-header-subtitle');
         
-        // MANEJO DE SESIÓN NO INICIADA
+        // MANEJO DE SESIÓN NO INICIADA (BLINDADO)
         if (!App.state.sessionToken) { 
             App.ui.hideLoader(); 
-            if(contentDiv) contentDiv.innerHTML = App.views.login(); 
             if(headerTitle) headerTitle.textContent = "Acceso Restringido"; 
             if(headerSubtitle) headerSubtitle.textContent = "Ingresa tu PIN";
+            
+            // Salvavidas: Si App.views.login no existe, pintamos un login de emergencia
+            if(contentDiv) {
+                if (typeof App.views.login === 'function') {
+                    contentDiv.innerHTML = App.views.login(); 
+                } else {
+                    contentDiv.innerHTML = `<div style="text-align:center; padding:40px;"><h2 class="dm-mb-3">Descanso Maya</h2><p class="dm-alert dm-alert-danger dm-mb-3">Archivo de vistas dañado o cargando...</p><input type="password" id="pin-input" class="dm-input dm-mb-3" placeholder="PIN"><button class="dm-btn dm-btn-primary" onclick="App.logic.verificarPIN(document.getElementById('pin-input').value)">Entrar forzado</button></div>`;
+                }
+            }
             return; 
         } 
         
-        // OBTENER RUTA ACTUAL
+     
         let hash = window.location.hash.substring(1) || 'inicio'; 
-        
-        // ACTUALIZAR BOTONES ACTIVOS (MÓVIL Y DESKTOP)
         document.querySelectorAll('.dm-bottom-nav a').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.dm-sidebar-link').forEach(el => el.classList.remove('active'));
         
@@ -60,11 +66,8 @@ App.router = {
         if(activeMobile) activeMobile.classList.add('active');
         if(activeDesktop) activeDesktop.classList.add('active');
         
-        // RENDERIZAR VISTA
         if (App.views[hash]) { 
             if(contentDiv) contentDiv.innerHTML = App.views[hash](); 
-            
-            // Textos por defecto por si la vista no los sobreescribe
             if(headerTitle && hash !== 'inicio' && hash !== 'inventario') {
                 headerTitle.textContent = hash.charAt(0).toUpperCase() + hash.slice(1);
                 headerSubtitle.textContent = "Gestión de " + hash;
