@@ -11,18 +11,24 @@ App.views.finanzas = function() {
     return `<div class="card" style="padding-top:15px;">
         <h3 class="card-title" style="margin-bottom:15px;">Dashboard Financiero</h3>
         
-        <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 15px; scrollbar-width: none; -ms-overflow-style: none;">
+        <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 10px; scrollbar-width: none; -ms-overflow-style: none;">
             <style>
                 .pill-fin { padding: 8px 16px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; border: 1px solid var(--primary); color: var(--primary); background: transparent; cursor: pointer; white-space: nowrap; transition: 0.2s all; }
                 .pill-fin.active { background: var(--primary); color: white; }
-                /* Ocultar barra de scroll en Webkit */
                 .pill-fin-container::-webkit-scrollbar { display: none; }
             </style>
-            <button class="pill-fin active" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); App.logic.renderGraficasFinanzas('mes_actual')">Este Mes</button>
-            <button class="pill-fin" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); App.logic.renderGraficasFinanzas('mes_pasado')">Mes Pasado</button>
-            <button class="pill-fin" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); App.logic.renderGraficasFinanzas('trimestre_actual')">Este Trimestre</button>
-            <button class="pill-fin" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); App.logic.renderGraficasFinanzas('anio_actual')">Este Año</button>
-            <button class="pill-fin" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); App.logic.renderGraficasFinanzas('todo')">Historial Completo</button>
+            <button class="pill-fin active" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); document.getElementById('filtro-rango-fechas').style.display='none'; App.logic.renderGraficasFinanzas('mes_actual')">Este Mes</button>
+            <button class="pill-fin" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); document.getElementById('filtro-rango-fechas').style.display='none'; App.logic.renderGraficasFinanzas('mes_pasado')">Mes Pasado</button>
+            <button class="pill-fin" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); document.getElementById('filtro-rango-fechas').style.display='none'; App.logic.renderGraficasFinanzas('trimestre_actual')">Trimestre</button>
+            <button class="pill-fin" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); document.getElementById('filtro-rango-fechas').style.display='none'; App.logic.renderGraficasFinanzas('anio_actual')">Este Año</button>
+            <button class="pill-fin" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); document.getElementById('filtro-rango-fechas').style.display='none'; App.logic.renderGraficasFinanzas('todo')">Historial</button>
+            <button class="pill-fin" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); document.getElementById('filtro-rango-fechas').style.display='flex';">Personalizado 📅</button>
+        </div>
+
+        <div id="filtro-rango-fechas" style="display:none; gap:10px; margin-bottom:15px; background:#F7FAFC; padding:10px; border-radius:8px; border:1px solid #E2E8F0; align-items:flex-end;">
+            <div style="flex:1;"><label style="font-size:0.75rem; color:var(--text-muted);">Desde:</label><input type="date" id="fecha-desde" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border);"></div>
+            <div style="flex:1;"><label style="font-size:0.75rem; color:var(--text-muted);">Hasta:</label><input type="date" id="fecha-hasta" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border);"></div>
+            <button class="btn btn-primary" style="padding:8px 12px;" onclick="App.logic.renderGraficasFinanzas('custom')">🔎</button>
         </div>
         
         <div id="finanzas-contenedor">
