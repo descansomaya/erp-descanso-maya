@@ -26,30 +26,28 @@ function generarListaProd(estadoFiltro) {
     ords.sort((a,b) => new Date(b.fecha_inicio) - new Date(a.fecha_inicio)); 
     let html = `<div class="dm-list">`; 
 
-    ords.forEach(o => { 
-        const a = App.state.artesanos.find(x => x.id === o.artesano_id) || {}; 
-        const pedDet = App.state.pedido_detalle.find(d => d.id === o.pedido_detalle_id) || {}; 
-        const prod = App.state.productos.find(x => x.id === pedDet.producto_id) || {}; 
-        let estColor = o.estado === 'listo' ? 'dm-badge-success' : (o.estado === 'proceso' ? 'dm-badge-warning' : 'dm-badge-info'); 
+// Dentro de generarListaProd...
+ords.forEach(o => { 
+    // BUSQUEDA CORRECTA DEL ARTESANO ASIGNADO EN SHEETS 
+    const artesanoAsignado = App.state.artesanos.find(a => a.id === o.artesano_id);
+    const nombreArtesano = artesanoAsignado ? artesanoAsignado.nombre : '⚠️ Sin asignar';
+    
+    // Vinculación con el detalle del producto 
+    const pDetalle = App.state.pedido_detalle.find(d => d.id === o.pedido_detalle_id) || {};
+    const producto = App.state.productos.find(p => p.id === pDetalle.producto_id) || {};
 
-        html += `
-        <div class="dm-list-card">
-            <div class="dm-list-card-top">
-                <div>
-                    <div class="dm-list-card-title">${prod.nombre || 'Producto'}</div>
-                    <div class="dm-list-card-subtitle dm-mt-2"><span class="dm-badge ${estColor}">${o.estado.toUpperCase()}</span> <span class="dm-badge dm-badge-primary">Ref: ${(pedDet.pedido_id||'')}</span></div>
-                </div>
+    html += `
+    <div class="dm-list-card">
+        <div class="dm-list-card-top">
+            <div>
+                <div class="dm-list-card-title">${producto.nombre || 'Producto'}</div>
+                <div class="dm-list-card-subtitle">Artesano: <strong>${nombreArtesano}</strong></div>
             </div>
-            <div class="dm-list-card-meta dm-mt-3 dm-mb-3" style="background:var(--dm-surface-2); padding:10px; border-radius:var(--dm-radius-md);">
-                <div class="dm-mb-2">🧑‍🎨 <strong>Artesano:</strong> ${a.nombre || 'Sin Asignar'}</div>
-            <div class="dm-list-card-actions">
-                <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="window.verDetallesProduccion('${o.id}')">👁️ Detalles</button>
-                ${o.estado === 'pendiente' ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.logic.cambiarEstadoProduccion('${o.id}', 'proceso')">▶️ Iniciar</button>` : ''}
-                ${o.estado === 'proceso' ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.logic.cambiarEstadoProduccion('${o.id}', 'listo')">✅ Terminar</button>` : ''}
-                <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.eliminarRegistroGenerico('ordenes_produccion', '${o.id}', 'produccion')">🗑️</button>
-            </div>
-        </div>`; 
-    }); 
+            <span class="dm-badge dm-badge-primary">Folio: ${o.id.split('-')[1]}</span>
+        </div>
+        </div>`;
+});
+    
     html += `</div>`; return html; 
 }
 
