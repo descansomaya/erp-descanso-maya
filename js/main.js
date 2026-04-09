@@ -11,7 +11,7 @@ window.onerror = function (message, source, lineno) {
 // Helpers globales existentes
 // ==============================
 window.cargarTarifas = function (artesanoId) {
-    const tarifas = App.state.tarifas_artesano.filter(t => t.artesano_id === artesanoId);
+    const tarifas = (App.state?.tarifas_artesano || []).filter(t => t.artesano_id === artesanoId);
     const select = document.getElementById('select-tarifas');
     if (!select) return;
 
@@ -24,10 +24,13 @@ window.calcTotalTrabajo = function () {
     const sel = document.getElementById('select-tarifas');
     const cant = document.getElementById('cant-trabajo')?.value;
     const tot = document.getElementById('total-trabajo');
+    const tareaNombre = document.getElementById('tarea_nombre');
 
     if (sel && cant && tot && sel.value) {
-        tot.value = (parseFloat(sel.value) * parseFloat(cant)).toFixed(2);
-        document.getElementById('tarea_nombre').value = sel.options[sel.selectedIndex].text.split(' ($')[0];
+        tot.value = (parseFloat(sel.value) * parseFloat(cant || 1)).toFixed(2);
+        if (tareaNombre) {
+            tareaNombre.value = sel.options[sel.selectedIndex]?.text?.split(' ($')[0] || '';
+        }
     }
 };
 
@@ -39,7 +42,7 @@ window.filtrarLista = function (inputId, claseItem) {
     const items = document.querySelectorAll('.' + claseItem);
 
     items.forEach(item => {
-        const texto = item.innerText.toLowerCase();
+        const texto = (item.innerText || '').toLowerCase();
         item.style.display = texto.includes(filtro) ? '' : 'none';
     });
 };
@@ -51,29 +54,33 @@ App.forms.calcularTotalPedido = function () {
     const totalInput = document.querySelector('input[name="total"]');
     const infoExtra = document.getElementById('info-extra-prod');
 
-    if (prodSelect && cantInput && totalInput && prodSelect.value) {
-        const prod = App.state.productos.find(p => p.id === prodSelect.value);
-        if (prod) {
-            const cant = parseFloat(cantInput.value) || 1;
-            const precioBase =
-                mayoreoCheck && mayoreoCheck.checked && parseFloat(prod.precio_mayoreo) > 0
-                    ? parseFloat(prod.precio_mayoreo)
-                    : parseFloat(prod.precio_venta);
-
-            totalInput.value = (precioBase * cant).toFixed(2);
-
-            if (infoExtra) {
-                infoExtra.innerHTML = `
-                    <small style="color:var(--primary);">
-                        <strong>Clasificación:</strong> ${App.ui.safe(prod.clasificacion || 'N/A')} |
-                        <strong>Tamaño:</strong> ${App.ui.safe(prod.tamano || 'N/A')} |
-                        <strong>Color:</strong> ${App.ui.safe(prod.color || 'N/A')}
-                    </small>
-                `;
-            }
-        }
-    } else {
+    if (!prodSelect || !cantInput || !totalInput || !prodSelect.value) {
         if (infoExtra) infoExtra.innerHTML = '';
+        return;
+    }
+
+    const prod = (App.state?.productos || []).find(p => p.id === prodSelect.value);
+    if (!prod) {
+        if (infoExtra) infoExtra.innerHTML = '';
+        return;
+    }
+
+    const cant = parseFloat(cantInput.value) || 1;
+    const precioBase =
+        mayoreoCheck && mayoreoCheck.checked && parseFloat(prod.precio_mayoreo) > 0
+            ? parseFloat(prod.precio_mayoreo)
+            : parseFloat(prod.precio_venta || 0);
+
+    totalInput.value = (precioBase * cant).toFixed(2);
+
+    if (infoExtra) {
+        infoExtra.innerHTML = `
+            <small style="color:var(--primary);">
+                <strong>Clasificación:</strong> ${App.ui.safe(prod.clasificacion || 'N/A')} |
+                <strong>Tamaño:</strong> ${App.ui.safe(prod.tamano || 'N/A')} |
+                <strong>Color:</strong> ${App.ui.safe(prod.color || 'N/A')}
+            </small>
+        `;
     }
 };
 
@@ -83,7 +90,7 @@ App.forms.agregarFilaReceta = function () {
     const cont = document.getElementById('cont-receta');
     if (!cont) return;
 
-    const opcMat = App.state.inventario
+    const opcMat = (App.state?.inventario || [])
         .map(m => `<option value="${m.id}">${App.ui.safe(m.nombre)} (${App.ui.safe(m.unidad)})</option>`)
         .join('');
 
@@ -136,7 +143,7 @@ App.forms.agregarFilaCompra = function () {
     const cont = document.getElementById('cont-compras');
     if (!cont) return;
 
-    const opcMat = App.state.inventario
+    const opcMat = (App.state?.inventario || [])
         .map(m => `<option value="${m.id}">${App.ui.safe(m.nombre)} (Físico: ${m.stock_real || 0})</option>`)
         .join('');
 
@@ -179,7 +186,7 @@ App.forms.agregarFilaGasto = function () {
 window.agregarFilaGasto = () => App.forms.agregarFilaGasto();
 
 window.generarFilaRecetaProd = function (matId, cant, uso) {
-    const opcMat = App.state.inventario
+    const opcMat = (App.state?.inventario || [])
         .map(m => `<option value="${m.id}" ${matId === m.id ? 'selected' : ''}>${App.ui.safe(m.nombre)} (${m.stock_real || 0} físicos)</option>`)
         .join('');
 
@@ -213,12 +220,15 @@ window.agregarFilaRecetaProd = function () {
 };
 
 window.exportarAExcel = function (datos, nombreArchivo) {
-    if (!datos || datos.length === 0) return alert('No hay datos para exportar');
+    if (!datos || datos.length === 0) {
+        alert('No hay datos para exportar');
+        return;
+    }
 
     const cabeceras = Object.keys(datos[0]).join(',');
     const filas = datos.map(obj =>
         Object.values(obj)
-            .map(v => `"${String(v).replace(/"/g, '""')}"`)
+            .map(v => `"${String(v ?? '').replace(/"/g, '""')}"`)
             .join(',')
     );
 
@@ -235,15 +245,19 @@ window.exportarAExcel = function (datos, nombreArchivo) {
 window.switchTabProd = function (tabId, btn) {
     document.querySelectorAll('.tab-content-prod').forEach(el => el.style.display = 'none');
     document.querySelectorAll('.tab-btn-prod').forEach(el => el.classList.remove('active'));
-    document.getElementById('tab-' + tabId).style.display = 'block';
-    btn.classList.add('active');
+
+    const tab = document.getElementById('tab-' + tabId);
+    if (tab) tab.style.display = 'block';
+    if (btn) btn.classList.add('active');
 };
 
 window.switchTabPed = function (tabId, btn) {
     document.querySelectorAll('.tab-content-ped').forEach(el => el.style.display = 'none');
     document.querySelectorAll('.tab-btn-ped').forEach(el => el.classList.remove('active'));
-    document.getElementById('tab-' + tabId).style.display = 'block';
-    btn.classList.add('active');
+
+    const tab = document.getElementById('tab-' + tabId);
+    if (tab) tab.style.display = 'block';
+    if (btn) btn.classList.add('active');
 };
 
 // ==============================
@@ -264,14 +278,14 @@ App.router = {
         const headerTitle = document.getElementById('app-header-title');
         const headerSubtitle = document.getElementById('app-header-subtitle');
 
-        if (!App.state.sessionToken) {
+        if (!App.state?.sessionToken) {
             App.ui.hideLoader();
 
             if (headerTitle) headerTitle.textContent = 'Acceso Restringido';
             if (headerSubtitle) headerSubtitle.textContent = 'Ingresa tu PIN';
 
             if (contentDiv) {
-                if (typeof App.views.login === 'function') {
+                if (typeof App.views?.login === 'function') {
                     contentDiv.innerHTML = App.views.login();
                 } else {
                     contentDiv.innerHTML = `
@@ -298,12 +312,20 @@ App.router = {
         if (activeMobile) activeMobile.classList.add('active');
         if (activeDesktop) activeDesktop.classList.add('active');
 
-        if (App.views[hash]) {
+        if (App.views && typeof App.views[hash] === 'function') {
             if (contentDiv) contentDiv.innerHTML = App.views[hash]();
 
-            if (headerTitle && hash !== 'inicio' && hash !== 'inventario') {
-                headerTitle.textContent = hash.charAt(0).toUpperCase() + hash.slice(1);
-                headerSubtitle.textContent = 'Gestión de ' + hash;
+            if (headerTitle) {
+                if (hash === 'inicio') {
+                    headerTitle.textContent = 'Inicio';
+                    if (headerSubtitle) headerSubtitle.textContent = 'Resumen general';
+                } else if (hash === 'inventario') {
+                    headerTitle.textContent = 'Inventario';
+                    if (headerSubtitle) headerSubtitle.textContent = 'Control de materiales';
+                } else {
+                    headerTitle.textContent = hash.charAt(0).toUpperCase() + hash.slice(1);
+                    if (headerSubtitle) headerSubtitle.textContent = 'Gestión de ' + hash;
+                }
             }
         } else {
             if (contentDiv) {
@@ -323,18 +345,23 @@ App.start = function () {
             App.compat.init();
         }
 
-        if (!this.state.sessionToken) {
+        if (!this.state?.sessionToken) {
             this.router.init();
-        } else {
+        } else if (this.logic && typeof this.logic.cargarDatosIniciales === 'function') {
             this.logic.cargarDatosIniciales();
+        } else {
+            this.router.init();
         }
     } catch (error) {
         console.error('Error al iniciar App:', error);
-        document.getElementById('app-content').innerHTML = `
-            <div class="dm-card">
-                <p class="dm-alert dm-alert-danger">Error al iniciar la aplicación: ${App.ui.escapeHTML(error.message)}</p>
-            </div>
-        `;
+        const content = document.getElementById('app-content');
+        if (content) {
+            content.innerHTML = `
+                <div class="dm-card">
+                    <p class="dm-alert dm-alert-danger">Error al iniciar la aplicación: ${App.ui.escapeHTML(error.message)}</p>
+                </div>
+            `;
+        }
     }
 };
 
@@ -354,17 +381,17 @@ App.logic.cambiarEstadoProduccion = function (id, nuevoEstado) {
 };
 
 window.verDetallesProduccion = function (ordenId) {
-    const o = App.state.ordenes_produccion.find(x => x.id === ordenId);
+    const o = (App.state?.ordenes_produccion || []).find(x => x.id === ordenId);
     if (!o) return;
 
-    const pedDet = App.state.pedido_detalle.find(d => d.id === o.pedido_detalle_id) || {};
-    const p = App.state.pedidos.find(x => x.id === pedDet.pedido_id) || {};
-    const cliente = App.state.clientes.find(x => x.id === p.cliente_id) || {};
-    const prod = App.state.productos.find(x => x.id === pedDet.producto_id) || {};
+    const pedDet = (App.state?.pedido_detalle || []).find(d => d.id === o.pedido_detalle_id) || {};
+    const p = (App.state?.pedidos || []).find(x => x.id === pedDet.pedido_id) || {};
+    const cliente = (App.state?.clientes || []).find(x => x.id === p.cliente_id) || {};
+    const prod = (App.state?.productos || []).find(x => x.id === pedDet.producto_id) || {};
     const nomCliente = p.cliente_id === 'STOCK_INTERNO' ? 'STOCK BODEGA' : (cliente.nombre || 'Desconocido');
 
     let artesanosOpts = '<option value="">-- Sin Asignar --</option>';
-    (App.state.artesanos || []).forEach(art => {
+    (App.state?.artesanos || []).forEach(art => {
         artesanosOpts += `<option value="${art.id}" ${o.artesano_id === art.id ? 'selected' : ''}>${App.ui.safe(art.nombre)}</option>`;
     });
 
@@ -436,10 +463,12 @@ window.verDetallesProduccion = function (ordenId) {
             window.cargarTarifas(o.artesano_id);
             if (o.pago_estimado) {
                 const selectTarifas = document.getElementById('select-tarifas');
-                for (let i = 0; i < selectTarifas.options.length; i++) {
-                    if (selectTarifas.options[i].value == o.pago_estimado) {
-                        selectTarifas.selectedIndex = i;
-                        break;
+                if (selectTarifas) {
+                    for (let i = 0; i < selectTarifas.options.length; i++) {
+                        if (selectTarifas.options[i].value == o.pago_estimado) {
+                            selectTarifas.selectedIndex = i;
+                            break;
+                        }
                     }
                 }
             }
