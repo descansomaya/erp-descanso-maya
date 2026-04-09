@@ -3,7 +3,7 @@
 // ==========================================
 
 Object.assign(App.logic, {
-  async guardarNuevoPedido(datosFormulario) { 
+    async guardarNuevoPedido(datosFormulario) { 
         App.ui.showLoader("Procesando pedido..."); 
         const pedidoId = "PED-" + Date.now(); 
         const totalNum = parseFloat(datosFormulario.total) || 0; 
