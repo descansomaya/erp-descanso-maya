@@ -79,7 +79,11 @@ App.router = {
 };
 
 App.start = function() { 
-    this.ui.init(); 
+    // Si la función init existe, la ejecutamos (Evita el error de caché del celular)
+    if (this.ui && typeof this.ui.init === 'function') {
+        this.ui.init(); 
+    }
+    
     if (!this.state.sessionToken) { 
         this.router.init(); 
     } else { 
