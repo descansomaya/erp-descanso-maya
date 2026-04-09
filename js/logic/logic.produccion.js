@@ -42,7 +42,7 @@ Object.assign(App.logic, {
         const jsonHistorial = JSON.stringify([{ fecha: new Date().toISOString(), nota: "Orden creada y enviada a taller" }]);
         const nuevaOrden = { id: "ORD-" + Date.now(), pedido_detalle_id: datos.pedido_detalle_id, estado: "pendiente", fecha_creacion: new Date().toISOString(), receta_personalizada: JSON.stringify(recetaPersonalizada), historial_eventos: jsonHistorial }; 
         nuevosMovs.forEach(m => { m.origen_id = nuevaOrden.id; operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: m }); }); operaciones.push({ action: "guardar_fila", nombreHoja: "ordenes_produccion", datos: nuevaOrden });
-        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Enviado a taller"); App.router.navigate('produccion');
+        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.ordenes_produccion.push(nuevaOrden); if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Enviado a taller"); App.router.navigate('produccion');App.logic.revisarAlertasStock();
     },
 
     async cerrarOrdenProduccion(datosFormulario) { 
@@ -119,7 +119,7 @@ Object.assign(App.logic, {
         
         await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); 
         if(!App.state.movimientos_inventario) App.state.movimientos_inventario = []; App.state.movimientos_inventario.push(...nuevosMovs); 
-        App.ui.hideLoader(); App.ui.toast("¡Terminado y Costeado!"); App.router.handleRoute(); 
+        App.ui.hideLoader(); App.ui.toast("¡Terminado y Costeado!"); App.router.handleRoute(); App.logic.revisarAlertasStock();
     },
 
     async procesarCambioOrden(ordenId, datos) { 
