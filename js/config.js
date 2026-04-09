@@ -1,7 +1,7 @@
 window.App = window.App || {};
 
 App.config = {
-    version: '11.6.0',
+    version: '11.6.1-debug',
     appName: 'ERP Descanso Maya',
     debug: true,
 
@@ -16,3 +16,6 @@ App.config = {
         useSafeHTML: true
     }
 };
+
+window.__CONFIG_LOADED__ = true;
+console.log('CONFIG CARGADO OK', App.config);
