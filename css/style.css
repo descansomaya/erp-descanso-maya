@@ -1356,3 +1356,27 @@ h1,h2,h3,h4,h5,h6,p{
     flex: 1 1 calc(50% - 6px);
   }
 }
+
+@media (max-width: 768px) {
+  .dm-section {
+    padding-bottom: 90px;
+  }
+
+  .dm-tabs {
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .dm-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-btn-ped,
+  .tab-btn-prod {
+    flex: 0 0 auto;
+    font-size: 0.85rem;
+    padding: 10px 12px;
+  }
+}
