@@ -1,5 +1,5 @@
 // ==========================================
-// LÓGICA: FINANZAS Y GASTOS (V63 - DONAS CON PORCENTAJES Y BI)
+// LÓGICA: FINANZAS Y GASTOS (V64 - PLUGIN DE PORCENTAJES)
 // ==========================================
 
 Object.assign(App.logic, {
@@ -47,18 +47,13 @@ Object.assign(App.logic, {
 
         (App.state.abonos || []).forEach(a => { const clase = clasificarFecha(a.fecha); if(clase !== 'fuera') metrics[clase].ingresos += parseFloat(a.monto || 0); });
 
-        // 👇 NUEVO ANALIZADOR INTELIGENTE DE GASTOS 👇
         (App.state.gastos || []).forEach(g => {
             const clase = clasificarFecha(g.fecha);
             if(clase !== 'fuera') {
                 const montoGasto = parseFloat(g.monto || 0);
                 metrics[clase].gastos += montoGasto;
                 if(clase === 'actual') {
-                    let catOriginal = (g.categoria || '').toLowerCase();
-                    let desc = (g.descripcion || '').toLowerCase();
-                    let catAsignada = 'Otros Gastos';
-
-                    // Motor de reglas semánticas para categorizar
+                    let catOriginal = (g.categoria || '').toLowerCase(); let desc = (g.descripcion || '').toLowerCase(); let catAsignada = 'Otros Gastos';
                     if (catOriginal.includes('reventa') || desc.includes('reventa') || desc.includes('hamaca')) catAsignada = 'Hamacas (Reventa)';
                     else if (desc.includes('silla')) catAsignada = 'Sillas';
                     else if (desc.includes('cojin') || desc.includes('cojín')) catAsignada = 'Cojines';
@@ -66,7 +61,6 @@ Object.assign(App.logic, {
                     else if (catOriginal.includes('material') || desc.includes('hilo') || desc.includes('nylon') || desc.includes('algodon') || desc.includes('crochet')) catAsignada = 'Materiales (Hilos)';
                     else if (catOriginal.includes('nomina') || catOriginal.includes('nómina') || desc.includes('nomina') || desc.includes('artesano') || desc.includes('pago a')) catAsignada = 'Nómina Artesanos';
                     else if (catOriginal.includes('servicio')) catAsignada = 'Servicios y Otros';
-
                     metrics.actual.desglGastos[catAsignada] = (metrics.actual.desglGastos[catAsignada] || 0) + montoGasto;
                 }
             }
@@ -90,12 +84,9 @@ Object.assign(App.logic, {
             return `<span style="font-size:0.7rem; color:${color}; margin-left:5px; font-weight:bold;">${dir} ${Math.abs(varPorc).toFixed(1)}% vs ant.</span>`;
         };
 
-        const labels = { todo: "Todo el historial", mes_actual: "Este Mes", mes_pasado: "Mes Pasado", trimestre_actual: "Este Trimestre", anio_actual: "Este Año" };
         const act = metrics.actual; const prev = metrics.previo;
 
-        let html = `<p style="color:var(--text-muted); font-size:0.85rem; margin-top:-10px; margin-bottom:15px; text-transform:uppercase; font-weight:bold;">Periodo: <strong style="color:var(--primary);">${labels[filtro]}</strong></p>`;
-        
-        html += `<h4 style="margin-bottom:10px; color:#2D3748; font-size:0.9rem;">1. Rendimiento del Periodo</h4>
+        let html = `<h4 style="margin-bottom:10px; color:#2D3748; font-size:0.9rem;">1. Rendimiento del Periodo</h4>
         <div class="grid-2">
             <div class="card stat-card" style="background:#EBF8FF; cursor:pointer; padding:15px;" onclick="App.views.detalleFinanzas('ventas', '${filtro}')">
                 <div class="label" style="margin-bottom:2px;">Ventas Totales (Comercial)</div>
@@ -134,7 +125,7 @@ Object.assign(App.logic, {
         </div>`;
 
         html += `<div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px;"><canvas id="graficaFinanzas"></canvas></div>`;
-        html += `<div style="display:flex; flex-direction:column; gap:15px; margin-top:15px;"><div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px; display:flex; flex-direction:column; align-items:center;"><h4 style="text-align:center; margin-bottom:15px; color:var(--text-muted); font-size:0.9rem;">Categorías de Venta 📈</h4><div style="position:relative; width:100%; max-width:280px; aspect-ratio:1;"><canvas id="graficaVentasCanvas"></canvas></div></div><div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px; display:flex; flex-direction:column; align-items:center;"><h4 style="text-align:center; margin-bottom:15px; color:var(--text-muted); font-size:0.9rem;">Destino de los Gastos 📉</h4><div style="position:relative; width:100%; max-width:280px; aspect-ratio:1;"><canvas id="graficaGastosCanvas"></canvas></div></div></div><button class="btn btn-secondary" style="width:100%; margin-top:15px; border-color:#38A169; color:#38A169; font-weight:bold; background:transparent;" onclick="window.exportarAExcel(App.state.gastos, 'Gastos_${labels[filtro]}')">📥 Exportar Gastos a Excel</button>`;
+        html += `<div style="display:flex; flex-direction:column; gap:15px; margin-top:15px;"><div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px; display:flex; flex-direction:column; align-items:center;"><h4 style="text-align:center; margin-bottom:15px; color:var(--text-muted); font-size:0.9rem;">Categorías de Venta 📈</h4><div style="position:relative; width:100%; max-width:280px; aspect-ratio:1;"><canvas id="graficaVentasCanvas"></canvas></div></div><div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px; display:flex; flex-direction:column; align-items:center;"><h4 style="text-align:center; margin-bottom:15px; color:var(--text-muted); font-size:0.9rem;">Destino de los Gastos 📉</h4><div style="position:relative; width:100%; max-width:280px; aspect-ratio:1;"><canvas id="graficaGastosCanvas"></canvas></div></div></div><button class="btn btn-secondary" style="width:100%; margin-top:15px; border-color:#38A169; color:#38A169; font-weight:bold; background:transparent;" onclick="window.exportarAExcel(App.state.gastos, 'Gastos')">📥 Exportar Gastos a Excel</button>`;
         
         cont.innerHTML = html;
         
@@ -142,21 +133,51 @@ Object.assign(App.logic, {
             if(window.Chart) { 
                 const colores = ['#4C51BF', '#ED8936', '#38B2AC', '#E53E3E', '#ECC94B', '#805AD5', '#3182CE'];
                 
-                // 👇 CÁLCULO DE PORCENTAJES PARA LAS ETIQUETAS DE LAS DONAS 👇
+                // TEXTOS DEL LEGEND PARA DOUGHNUT (con porcentajes)
                 const totalVentasCat = Object.values(act.desglVentas).reduce((a,b)=>a+b, 0);
                 const labelsVentas = Object.keys(act.desglVentas).map(k => `${k} (${totalVentasCat>0 ? ((act.desglVentas[k]/totalVentasCat)*100).toFixed(1) : 0}%)`);
 
                 const totalGastosCat = Object.values(act.desglGastos).reduce((a,b)=>a+b, 0);
                 const labelsGastos = Object.keys(act.desglGastos).map(k => `${k} (${totalGastosCat>0 ? ((act.desglGastos[k]/totalGastosCat)*100).toFixed(1) : 0}%)`);
 
+                // 🎨 PLUGIN PARA PINTAR TEXTOS BLANCOS ADENTRO DE LAS DONAS 🎨
+                const pluginPorcentajes = {
+                    id: 'pluginPorcentajes',
+                    afterDatasetsDraw(chart, args, options) {
+                        const { ctx, data } = chart;
+                        ctx.save();
+                        ctx.font = 'bold 12px sans-serif';
+                        ctx.fillStyle = 'white';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.shadowColor = 'rgba(0,0,0,0.6)'; // Sombra para que se lea en celulares
+                        ctx.shadowBlur = 4;
+                        
+                        const meta = chart.getDatasetMeta(0);
+                        const total = data.datasets[0].data.reduce((a,b) => a+b, 0);
+                        
+                        meta.data.forEach((element, index) => {
+                            const val = data.datasets[0].data[index];
+                            if (val > 0 && total > 0) {
+                                const porcentaje = Math.round((val / total) * 100);
+                                if (porcentaje > 4) { // Oculta textos muy encimados en rebanadas chicas (<4%)
+                                    const pos = element.tooltipPosition();
+                                    ctx.fillText(porcentaje + '%', pos.x, pos.y);
+                                }
+                            }
+                        });
+                        ctx.restore();
+                    }
+                };
+
                 const ctx1 = document.getElementById('graficaFinanzas');
                 if(ctx1) { if(window.graficaActual) window.graficaActual.destroy(); window.graficaActual = new Chart(ctx1, { type: 'bar', data: { labels: ['Ingresos Caja', 'Salidas Caja'], datasets: [{ label: 'Monto ($)', data: [act.ingresos, act.gastos], backgroundColor: ['#38A169', '#E53E3E'], borderRadius: 4 }] }, options: { responsive: true, plugins: { legend: { display: false } } } }); } 
                 
                 const ctxV = document.getElementById('graficaVentasCanvas');
-                if(ctxV) { if(window.graficaVentasD) window.graficaVentasD.destroy(); window.graficaVentasD = new Chart(ctxV, { type: 'doughnut', data: { labels: labelsVentas, datasets: [{ data: Object.values(act.desglVentas), backgroundColor: colores }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels:{font:{size:11}, padding: 15} } } } }); }
+                if(ctxV) { if(window.graficaVentasD) window.graficaVentasD.destroy(); window.graficaVentasD = new Chart(ctxV, { type: 'doughnut', data: { labels: labelsVentas, datasets: [{ data: Object.values(act.desglVentas), backgroundColor: colores }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels:{font:{size:11}, padding: 15} } } }, plugins: [pluginPorcentajes] }); }
                 
                 const ctxG = document.getElementById('graficaGastosCanvas');
-                if(ctxG) { if(window.graficaGastosD) window.graficaGastosD.destroy(); window.graficaGastosD = new Chart(ctxG, { type: 'doughnut', data: { labels: labelsGastos, datasets: [{ data: Object.values(act.desglGastos), backgroundColor: colores }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels:{font:{size:11}, padding: 15} } } } }); }
+                if(ctxG) { if(window.graficaGastosD) window.graficaGastosD.destroy(); window.graficaGastosD = new Chart(ctxG, { type: 'doughnut', data: { labels: labelsGastos, datasets: [{ data: Object.values(act.desglGastos), backgroundColor: colores }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels:{font:{size:11}, padding: 15} } } }, plugins: [pluginPorcentajes] }); }
             } 
         }, 300);
     }
