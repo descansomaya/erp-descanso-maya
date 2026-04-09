@@ -55,3 +55,33 @@ App.views.formCotizacion = function(id = null) {
     let formHTML = `<form id="dynamic-form"><div class="dm-form-group"><label class="dm-label">Nombre del Cliente</label><input type="text" class="dm-input" name="cliente_nombre" value="${obj?App.ui.escapeHTML(obj.cliente_nombre):''}" required></div><div class="dm-form-group"><label class="dm-label">Detalles (Productos y Precios)</label><textarea class="dm-textarea" name="detalles" required>${obj?App.ui.escapeHTML(obj.detalles):''}</textarea></div><div class="dm-form-group"><label class="dm-label">Total Presupuestado ($)</label><input type="number" step="0.01" class="dm-input" name="total" value="${obj?obj.total:''}" required></div><input type="hidden" name="fecha" value="${obj?obj.fecha:new Date().toISOString()}"><button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Guardar Cotización</button></form>`;
     App.ui.openSheet(obj?"Editar Cotización":"Nueva Cotización", formHTML, (data) => { if(obj) App.logic.actualizarRegistroGenerico("cotizaciones", id, data, "cotizaciones"); else App.logic.guardarNuevoGenerico("cotizaciones", data, "COT", "cotizaciones"); });
 };
+
+    // NUEVA FUNCIÓN PARA VER EL DETALLE MULTIPRODUCTO
+App.views.modalDetallesPedido = function(pedidoId) {
+    const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
+    
+    if (detalles.length === 0) {
+        App.ui.toast("No hay detalles guardados para este pedido.");
+        return;
+    }
+
+    let html = '<div class="dm-list">';
+    detalles.forEach(d => {
+        const prod = (App.state.productos || []).find(p => p.id === d.producto_id);
+        const nombreProducto = prod ? prod.nombre : 'Producto sin nombre';
+        html += `
+        <div class="dm-list-card" style="padding: 10px; margin-bottom: 10px;">
+            <div class="dm-fw-bold" style="font-size: 16px;">${nombreProducto}</div>
+            <div class="dm-text-sm dm-muted dm-mt-2">
+                Cantidad comprada: <strong>${d.cantidad}</strong> <br>
+                Precio Unitario: $${parseFloat(d.precio_unitario||0).toFixed(2)}
+            </div>
+        </div>`;
+    });
+    html += '</div>';
+
+    // Abrimos un Sheet de solo lectura para ver los productos
+    App.ui.openSheet(`Detalles del Pedido: ${pedidoId}`, html, () => {
+        App.ui.closeSheet(); // Botón genérico de cerrar
+    });
+};
