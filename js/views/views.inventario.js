@@ -3,61 +3,94 @@
 // ==========================================
 
 App.views.inventario = function() { 
-    document.getElementById('bottom-nav').style.display = 'flex'; 
-    let html = `<div class="container-app">
-        <div class="top-header">
-            <h2>📦 Bodega</h2>
-            <button class="badge badge-primary" style="border:none; cursor:pointer;" onclick="App.views.modalEstadisticas()">📊 Reportes</button>
+    document.getElementById('app-header-title').innerText = "Inventario";
+    document.getElementById('app-header-subtitle').innerText = "Control de insumos y reventa";
+
+    let html = `
+    <div class="dm-section">
+        <div class="dm-row-between dm-mb-4">
+            <input type="text" id="bus-inv" class="dm-input" onkeyup="window.filtrarLista('bus-inv', 'dm-list-card')" placeholder="🔍 Buscar insumo..." style="max-width: 300px;">
+            <button class="dm-btn dm-btn-secondary" onclick="window.exportarAExcel(App.state.inventario, 'Inventario')">📥 Exportar</button>
         </div>
         
-        <input type="text" id="bus-inv" class="input-modern" onkeyup="window.filtrarLista('bus-inv', 'modern-card')" placeholder="🔍 Buscar insumo o hilo...">
-        
-        <button class="btn-modern btn-outline" style="margin-bottom:20px; border-color:var(--success); color:var(--success);" onclick="window.exportarAExcel(App.state.inventario, 'Inventario')">📥 Exportar a Excel</button>
-        `; 
+        <div class="dm-list">`; 
 
     if (!App.state.inventario || App.state.inventario.length === 0) { 
-        html += `<p style="text-align:center; color:var(--text-muted); padding:30px;">Inventario vacío.</p>`; 
+        html += `<div class="dm-alert dm-alert-info">No hay insumos registrados.</div>`; 
     } else { 
         App.state.inventario.forEach(i => { 
             const real = parseFloat(i.stock_real||0);
             const reservado = parseFloat(i.stock_reservado||0);
             const comprometido = parseFloat(i.stock_comprometido||0);
             const libre = real - reservado - comprometido;
-            const badgeClass = (parseFloat(i.stock_minimo)>0 && libre <= parseFloat(i.stock_minimo)) ? 'badge-danger' : 'badge-success';
+            const badgeClass = (parseFloat(i.stock_minimo)>0 && libre <= parseFloat(i.stock_minimo)) ? 'dm-badge-danger' : 'dm-badge-success';
             
-            let icono = '🧵'; if(i.tipo === 'accesorio') icono = '🔗'; else if(i.tipo === 'reventa') icono = '🛍️';
-
             html += `
-            <div class="modern-card">
-                <div class="list-item" style="padding:0; border:none; margin-bottom:12px;">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <div class="list-icon">${icono}</div>
-                        <div>
-                            <strong style="font-size:1.1rem; color:var(--text-main);">${App.ui.escapeHTML(i.nombre)}</strong><br>
-                            <span class="badge ${badgeClass}" style="margin-top:6px; display:inline-block;">Libre: ${libre} ${i.unidad}</span>
-                        </div>
+            <div class="dm-list-card">
+                <div class="dm-list-card-top">
+                    <div>
+                        <div class="dm-list-card-title">${App.ui.escapeHTML(i.nombre)}</div>
+                        <div class="dm-list-card-subtitle">${App.ui.escapeHTML(i.tipo || 'OTRO')}</div>
                     </div>
+                    <span class="dm-badge ${badgeClass}">Libre: ${libre} ${i.unidad}</span>
                 </div>
                 
-                <div style="display:flex; justify-content:space-between; background:var(--bg-app); padding:12px; border-radius:8px; font-size:0.85rem; color:var(--text-muted); margin-bottom:12px;">
-                    <div style="text-align:center;">Físico<br><strong style="color:var(--text-main); font-size:1.1rem;">${real}</strong></div>
-                    <div style="text-align:center;">Apartado (Venta)<br><strong style="color:var(--warning); font-size:1.1rem;">${reservado}</strong></div>
-                    <div style="text-align:center;">Taller<br><strong style="color:var(--primary-dark); font-size:1.1rem;">${comprometido}</strong></div>
+                <div class="dm-list-card-meta dm-grid-3 dm-mt-3 dm-mb-3" style="background:var(--dm-surface-2); padding:10px; border-radius:var(--dm-radius-md); text-align:center;">
+                    <div><small class="dm-muted">Físico</small><br><strong>${real}</strong></div>
+                    <div><small class="dm-muted">Vendido</small><br><strong style="color:var(--dm-warning);">${reservado}</strong></div>
+                    <div><small class="dm-muted">Taller</small><br><strong style="color:var(--dm-primary);">${comprometido}</strong></div>
                 </div>
 
-                <div style="display:flex; gap:8px;">
-                    <button class="btn-modern btn-ghost" onclick="App.views.modalKardex('${i.id}')">📋 Auditoría</button>
-                    <button class="btn-modern btn-ghost" onclick="App.views.formMaterial('${i.id}')">✏️ Editar</button>
+                <div class="dm-list-card-actions">
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalKardex('${i.id}')">📋 Kardex</button>
+                    <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formMaterial('${i.id}')">✏️ Editar</button>
                 </div>
             </div>`; 
         }); 
     } 
-    html += `</div><button class="fab" style="background:var(--primary);" onclick="App.views.formMaterial()">+</button>`; return html; 
+    html += `</div></div>
+    <button class="dm-fab" onclick="App.views.formMaterial()">+</button>`; 
+    return html; 
 };
 
+// Formularios usando las clases del sistema de diseño
 App.views.formMaterial = function(id = null, callback = null) { 
     const obj = id ? App.state.inventario.find(m => m.id === id) : null; 
-    const formHTML = `<form id="dynamic-form"><div style="background: var(--primary-light); padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem; color: var(--primary-dark);">Crea o ajusta un insumo del catálogo.</div><div class="form-group-modern"><label>Nombre del Insumo / Artículo</label><input type="text" class="input-modern" name="nombre" value="${obj ? App.ui.escapeHTML(obj.nombre) : ''}" required placeholder="Ej. Hilo Nylon Rojo"></div><div class="form-group-modern"><label>Tipo de Insumo</label><select class="input-modern" name="tipo" required><option value="hilo" ${obj && obj.tipo === 'hilo' ? 'selected' : ''}>Hilo para Tejer</option><option value="accesorio" ${obj && obj.tipo === 'accesorio' ? 'selected' : ''}>Accesorios (Argollas, etc)</option><option value="reventa" ${obj && obj.tipo === 'reventa' ? 'selected' : ''}>Hamaca Terminada (Reventa)</option><option value="otro" ${obj && obj.tipo === 'otro' ? 'selected' : ''}>Otro</option></select></div><div class="form-group-modern"><label>Unidad de Medida</label><select class="input-modern" name="unidad"><option value="Tubos" ${obj && obj.unidad === 'Tubos' ? 'selected' : ''}>Tubos</option><option value="Kg" ${obj && obj.unidad === 'Kg' ? 'selected' : ''}>Kilogramos (Kg)</option><option value="Pzas" ${obj && obj.unidad === 'Pzas' ? 'selected' : ''}>Piezas (Pzas)</option></select></div><div class="grid-2"><div class="form-group-modern"><label>Stock Real (Físico)</label><input type="number" class="input-modern" step="0.1" name="stock_real" value="${obj ? obj.stock_real : '0'}" required></div><div class="form-group-modern"><label>Stock Mínimo (Alerta)</label><input type="number" class="input-modern" step="0.1" name="stock_minimo" value="${obj ? (obj.stock_minimo||'0') : '0'}" required></div></div><button type="submit" class="btn-modern btn-primary">${obj ? 'Guardar Cambios' : 'Crear Insumo'}</button></form>`; 
+    const formHTML = `
+    <form id="dynamic-form">
+        <div class="dm-form-group">
+            <label class="dm-label">Nombre del Insumo</label>
+            <input type="text" class="dm-input" name="nombre" value="${obj ? App.ui.escapeHTML(obj.nombre) : ''}" required>
+        </div>
+        <div class="dm-form-row">
+            <div class="dm-form-group">
+                <label class="dm-label">Tipo</label>
+                <select class="dm-select" name="tipo" required>
+                    <option value="hilo" ${obj && obj.tipo === 'hilo' ? 'selected' : ''}>Hilo</option>
+                    <option value="accesorio" ${obj && obj.tipo === 'accesorio' ? 'selected' : ''}>Accesorio</option>
+                </select>
+            </div>
+            <div class="dm-form-group">
+                <label class="dm-label">Unidad</label>
+                <select class="dm-select" name="unidad">
+                    <option value="Tubos" ${obj && obj.unidad === 'Tubos' ? 'selected' : ''}>Tubos</option>
+                    <option value="Kg" ${obj && obj.unidad === 'Kg' ? 'selected' : ''}>Kg</option>
+                </select>
+            </div>
+        </div>
+        <div class="dm-form-row">
+            <div class="dm-form-group">
+                <label class="dm-label">Stock Físico</label>
+                <input type="number" class="dm-input" step="0.1" name="stock_real" value="${obj ? obj.stock_real : '0'}" required>
+            </div>
+            <div class="dm-form-group">
+                <label class="dm-label">Stock Mínimo</label>
+                <input type="number" class="dm-input" step="0.1" name="stock_minimo" value="${obj ? (obj.stock_minimo||'0') : '0'}" required>
+            </div>
+        </div>
+        <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">${obj ? 'Guardar Cambios' : 'Crear Insumo'}</button>
+    </form>`; 
+    
     App.ui.openSheet(obj ? "Editar Insumo" : "Nuevo Insumo", formHTML, (data) => { 
         if (obj) App.logic.actualizarRegistroGenerico("materiales", id, data, "inventario"); 
         else { data.stock_reservado = 0; data.stock_comprometido = 0; App.logic.guardarNuevoGenerico("materiales", data, "MAT", "inventario", callback); } 
