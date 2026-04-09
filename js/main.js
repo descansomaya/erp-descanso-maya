@@ -91,3 +91,67 @@ App.start = function() {
     } 
 };
 document.addEventListener('DOMContentLoaded', () => App.start());
+
+// ==========================================
+// PARCHES Y RECONEXIÓN DE MÓDULOS (DISEÑO DM)
+// ==========================================
+
+// 1. Reconectar el botón de Iniciar/Terminar Producción
+App.logic.cambiarEstadoProduccion = function(id, nuevoEstado) {
+    App.ui.showLoader("Actualizando estado...");
+    let data = { estado: nuevoEstado };
+    if(nuevoEstado === 'proceso') data.fecha_inicio = new Date().toISOString();
+    if(nuevoEstado === 'listo') data.fecha_fin = new Date().toISOString();
+    
+    // Usamos tu función genérica que ya funciona perfecto
+    App.logic.actualizarRegistroGenerico('ordenes_produccion', id, data, 'produccion');
+};
+
+// 2. Recuperar el "Ver Detalles" de Producción
+window.verDetallesProduccion = function(ordenId) {
+    const o = App.state.ordenes_produccion.find(x => x.id === ordenId);
+    if(!o) return;
+    
+    const a = App.state.artesanos.find(x => x.id === o.artesano_id) || {}; 
+    const pedDet = App.state.pedido_detalle.find(d => d.id === o.pedido_detalle_id) || {}; 
+    const p = App.state.pedidos.find(x => x.id === pedDet.pedido_id) || {}; 
+    const cliente = App.state.clientes.find(x => x.id === p.cliente_id) || {};
+    const prod = App.state.productos.find(x => x.id === pedDet.producto_id) || {};
+    
+    const nomCliente = p.cliente_id === 'STOCK_INTERNO' ? 'STOCK BODEGA' : (cliente.nombre || 'Desconocido');
+
+    let html = `
+    <div class="dm-list-card dm-mb-4" style="background:var(--dm-surface-2); padding:15px; border:none;">
+        <div class="dm-row-between dm-mb-2">
+            <span class="dm-text-sm dm-muted">Folio Pedido:</span>
+            <strong>${(p.id||'').replace('PED-','')}</strong>
+        </div>
+        <div class="dm-row-between dm-mb-2">
+            <span class="dm-text-sm dm-muted">Cliente / Destino:</span>
+            <strong style="color:var(--dm-primary);">${nomCliente}</strong>
+        </div>
+        <div class="dm-row-between">
+            <span class="dm-text-sm dm-muted">Producto a tejer:</span>
+            <strong>${prod.nombre || 'No definido'}</strong>
+        </div>
+    </div>
+    
+    <div class="dm-form-group">
+        <label class="dm-label">Notas del Pedido (Instrucciones)</label>
+        <div class="dm-alert dm-alert-warning" style="background:#fff;">
+            ${p.notas ? App.ui.escapeHTML(p.notas) : '<i>Sin instrucciones especiales registradas.</i>'}
+        </div>
+    </div>
+
+    <div class="dm-form-group">
+        <label class="dm-label">Artesano Asignado</label>
+        <div class="dm-input" style="background:#f9fafb; pointer-events:none;">${a.nombre || 'Nadie asignado aún'}</div>
+    </div>
+    
+    <div class="dm-row-between dm-mt-4">
+        <button class="dm-btn dm-btn-secondary" onclick="App.ui.closeSheet()">Cerrar Detalles</button>
+        ${o.estado !== 'listo' ? `<button class="dm-btn dm-btn-primary" onclick="App.views.modalMateriaPrima('${o.id}')">🧶 Ver/Editar Hilos</button>` : ''}
+    </div>`;
+
+    App.ui.openSheet("Detalle de Producción", html);
+};
