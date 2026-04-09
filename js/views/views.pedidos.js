@@ -13,13 +13,13 @@ App.views.pedidos = function() {
 
     return `
         <div class="dm-section">
-            <div class="dm-card dm-mb-4">
-                <div class="dm-tabs">
-                    <button class="dm-tab active tab-btn-ped" onclick="window.switchTabPed('activos', this)">🟢 Activos / Taller</button>
-                    <button class="dm-tab tab-btn-ped" onclick="window.switchTabPed('listos', this)">🟠 Listos / Cobro</button>
-                    <button class="dm-tab tab-btn-ped" onclick="window.switchTabPed('historial', this)">✅ Historial</button>
-                </div>
-            </div>
+            <div class="dm-card dm-mb-4" style="padding:10px;">
+    <div class="dm-tabs" style="display:flex; gap:8px; overflow-x:auto; white-space:nowrap; scrollbar-width:none; -ms-overflow-style:none;">
+        <button class="dm-tab active tab-btn-ped" style="flex:0 0 auto; font-size:0.85rem; padding:10px 12px;" onclick="window.switchTabPed('activos', this)">🟢 Activos / Taller</button>
+        <button class="dm-tab tab-btn-ped" style="flex:0 0 auto; font-size:0.85rem; padding:10px 12px;" onclick="window.switchTabPed('listos', this)">🟠 Listos / Cobro</button>
+        <button class="dm-tab tab-btn-ped" style="flex:0 0 auto; font-size:0.85rem; padding:10px 12px;" onclick="window.switchTabPed('historial', this)">✅ Historial</button>
+    </div>
+</div>
 
             <div id="tab-activos" class="tab-content-ped" style="display:block;">
                 ${window.generarListaPedidos('activos')}
