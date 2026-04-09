@@ -42,11 +42,10 @@ function generarListaProd(estadoFiltro) {
             </div>
             <div class="dm-list-card-meta dm-mt-3 dm-mb-3" style="background:var(--dm-surface-2); padding:10px; border-radius:var(--dm-radius-md);">
                 <div class="dm-mb-2">🧑‍🎨 <strong>Artesano:</strong> ${a.nombre || 'Sin Asignar'}</div>
-            </div>
             <div class="dm-list-card-actions">
+                <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="window.verDetallesProduccion('${o.id}')">👁️ Detalles</button>
                 ${o.estado === 'pendiente' ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.logic.cambiarEstadoProduccion('${o.id}', 'proceso')">▶️ Iniciar</button>` : ''}
                 ${o.estado === 'proceso' ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.logic.cambiarEstadoProduccion('${o.id}', 'listo')">✅ Terminar</button>` : ''}
-                ${o.estado !== 'listo' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalMateriaPrima('${o.id}')">🧶 Hilos</button>` : ''}
                 <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.eliminarRegistroGenerico('ordenes_produccion', '${o.id}', 'produccion')">🗑️</button>
             </div>
         </div>`; 
