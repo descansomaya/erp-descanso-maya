@@ -1,25 +1,58 @@
 // ==========================================
-// VISTAS: INVENTARIO, COMPRAS Y KARDEX
+// VISTAS: INVENTARIO, COMPRAS Y KARDEX (REDISEÑADO)
 // ==========================================
 
 App.views.inventario = function() { 
     document.getElementById('bottom-nav').style.display = 'flex'; 
-    let html = `<div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3 class="card-title" style="margin:0;">Bodega (Inventario Inteligente)</h3><button class="btn btn-secondary" style="padding:6px 10px; font-size:0.8rem; border-color:var(--primary); color:var(--primary); background:transparent;" onclick="App.views.modalEstadisticas()">📊 Reportes</button></div><button class="btn btn-secondary" style="width:100%; margin-bottom:15px; border-color:#38A169; color:#38A169; background:transparent;" onclick="window.exportarAExcel(App.state.inventario, 'Inventario_DescansoMaya')">📥 Descargar Tabla en Excel</button><input type="text" id="bus-inv" onkeyup="window.filtrarLista('bus-inv', 'fila-inv')" placeholder="🔍 Buscar insumo..." style="width:100%; padding:8px; margin-bottom:15px; border-radius:6px; border:1px solid var(--border);">`; 
-    if (!App.state.inventario || App.state.inventario.length === 0) { html += `<p>No hay insumos.</p>`; } 
-    else { 
-        html += `<table style="width:100%; border-collapse: collapse; font-size: 0.85rem;"><tr style="border-bottom: 2px solid var(--border);"><th style="text-align:left; padding:8px;">Artículo</th><th style="padding:8px; text-align:center;">Físico</th><th style="padding:8px; text-align:center;">Apartado</th><th style="padding:8px; text-align:center; color:var(--primary);">Libre</th><th></th></tr>`; 
+    let html = `<div class="container-app">
+        <div class="top-header">
+            <h2>📦 Bodega</h2>
+            <button class="badge badge-primary" style="border:none; cursor:pointer;" onclick="App.views.modalEstadisticas()">📊 Reportes</button>
+        </div>
+        
+        <input type="text" id="bus-inv" class="input-modern" onkeyup="window.filtrarLista('bus-inv', 'modern-card')" placeholder="🔍 Buscar insumo o hilo...">
+        
+        <button class="btn-modern btn-outline" style="margin-bottom:20px; border-color:var(--success); color:var(--success);" onclick="window.exportarAExcel(App.state.inventario, 'Inventario')">📥 Exportar a Excel</button>
+        `; 
+
+    if (!App.state.inventario || App.state.inventario.length === 0) { 
+        html += `<p style="text-align:center; color:var(--text-muted); padding:30px;">Inventario vacío.</p>`; 
+    } else { 
         App.state.inventario.forEach(i => { 
             const real = parseFloat(i.stock_real||0);
             const reservado = parseFloat(i.stock_reservado||0);
             const comprometido = parseFloat(i.stock_comprometido||0);
             const libre = real - reservado - comprometido;
-            const colorLibre = (parseFloat(i.stock_minimo)>0 && libre <= parseFloat(i.stock_minimo)) ? 'var(--danger)' : 'var(--primary)';
+            const badgeClass = (parseFloat(i.stock_minimo)>0 && libre <= parseFloat(i.stock_minimo)) ? 'badge-danger' : 'badge-success';
             
-            html += `<tr class="fila-inv" style="border-bottom: 1px solid var(--border);"><td style="padding: 10px 5px;"><strong>${App.ui.escapeHTML(i.nombre)}</strong><br><small style="color:var(--text-muted); text-transform:uppercase; font-size:0.7rem;">[${App.ui.escapeHTML(i.tipo || 'OTRO')}]</small></td><td style="padding: 10px 5px; text-align:center; font-weight:bold; color:var(--text-main)">${real}</td><td style="padding: 10px 5px; text-align:center; color:#D69E2E">${reservado + comprometido}</td><td style="padding: 10px 5px; text-align:center; font-weight:bold; font-size:1.1rem; color:${colorLibre}">${libre}</td><td style="text-align:right;"><button class="btn btn-secondary" style="padding:4px; font-size:0.8rem; margin-right:4px;" onclick="App.views.modalKardex('${i.id}')">📋</button><button class="btn btn-secondary" style="padding:4px; font-size:0.8rem;" onclick="App.views.formMaterial('${i.id}')">✏️</button></td></tr>`; 
+            let icono = '🧵'; if(i.tipo === 'accesorio') icono = '🔗'; else if(i.tipo === 'reventa') icono = '🛍️';
+
+            html += `
+            <div class="modern-card">
+                <div class="list-item" style="padding:0; border:none; margin-bottom:12px;">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div class="list-icon">${icono}</div>
+                        <div>
+                            <strong style="font-size:1.1rem; color:var(--text-main);">${App.ui.escapeHTML(i.nombre)}</strong><br>
+                            <span class="badge ${badgeClass}" style="margin-top:6px; display:inline-block;">Libre: ${libre} ${i.unidad}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="display:flex; justify-content:space-between; background:var(--bg-app); padding:12px; border-radius:8px; font-size:0.85rem; color:var(--text-muted); margin-bottom:12px;">
+                    <div style="text-align:center;">Físico<br><strong style="color:var(--text-main); font-size:1.1rem;">${real}</strong></div>
+                    <div style="text-align:center;">Apartado (Venta)<br><strong style="color:var(--warning); font-size:1.1rem;">${reservado}</strong></div>
+                    <div style="text-align:center;">Taller<br><strong style="color:var(--primary-dark); font-size:1.1rem;">${comprometido}</strong></div>
+                </div>
+
+                <div style="display:flex; gap:8px;">
+                    <button class="btn-modern btn-ghost" onclick="App.views.modalKardex('${i.id}')">📋 Auditoría</button>
+                    <button class="btn-modern btn-ghost" onclick="App.views.formMaterial('${i.id}')">✏️ Editar</button>
+                </div>
+            </div>`; 
         }); 
-        html += `</table>`; 
     } 
-    html += `</div><button class="fab" onclick="App.views.formMaterial()">+</button>`; return html; 
+    html += `</div><button class="fab" style="background:var(--primary);" onclick="App.views.formMaterial()">+</button>`; return html; 
 };
 
 App.views.formMaterial = function(id = null, callback = null) { 
