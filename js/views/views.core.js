@@ -15,59 +15,42 @@ App.views.login = function() {
 };
 
 App.views.inicio = function() { 
-    document.getElementById('bottom-nav').style.display = 'flex'; 
+    // Actualizar Header
+    document.getElementById('app-header-title').innerText = "Dashboard";
+    document.getElementById('app-header-subtitle').innerText = "Resumen de operación";
+
     const pedidosCount = App.state.pedidos ? App.state.pedidos.length : 0; 
     const prodCount = App.state.ordenes_produccion ? App.state.ordenes_produccion.filter(o => o.estado !== 'listo').length : 0; 
-    let alertasHTML = ''; 
     
-    const stockBajo = App.state.inventario.filter(i => { const libre = parseFloat(i.stock_real||0) - parseFloat(i.stock_reservado||0) - parseFloat(i.stock_comprometido||0); return parseFloat(i.stock_minimo) > 0 && libre <= parseFloat(i.stock_minimo); }); 
-    if(stockBajo.length > 0) { 
-        alertasHTML += `<div class="modern-card" style="background:var(--danger-bg); border-color:#FEB2B2;">
-            <strong style="color:var(--danger); display:flex; align-items:center; gap:8px;"><span>⚠️</span> Alerta de Insumos Críticos</strong>
-            <ul style="margin:8px 0 0 20px; color:#9B2C2C; font-size:0.85rem;">`; 
-        stockBajo.forEach(i => { const libre = parseFloat(i.stock_real||0) - parseFloat(i.stock_reservado||0) - parseFloat(i.stock_comprometido||0); alertasHTML += `<li>${App.ui.escapeHTML(i.nombre)}: Quedan ${libre} libres</li>`; }); 
-        alertasHTML += `</ul></div>`; 
-    } 
-    
-    let pedAtrasados = 0; let pedUrgentes = 0; const hoy = new Date(); hoy.setHours(0,0,0,0);
-    App.state.pedidos.forEach(p => { if(p.estado !== 'listo para entregar' && p.estado !== 'pagado' && p.fecha_entrega) { const fEnt = new Date(p.fecha_entrega+'T00:00:00'); const diffDias = Math.ceil((fEnt - hoy)/(1000*60*60*24)); if(diffDias < 0) pedAtrasados++; else if(diffDias >= 0 && diffDias <= 3) pedUrgentes++; } });
-    if(pedAtrasados > 0 || pedUrgentes > 0) {
-        alertasHTML += `<div class="modern-card" style="background:var(--warning-bg); border-color:#F6E05E;">
-            <strong style="color:#B7791F; display:flex; align-items:center; gap:8px;"><span>🚨</span> Entregas Pendientes</strong>
-            <ul style="margin:8px 0 0 20px; color:#975A16; font-size:0.85rem;">`;
-        if(pedAtrasados > 0) alertasHTML += `<li>¡Tienes <strong>${pedAtrasados} pedido(s) atrasado(s)</strong>!</li>`;
-        if(pedUrgentes > 0) alertasHTML += `<li>Hay ${pedUrgentes} pedido(s) a entregar pronto.</li>`;
-        alertasHTML += `</ul></div>`;
-    }
-
-    return `<div class="container-app">
-        <div class="top-header">
-            <div>
-                <p style="color:var(--text-muted); margin:0; font-size:0.85rem;">Hola, buen día</p>
-                <h2>Panel Principal</h2>
-            </div>
-            <div class="list-icon" style="cursor:pointer;" onclick="App.views.modalBuscadorGlobal()">🔍</div>
+    return `
+    <div class="dm-section">
+        <div class="dm-section-header">
+            <h2 class="dm-section-title">Métricas Principales</h2>
         </div>
-        ${alertasHTML}
-        <h4 style="color:var(--text-muted); font-size:0.85rem; text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;">Resumen Operativo</h4>
-        <div class="grid-2">
-            <div class="stat-card-modern" onclick="App.router.navigate('pedidos')">
-                <div style="font-size:2rem; margin-bottom:5px;">📦</div>
-                <div style="font-size:1.8rem; font-weight:800; color:var(--text-main);">${pedidosCount}</div>
-                <div style="color:var(--text-muted); font-size:0.85rem;">Ventas</div>
+        
+        <div class="dm-grid dm-grid-kpi">
+            <div class="dm-kpi" onclick="App.router.navigate('pedidos')" style="cursor:pointer;">
+                <div class="dm-kpi-label">Total Pedidos</div>
+                <div class="dm-kpi-value">${pedidosCount}</div>
+                <div class="dm-kpi-meta"><span class="dm-badge dm-badge-info">📦 Ventas</span></div>
             </div>
-            <div class="stat-card-modern" onclick="App.router.navigate('produccion')">
-                <div style="font-size:2rem; margin-bottom:5px;">🔨</div>
-                <div style="font-size:1.8rem; font-weight:800; color:var(--text-main);">${prodCount}</div>
-                <div style="color:var(--text-muted); font-size:0.85rem;">En Taller</div>
+            
+            <div class="dm-kpi" onclick="App.router.navigate('produccion')" style="cursor:pointer;">
+                <div class="dm-kpi-label">En Taller</div>
+                <div class="dm-kpi-value">${prodCount}</div>
+                <div class="dm-kpi-meta"><span class="dm-badge dm-badge-warning">🔨 Producción</span></div>
             </div>
-            <div class="stat-card-modern" onclick="App.router.navigate('nomina')" style="background:var(--danger-bg); border-color:#FEB2B2;">
-                <div style="font-size:1.5rem; margin-bottom:5px;">🧑‍🎨</div>
-                <div style="color:var(--danger); font-weight:bold; font-size:1rem;">Nómina</div>
+            
+            <div class="dm-kpi" onclick="App.router.navigate('nomina')" style="cursor:pointer;">
+                <div class="dm-kpi-label">Nómina</div>
+                <div class="dm-kpi-value" style="color:var(--dm-danger);">Pago</div>
+                <div class="dm-kpi-meta"><span class="dm-badge dm-badge-danger">🧑‍🎨 Artesanos</span></div>
             </div>
-            <div class="stat-card-modern" onclick="App.router.navigate('finanzas')" style="background:var(--primary-light); border-color:#E9D8FD;">
-                <div style="font-size:1.5rem; margin-bottom:5px;">📊</div>
-                <div style="color:var(--primary-dark); font-weight:bold; font-size:1rem;">Finanzas</div>
+            
+            <div class="dm-kpi" onclick="App.router.navigate('finanzas')" style="cursor:pointer;">
+                <div class="dm-kpi-label">Flujo de Caja</div>
+                <div class="dm-kpi-value" style="color:var(--dm-success);">Ver</div>
+                <div class="dm-kpi-meta"><span class="dm-badge dm-badge-success">📊 Finanzas</span></div>
             </div>
         </div>
     </div>`; 
