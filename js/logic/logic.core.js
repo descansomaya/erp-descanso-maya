@@ -11,7 +11,7 @@ Object.assign(App.logic, {
             App.ui.toast("¡Acceso concedido!"); this.cargarDatosIniciales(); 
         } else { App.state.sessionToken = null; App.ui.hideLoader(); App.ui.toast(res.message || "PIN Incorrecto."); } 
     },
-    async cargarDatosIniciales() { 
+async cargarDatosIniciales() { 
         App.ui.showLoader("Sincronizando Base de Datos..."); 
         try { 
             if (!App.state.sessionToken) { App.ui.hideLoader(); return; }
@@ -21,11 +21,14 @@ Object.assign(App.logic, {
             const bd = res.data;
             App.state.inventario = bd["materiales"] || []; App.state.clientes = bd["clientes"] || []; App.state.productos = bd["productos"] || []; App.state.pedidos = bd["pedidos"] || []; App.state.pedido_detalle = bd["pedido_detalle"] || []; App.state.ordenes_produccion = bd["ordenes_produccion"] || []; App.state.artesanos = bd["artesanos"] || []; App.state.abonos = bd["abonos_clientes"] || []; App.state.gastos = bd["gastos"] || []; App.state.compras = bd["compras"] || []; App.state.proveedores = bd["proveedores"] || []; App.state.reparaciones = bd["reparaciones"] || []; App.state.tarifas_artesano = bd["tarifas_artesano"] || []; App.state.pago_artesanos = bd["pago_artesanos"] || []; App.state.movimientos_inventario = bd["movimientos_inventario"] || []; App.state.abonos_proveedores = bd["abonos_proveedores"] || []; 
             App.ui.hideLoader(); App.router.init(); 
-            this.revisarAlertasStock(true); // 🤖 AUTOMATIZACIÓN: Chequeo inicial
+            this.revisarAlertasStock(true); 
         } catch (error) { 
             console.error("Fallo de conexión:", error); 
-            if (App.state.sessionToken) { App.ui.toast("Señal débil. Reintentando..."); setTimeout(() => App.logic.cargarDatosIniciales(), 3000); } 
-            else { App.ui.hideLoader(); }
+            if (App.state.sessionToken) { 
+                // 👇 AQUÍ LE QUITAMOS LA MÁSCARA AL ERROR 👇
+                App.ui.toast("ERROR REAL: " + error.message, "danger"); 
+                setTimeout(() => App.logic.cargarDatosIniciales(), 6000); 
+            } else { App.ui.hideLoader(); }
         } 
     },
     descargarRespaldo() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(App.state, null, 2)); const dlAnchorElem = document.createElement('a'); dlAnchorElem.setAttribute("href", dataStr); dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`); dlAnchorElem.click(); App.ui.toast("Respaldo descargado"); },
