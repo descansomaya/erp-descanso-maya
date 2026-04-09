@@ -17,22 +17,22 @@ Object.assign(App.logic, {
             App.ui.toast(res.message || "PIN Incorrecto."); 
         } 
     },
-    async cargarDatosIniciales() { 
+  async cargarDatosIniciales() { 
         App.ui.showLoader("Sincronizando Base de Datos..."); 
         try { 
             if (!App.state.sessionToken) { App.ui.hideLoader(); return; }
-            const hojas = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "movimientos_inventario"]; 
+            // AGREGAMOS abonos_proveedores AL ARREGLO DE HOJAS
+            const hojas = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "movimientos_inventario", "abonos_proveedores"]; 
             const res = await App.api.fetch("leer_todo", { hojas: hojas }); 
             if (res.status === "error") throw new Error(res.message); 
             const bd = res.data;
             App.state.inventario = bd["materiales"] || []; App.state.clientes = bd["clientes"] || []; App.state.productos = bd["productos"] || []; App.state.pedidos = bd["pedidos"] || []; App.state.pedido_detalle = bd["pedido_detalle"] || []; App.state.ordenes_produccion = bd["ordenes_produccion"] || []; App.state.artesanos = bd["artesanos"] || []; App.state.abonos = bd["abonos_clientes"] || []; App.state.gastos = bd["gastos"] || []; App.state.compras = bd["compras"] || []; App.state.proveedores = bd["proveedores"] || []; App.state.reparaciones = bd["reparaciones"] || []; App.state.tarifas_artesano = bd["tarifas_artesano"] || []; App.state.pago_artesanos = bd["pago_artesanos"] || []; App.state.movimientos_inventario = bd["movimientos_inventario"] || []; 
+            App.state.abonos_proveedores = bd["abonos_proveedores"] || []; // NUEVA TABLA AL ESTADO
             App.ui.hideLoader(); App.router.init(); 
         } catch (error) { 
             console.error("Fallo de conexión:", error); 
-            if (App.state.sessionToken) {
-                App.ui.toast("Señal débil. Reintentando..."); 
-                setTimeout(() => App.logic.cargarDatosIniciales(), 3000); 
-            } else { App.ui.hideLoader(); }
+            if (App.state.sessionToken) { App.ui.toast("Señal débil. Reintentando..."); setTimeout(() => App.logic.cargarDatosIniciales(), 3000); } 
+            else { App.ui.hideLoader(); }
         } 
     },
     descargarRespaldo() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(App.state, null, 2)); const dlAnchorElem = document.createElement('a'); dlAnchorElem.setAttribute("href", dataStr); dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`); dlAnchorElem.click(); App.ui.toast("Respaldo descargado"); },
