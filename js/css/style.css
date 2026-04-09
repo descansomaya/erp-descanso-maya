@@ -1,0 +1,96 @@
+/* ==========================================
+   DESIGN SYSTEM - DESCANSO MAYA ERP
+========================================== */
+:root {
+  --primary: #6B46C1;
+  --primary-dark: #553C9A;
+  --primary-light: #FAF5FF;
+  --bg-app: #F7FAFC;
+  --surface: #FFFFFF;
+  --text-main: #2D3748;
+  --text-muted: #718096;
+  --border: #E2E8F0;
+  
+  --success: #38A169;
+  --success-bg: #F0FFF4;
+  --danger: #E53E3E;
+  --danger-bg: #FFF5F5;
+  --warning: #D69E2E;
+  --warning-bg: #FFFFF0;
+  
+  --radius-card: 16px;
+  --radius-btn: 10px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+}
+
+* { box-sizing: border-box; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+
+body {
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  margin: 0; padding: 0; padding-bottom: 80px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- CONTENEDORES Y CARDS --- */
+.container-app { padding: 15px; max-width: 800px; margin: 0 auto; }
+
+.modern-card {
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  padding: 16px; margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+  transition: transform 0.2s;
+}
+
+.stat-card-modern {
+  background: var(--surface); border-radius: var(--radius-card);
+  padding: 20px 16px; border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm); text-align: left;
+}
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* --- LISTAS TIPO APP --- */
+.list-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.list-item:last-child { border-bottom: none; }
+.list-icon { font-size: 1.5rem; background: var(--primary-light); border-radius: 50%; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; }
+
+/* --- BOTONES MODERNOS --- */
+.btn-modern {
+  display: inline-flex; justify-content: center; align-items: center; gap: 8px;
+  font-weight: 600; padding: 14px 16px; border-radius: var(--radius-btn);
+  border: none; cursor: pointer; transition: all 0.2s; width: 100%; font-size: 0.95rem;
+}
+.btn-primary { background: var(--primary); color: white; box-shadow: 0 4px 10px rgba(107, 70, 193, 0.3); }
+.btn-outline { background: transparent; border: 2px solid var(--primary); color: var(--primary); }
+.btn-ghost { background: var(--primary-light); color: var(--primary); }
+.btn-danger { background: var(--danger-bg); color: var(--danger); }
+.btn-success { background: var(--success); color: white; box-shadow: 0 4px 10px rgba(56, 161, 105, 0.3); }
+
+/* --- FORMULARIOS --- */
+.form-group-modern { margin-bottom: 15px; }
+.form-group-modern label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; }
+.input-modern {
+  width: 100%; padding: 14px; font-size: 1rem; background: #EDF2F7;
+  border: 2px solid transparent; border-radius: var(--radius-btn);
+  color: var(--text-main); outline: none; transition: 0.3s;
+}
+.input-modern:focus { background: var(--surface); border: 2px solid var(--primary); }
+
+/* --- BADGES (Etiquetas) --- */
+.badge { padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; }
+.badge-success { background: var(--success-bg); color: var(--success); }
+.badge-warning { background: var(--warning-bg); color: var(--warning); }
+.badge-danger { background: var(--danger-bg); color: var(--danger); }
+.badge-primary { background: var(--primary-light); color: var(--primary); }
+
+/* --- MODAL iOS STYLE --- */
+#sheet-content { border-top-left-radius: 24px; border-top-right-radius: 24px; padding-top: 25px; }
+.drag-handle { width: 40px; height: 5px; background: #CBD5E0; border-radius: 5px; position: absolute; top: 10px; left: calc(50% - 20px); }
+
+/* --- HEADER SUPERIOR --- */
+.top-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 0 20px 0; }
+.top-header h2 { margin: 0; font-size: 1.5rem; font-weight: 800; color: var(--text-main); }
