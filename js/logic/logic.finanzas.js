@@ -1,5 +1,5 @@
 // ==========================================
-// LÓGICA: FINANZAS Y GASTOS (V65 - RANGO CUSTOM + DONAS % + PÍLDORAS)
+// LÓGICA: FINANZAS Y GASTOS (V66 - ESCÁNER DE COMPRAS PARA DONAS)
 // ==========================================
 
 Object.assign(App.logic, {
@@ -26,27 +26,16 @@ Object.assign(App.logic, {
         if(!cont) return; 
         
         const hoy = new Date(); let mAct = hoy.getMonth(); let aAct = hoy.getFullYear(); 
-
-        // Leer fechas personalizadas si existen en la vista
-        const inputDesde = document.getElementById('fecha-desde');
-        const inputHasta = document.getElementById('fecha-hasta');
-        const fDesdeInput = inputDesde ? inputDesde.value : null;
-        const fHastaInput = inputHasta ? inputHasta.value : null;
+        const inputDesde = document.getElementById('fecha-desde'); const inputHasta = document.getElementById('fecha-hasta');
+        const fDesdeInput = inputDesde ? inputDesde.value : null; const fHastaInput = inputHasta ? inputHasta.value : null;
 
         const clasificarFecha = (fechaStr) => {
-            if(!fechaStr) return 'fuera';
-            const f = new Date(fechaStr); if(isNaN(f.getTime())) return 'fuera';
-            
-            // 👇 LÓGICA PARA RANGO PERSONALIZADO 👇
+            if(!fechaStr) return 'fuera'; const f = new Date(fechaStr); if(isNaN(f.getTime())) return 'fuera';
             if(filtro === 'custom') {
-                if(!fDesdeInput || !fHastaInput) return 'actual'; // Si no llenó fechas, cuenta todo para no fallar
-                // Se agrega tiempo para que cubra todo el día hasta las 23:59:59
-                const dInicio = new Date(fDesdeInput + 'T00:00:00');
-                const dFin = new Date(fHastaInput + 'T23:59:59');
-                if(f >= dInicio && f <= dFin) return 'actual';
-                return 'fuera';
+                if(!fDesdeInput || !fHastaInput) return 'actual'; 
+                const dInicio = new Date(fDesdeInput + 'T00:00:00'); const dFin = new Date(fHastaInput + 'T23:59:59');
+                if(f >= dInicio && f <= dFin) return 'actual'; return 'fuera';
             }
-
             const m = f.getMonth(); const a = f.getFullYear();
             if(filtro === 'todo') return 'actual';
             if(filtro === 'mes_actual') { if(a === aAct && m === mAct) return 'actual'; let mPrev = mAct - 1; let aPrev = aAct; if(mPrev < 0) { mPrev = 11; aPrev--; } if(a === aPrev && m === mPrev) return 'previo'; }
@@ -56,22 +45,16 @@ Object.assign(App.logic, {
             return 'fuera';
         };
 
-        // Etiquetas dinámicas para mostrar en pantalla
         let etiquetaFiltro = "";
-        if (filtro === 'custom') {
-            etiquetaFiltro = (fDesdeInput && fHastaInput) ? `Del ${fDesdeInput} al ${fHastaInput}` : "Rango Personalizado";
-        } else {
-            const labels = { todo: "Todo el historial", mes_actual: "Este Mes", mes_pasado: "Mes Pasado", trimestre_actual: "Este Trimestre", anio_actual: "Este Año" };
-            etiquetaFiltro = labels[filtro] || filtro;
-        }
+        if (filtro === 'custom') { etiquetaFiltro = (fDesdeInput && fHastaInput) ? `Del ${fDesdeInput} al ${fHastaInput}` : "Rango Personalizado"; } 
+        else { const labels = { todo: "Todo el historial", mes_actual: "Este Mes", mes_pasado: "Mes Pasado", trimestre_actual: "Este Trimestre", anio_actual: "Este Año" }; etiquetaFiltro = labels[filtro] || filtro; }
 
         let metrics = { actual: { ventas: 0, ingresos: 0, gastos: 0, neto: 0, desglGastos: {}, desglVentas: {} }, previo: { ventas: 0, ingresos: 0, gastos: 0, neto: 0 } };
 
         (App.state.pedidos || []).forEach(p => {
             const clase = clasificarFecha(p.fecha_creacion);
             if(clase !== 'fuera') {
-                metrics[clase].ventas += parseFloat(p.total || 0);
-                metrics[clase].ingresos += parseFloat(p.anticipo || 0);
+                metrics[clase].ventas += parseFloat(p.total || 0); metrics[clase].ingresos += parseFloat(p.anticipo || 0);
                 if(clase === 'actual') {
                     const det = App.state.pedido_detalle.find(d => d.pedido_id === p.id); const prod = det ? App.state.productos.find(x => x.id === det.producto_id) : null; 
                     let cat = prod ? prod.nombre.toLowerCase() : 'otros'; let key = 'Hamacas';
@@ -91,21 +74,71 @@ Object.assign(App.logic, {
 
         (App.state.abonos || []).forEach(a => { const clase = clasificarFecha(a.fecha); if(clase !== 'fuera') metrics[clase].ingresos += parseFloat(a.monto || 0); });
 
+        // 👇 NUEVO MOTOR: ESCÁNER DE RAYOS X PARA GASTOS DE COMPRAS 👇
         (App.state.gastos || []).forEach(g => {
             const clase = clasificarFecha(g.fecha);
             if(clase !== 'fuera') {
                 const montoGasto = parseFloat(g.monto || 0);
                 metrics[clase].gastos += montoGasto;
+                
                 if(clase === 'actual') {
-                    let catOriginal = (g.categoria || '').toLowerCase(); let desc = (g.descripcion || '').toLowerCase(); let catAsignada = 'Otros Gastos';
-                    if (catOriginal.includes('reventa') || desc.includes('reventa') || desc.includes('hamaca')) catAsignada = 'Hamacas (Reventa)';
-                    else if (desc.includes('silla')) catAsignada = 'Sillas';
-                    else if (desc.includes('cojin') || desc.includes('cojín')) catAsignada = 'Cojines';
-                    else if (catOriginal.includes('accesorio') || desc.includes('accesorio') || desc.includes('argolla') || desc.includes('guardacabo') || desc.includes('madera') || desc.includes('palo')) catAsignada = 'Accesorios';
-                    else if (catOriginal.includes('material') || desc.includes('hilo') || desc.includes('nylon') || desc.includes('algodon') || desc.includes('crochet')) catAsignada = 'Materiales (Hilos)';
-                    else if (catOriginal.includes('nomina') || catOriginal.includes('nómina') || desc.includes('nomina') || desc.includes('artesano') || desc.includes('pago a')) catAsignada = 'Nómina Artesanos';
-                    else if (catOriginal.includes('servicio')) catAsignada = 'Servicios y Otros';
-                    metrics.actual.desglGastos[catAsignada] = (metrics.actual.desglGastos[catAsignada] || 0) + montoGasto;
+                    let catOriginal = (g.categoria || '').toLowerCase(); 
+                    let desc = (g.descripcion || '').toLowerCase(); 
+                    
+                    let isCompra = false;
+                    let compraIdMatch = desc.match(/(com-\d+)/i); // Busca si dice "COM-12345" en el texto
+                    
+                    if (compraIdMatch) {
+                        const compraId = compraIdMatch[1].toUpperCase();
+                        const compra = (App.state.compras || []).find(c => c.id === compraId);
+                        if (compra && compra.detalles) {
+                            isCompra = true;
+                            try {
+                                const detalles = JSON.parse(compra.detalles);
+                                let subTotales = {}; let totalCompraCalc = 0;
+                                
+                                detalles.forEach(d => {
+                                    const mat = (App.state.inventario||[]).find(m => m.id === d.mat_id);
+                                    let dNombre = (d.nombre || '').toLowerCase();
+                                    let dTipo = mat ? (mat.tipo || '').toLowerCase() : '';
+                                    
+                                    let catAsignada = 'Materiales (Hilos)'; // Por defecto todo es Hilo
+                                    if (dTipo === 'reventa' || dNombre.includes('reventa') || dNombre.includes('hamaca')) catAsignada = 'Hamacas (Reventa)';
+                                    else if (dNombre.includes('silla')) catAsignada = 'Sillas';
+                                    else if (dNombre.includes('cojin') || dNombre.includes('cojín')) catAsignada = 'Cojines';
+                                    else if (dTipo === 'accesorio' || dNombre.includes('accesorio') || dNombre.includes('argolla') || dNombre.includes('guardacabo') || dNombre.includes('madera')) catAsignada = 'Accesorios';
+                                    
+                                    const costoFila = parseFloat(d.cantidad||0) * parseFloat(d.costo_unitario||0);
+                                    subTotales[catAsignada] = (subTotales[catAsignada] || 0) + costoFila;
+                                    totalCompraCalc += costoFila;
+                                });
+                                
+                                // Repartir el dinero del gasto proporcionalmente a lo que se compró
+                                if (totalCompraCalc > 0) {
+                                    Object.keys(subTotales).forEach(cat => {
+                                        const proporcion = subTotales[cat] / totalCompraCalc;
+                                        metrics.actual.desglGastos[cat] = (metrics.actual.desglGastos[cat] || 0) + (montoGasto * proporcion);
+                                    });
+                                } else {
+                                    metrics.actual.desglGastos['Materiales (Hilos)'] = (metrics.actual.desglGastos['Materiales (Hilos)'] || 0) + montoGasto;
+                                }
+                            } catch(e) { metrics.actual.desglGastos['Materiales (Hilos)'] = (metrics.actual.desglGastos['Materiales (Hilos)'] || 0) + montoGasto; }
+                        }
+                    }
+                    
+                    // Si NO es una compra, usa el categorizador de texto normal
+                    if (!isCompra) {
+                        let catAsignada = 'Otros Gastos';
+                        if (catOriginal.includes('reventa') || desc.includes('reventa') || desc.includes('hamaca')) catAsignada = 'Hamacas (Reventa)';
+                        else if (desc.includes('silla')) catAsignada = 'Sillas';
+                        else if (desc.includes('cojin') || desc.includes('cojín')) catAsignada = 'Cojines';
+                        else if (catOriginal.includes('accesorio') || desc.includes('accesorio') || desc.includes('argolla') || desc.includes('guardacabo') || desc.includes('madera') || desc.includes('palo')) catAsignada = 'Accesorios';
+                        else if (catOriginal.includes('material') || desc.includes('hilo') || desc.includes('nylon') || desc.includes('algodon') || desc.includes('crochet')) catAsignada = 'Materiales (Hilos)';
+                        else if (catOriginal.includes('nomina') || catOriginal.includes('nómina') || desc.includes('nomina') || desc.includes('artesano') || desc.includes('pago a')) catAsignada = 'Nómina Artesanos';
+                        else if (catOriginal.includes('servicio') || desc.includes('luz') || desc.includes('agua') || desc.includes('renta')) catAsignada = 'Servicios y Otros';
+                        
+                        metrics.actual.desglGastos[catAsignada] = (metrics.actual.desglGastos[catAsignada] || 0) + montoGasto;
+                    }
                 }
             }
         });
@@ -120,7 +153,7 @@ Object.assign(App.logic, {
         (App.state.compras || []).forEach(c => { const pg = c.monto_pagado !== undefined && c.monto_pagado !== "" ? parseFloat(c.monto_pagado) : parseFloat(c.total||0); const deu = parseFloat(c.total||0)-pg; if(deu>0) xPagarGlobal+=deu; });
 
         const getTendencia = (act, prev, inverso = false) => {
-            if(filtro === 'todo' || filtro === 'custom') return ''; // No comparamos en estos casos
+            if(filtro === 'todo' || filtro === 'custom') return ''; 
             if(prev === 0 && act === 0) return '<span style="font-size:0.7rem; color:#718096; margin-left:5px;">Igual</span>';
             if(prev === 0 && act > 0) return `<span style="font-size:0.7rem; color:${inverso ? '#E53E3E' : '#38A169'}; margin-left:5px;">⬆️ 100%</span>`;
             const varPorc = ((act - prev) / prev) * 100; const dir = varPorc >= 0 ? '⬆️' : '⬇️'; let color = '#718096';
@@ -130,7 +163,6 @@ Object.assign(App.logic, {
 
         const act = metrics.actual; const prev = metrics.previo;
 
-        // Se usa la nueva etiquetaFiltro aquí
         let html = `<p style="color:var(--text-muted); font-size:0.85rem; margin-top:-10px; margin-bottom:15px; text-transform:uppercase; font-weight:bold;">Periodo: <strong style="color:var(--primary);">${etiquetaFiltro}</strong></p>`;
         
         html += `<h4 style="margin-bottom:10px; color:#2D3748; font-size:0.9rem;">1. Rendimiento del Periodo</h4>
@@ -190,7 +222,6 @@ Object.assign(App.logic, {
                 const totalGastosCat = Object.values(act.desglGastos).reduce((a,b)=>a+b, 0);
                 const labelsGastos = Object.keys(act.desglGastos).map(k => `${k} (${totalGastosCat>0 ? ((act.desglGastos[k]/totalGastosCat)*100).toFixed(1) : 0}%)`);
 
-                // PLUGIN para pintar en blanco los porcentajes adentro de la dona
                 const pluginPorcentajes = {
                     id: 'pluginPorcentajes',
                     afterDatasetsDraw(chart, args, options) {
