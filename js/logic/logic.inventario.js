@@ -1,5 +1,5 @@
 // ==========================================
-// LÓGICA: INVENTARIO Y COMPRAS
+// LÓGICA: INVENTARIO, COMPRAS Y CUENTAS POR PAGAR
 // ==========================================
 
 Object.assign(App.logic, {
@@ -26,13 +26,62 @@ Object.assign(App.logic, {
         } 
         const totalNum = parseFloat(datos.total); const montoPagadoNum = parseFloat(datos.monto_pagado) || 0; const estadoCompra = montoPagadoNum >= totalNum ? 'pagado' : 'credito';
         const compra = { id: compraId, proveedor_id: datos.proveedor_id, fecha: datos.fecha, total: totalNum, monto_pagado: montoPagadoNum, estado: estadoCompra, detalles: JSON.stringify(detallesCompra), fecha_creacion: new Date().toISOString() }; operaciones.push({ action: "guardar_fila", nombreHoja: "compras", datos: compra }); const proveedor = App.state.proveedores.find(p => p.id === datos.proveedor_id); const nombreProv = proveedor ? proveedor.nombre : "Proveedor"; 
-        if(montoPagadoNum > 0) { Object.keys(gastoPorTipo).forEach((cat, idx) => { const proporcion = gastoPorTipo[cat] / totalNum; const montoCat = montoPagadoNum * proporcion; const nuevoGasto = { id: "GAS-" + Date.now() + "-" + idx, categoria: cat, descripcion: `Compra a ${nombreProv} (${compraId})`, monto: montoCat.toFixed(2), fecha: datos.fecha }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto }); App.state.gastos.push(nuevoGasto); }); }
-        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.compras.push(compra); if(!App.state.movimientos_inventario) App.state.movimientos_inventario=[]; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Compra registrada"); App.router.handleRoute();  
+        
+        let nuevosAbonosProv = [];
+        if(montoPagadoNum > 0) { 
+            // 1. Registrar en la nueva tabla de historial de abonos a proveedores
+            const abonoInicial = { id: "ABO-P-" + Date.now(), compra_id: compraId, proveedor_id: datos.proveedor_id, monto: montoPagadoNum, nota: "Pago inicial de compra", fecha: new Date().toISOString().split('T')[0] };
+            operaciones.push({ action: "guardar_fila", nombreHoja: "abonos_proveedores", datos: abonoInicial });
+            nuevosAbonosProv.push(abonoInicial);
+
+            // 2. Registrar los gastos en caja
+            Object.keys(gastoPorTipo).forEach((cat, idx) => { const proporcion = gastoPorTipo[cat] / totalNum; const montoCat = montoPagadoNum * proporcion; const nuevoGasto = { id: "GAS-" + Date.now() + "-" + idx, categoria: cat, descripcion: `Pago inicial compra a ${nombreProv} (${compraId})`, monto: montoCat.toFixed(2), fecha: datos.fecha }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto }); App.state.gastos.push(nuevoGasto); }); 
+        }
+
+        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); 
+        App.state.compras.push(compra); 
+        if(!App.state.abonos_proveedores) App.state.abonos_proveedores = []; App.state.abonos_proveedores.push(...nuevosAbonosProv);
+        if(!App.state.movimientos_inventario) App.state.movimientos_inventario=[]; App.state.movimientos_inventario.push(...nuevosMovs); App.ui.hideLoader(); App.ui.toast("Compra registrada"); App.router.handleRoute();  
     },
-    async guardarAbonoCompra(datos) { App.ui.showLoader("Registrando..."); const compra = App.state.compras.find(c => c.id === datos.compra_id); if(compra) { const nuevoPagado = parseFloat(compra.monto_pagado || 0) + parseFloat(datos.monto); const proveedor = App.state.proveedores.find(p => p.id === compra.proveedor_id); const nombreProv = proveedor ? proveedor.nombre : "Proveedor"; let operaciones = []; operaciones.push({action: "actualizar_fila", nombreHoja: "compras", idFila: compra.id, datosNuevos: { monto_pagado: nuevoPagado, estado: nuevoPagado >= parseFloat(compra.total) ? 'pagado' : 'credito' }}); const nuevoGasto = { id: "GAS-" + Date.now(), categoria: "Materiales e Insumos", descripcion: `Abono Compra a ${nombreProv} (${compra.id})`, monto: parseFloat(datos.monto), fecha: new Date().toISOString().split('T')[0] }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto }); const res = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); if(res.status === 'success') { compra.monto_pagado = nuevoPagado; if(nuevoPagado >= parseFloat(compra.total)) compra.estado = 'pagado'; App.state.gastos.push(nuevoGasto); App.ui.hideLoader(); App.ui.toast("Abono registrado"); App.router.handleRoute(); } else { App.ui.hideLoader(); App.ui.toast("Error"); } } },
+
+    async guardarAbonoCompra(datos) { 
+        const compra = App.state.compras.find(c => c.id === datos.compra_id); if(!compra) return;
+        const abonoFormateado = parseFloat(datos.monto) || 0;
+        const deudaActual = parseFloat(compra.total||0) - parseFloat(compra.monto_pagado||0);
+        
+        // 🔒 CANDADO: Evitar sobrepagos
+        if(abonoFormateado > deudaActual + 0.1) { alert(`❌ No puedes abonar más del saldo pendiente ($${deudaActual.toFixed(2)})`); return; }
+
+        App.ui.showLoader("Registrando Abono..."); 
+        const nuevoPagado = parseFloat(compra.monto_pagado || 0) + abonoFormateado; 
+        const proveedor = App.state.proveedores.find(p => p.id === compra.proveedor_id); const nombreProv = proveedor ? proveedor.nombre : "Proveedor"; let operaciones = []; 
+        
+        // 1. Actualizar Maestro de Compras
+        operaciones.push({action: "actualizar_fila", nombreHoja: "compras", idFila: compra.id, datosNuevos: { monto_pagado: nuevoPagado, estado: nuevoPagado >= parseFloat(compra.total) ? 'pagado' : 'credito' }}); 
+        
+        // 2. Historial en Abonos a Proveedores
+        const nuevoAbonoProv = { id: "ABO-P-" + Date.now(), compra_id: compra.id, proveedor_id: compra.proveedor_id, monto: abonoFormateado, nota: "Abono parcial", fecha: new Date().toISOString().split('T')[0] };
+        operaciones.push({ action: "guardar_fila", nombreHoja: "abonos_proveedores", datos: nuevoAbonoProv });
+
+        // 3. Salida de Dinero (Gasto)
+        const nuevoGasto = { id: "GAS-" + Date.now(), categoria: "Materiales e Insumos", descripcion: `Abono Compra a ${nombreProv} (${compra.id})`, monto: abonoFormateado, fecha: new Date().toISOString().split('T')[0] }; operaciones.push({ action: "guardar_fila", nombreHoja: "gastos", datos: nuevoGasto }); 
+        
+        const res = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); 
+        if(res.status === 'success') { 
+            compra.monto_pagado = nuevoPagado; if(nuevoPagado >= parseFloat(compra.total)) compra.estado = 'pagado'; 
+            App.state.gastos.push(nuevoGasto); 
+            if(!App.state.abonos_proveedores) App.state.abonos_proveedores = []; App.state.abonos_proveedores.push(nuevoAbonoProv);
+            App.ui.hideLoader(); App.ui.toast("Abono registrado"); App.router.handleRoute(); 
+            // Si estábamos en el detalle de la compra, refrescarlo
+            const sheetBg = document.getElementById('sheet-bg'); if(sheetBg) App.views.verDetallesCompra(compra.id);
+        } else { App.ui.hideLoader(); App.ui.toast("Error"); } 
+    },
+
     async eliminarCompra(id) { 
-        if(!confirm("⚠️ ¿Eliminar compra? Se restará el stock físico ingresado y se borrará el gasto.")) return; 
-        App.ui.showLoader("Eliminando..."); let operaciones = [ { action: "eliminar_fila", nombreHoja: "compras", idFila: id } ]; 
+        if(!confirm("⚠️ ¿Eliminar compra? Se restará el stock físico ingresado, se borrarán todos los pagos realizados y el gasto de caja regresará.")) return; 
+        App.ui.showLoader("Eliminando en cascada..."); let operaciones = [ { action: "eliminar_fila", nombreHoja: "compras", idFila: id } ]; 
+        
+        // Revertir inventario
         const movimientosAsociados = (App.state.movimientos_inventario || []).filter(m => m.origen_id === id); 
         movimientosAsociados.forEach(m => {
             const material = App.state.inventario.find(mat => mat.id === m.ref_id);
@@ -43,7 +92,20 @@ Object.assign(App.logic, {
             }
             operaciones.push({ action: "eliminar_fila", nombreHoja: "movimientos_inventario", idFila: m.id });
         });
+        
+        // Revertir gastos (dinero)
         const gastosAsociados = App.state.gastos.filter(g => g.descripcion.includes(id)); gastosAsociados.forEach(gastoAsociado => operaciones.push({ action: "eliminar_fila", nombreHoja: "gastos", idFila: gastoAsociado.id })); 
-        const res = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.ui.hideLoader(); if(res.status === "success") { App.state.compras = App.state.compras.filter(c => c.id !== id); App.state.gastos = App.state.gastos.filter(g => !g.descripcion.includes(id)); App.state.movimientos_inventario = App.state.movimientos_inventario.filter(m => m.origen_id !== id); App.ui.toast("Compra eliminada."); App.router.handleRoute(); } else { App.ui.toast("Error al eliminar"); } 
+        
+        // Eliminar historial de abonos
+        const abonosAsociados = (App.state.abonos_proveedores || []).filter(a => a.compra_id === id); abonosAsociados.forEach(ab => operaciones.push({ action: "eliminar_fila", nombreHoja: "abonos_proveedores", idFila: ab.id }));
+
+        const res = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.ui.hideLoader(); 
+        if(res.status === "success") { 
+            App.state.compras = App.state.compras.filter(c => c.id !== id); 
+            App.state.gastos = App.state.gastos.filter(g => !g.descripcion.includes(id)); 
+            App.state.movimientos_inventario = App.state.movimientos_inventario.filter(m => m.origen_id !== id); 
+            App.state.abonos_proveedores = (App.state.abonos_proveedores || []).filter(a => a.compra_id !== id);
+            App.ui.toast("Compra eliminada."); App.router.handleRoute(); 
+        } else { App.ui.toast("Error al eliminar"); } 
     }
 });
