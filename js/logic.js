@@ -1,5 +1,5 @@
 // ==========================================
-// 5. LÓGICA DE NEGOCIO (logic.js) - INVENTARIO INTELIGENTE V58
+// 5. LÓGICA DE NEGOCIO (logic.js) - INVENTARIO INTELIGENTE + COSTEO REAL (V59)
 // ==========================================
 
 App.logic = {
@@ -38,9 +38,72 @@ App.logic = {
     descargarRespaldo() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(App.state, null, 2)); const dlAnchorElem = document.createElement('a'); dlAnchorElem.setAttribute("href", dataStr); dlAnchorElem.setAttribute("download", `Respaldo_ERP_Maya_${new Date().toISOString().split('T')[0]}.json`); dlAnchorElem.click(); App.ui.toast("Respaldo descargado"); },
     async eliminarRegistroGenerico(hoja, id, estado) { if(!confirm("⚠️ ¿Eliminar permanentemente?")) return; App.ui.showLoader("Eliminando..."); const res = await App.api.fetch("eliminar_fila", { nombreHoja: hoja, idFila: id }); App.ui.hideLoader(); if(res.status === "success") { App.state[estado] = App.state[estado].filter(item => item.id !== id); App.ui.toast("Eliminado"); App.router.handleRoute(); } else { App.ui.toast("Error"); } },
     
-    // ==========================================
-    // NUEVO MOTOR DE INVENTARIO INTELIGENTE
-    // ==========================================
+    // 👇 FUNCIONES RESTAURADAS Y ACTUALIZADAS 👇
+    async eliminarPedido(id) { 
+        if(!confirm("⚠️ ¿Eliminar pedido por completo?\n\nLos insumos volverán a estar libres en el inventario.")) return; 
+        App.ui.showLoader("Procesando eliminación..."); const pedido = App.state.pedidos.find(p => p.id === id); const detalle = App.state.pedido_detalle.find(d => d.pedido_id === id); const orden = App.state.ordenes_produccion.find(o => detalle && o.pedido_detalle_id === detalle.id); const producto = detalle ? App.state.productos.find(p => p.id === detalle.producto_id) : null;
+        let operaciones = []; let nuevosMovs = [];
+
+        // Devolución inteligente de inventario
+        if(orden && orden.estado !== 'listo' && orden.receta_personalizada) {
+            try { JSON.parse(orden.receta_personalizada).forEach(item => {
+                let mat = App.state.inventario.find(m => m.id === item.mat_id);
+                if(mat && parseFloat(item.cant) > 0) {
+                    let nComp = Math.max(0, parseFloat(mat.stock_comprometido||0) - parseFloat(item.cant));
+                    operaciones.push({action: "actualizar_fila", nombreHoja: "materiales", idFila: mat.id, datosNuevos: {stock_comprometido: nComp}}); mat.stock_comprometido = nComp;
+                }
+            }); } catch(e){}
+        } else if (producto && producto.categoria === 'reventa' && pedido.estado !== 'listo para entregar' && pedido.estado !== 'pagado') {
+            for(let i=1; i<=20; i++) {
+                const matId = producto[`mat_${i}`]; const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * (parseInt(detalle.cantidad)||1);
+                if(matId && cantTeorica > 0) {
+                    let mat = App.state.inventario.find(m => m.id === matId);
+                    if(mat) {
+                        let nRes = Math.max(0, parseFloat(mat.stock_reservado||0) - cantTeorica);
+                        operaciones.push({action: "actualizar_fila", nombreHoja: "materiales", idFila: mat.id, datosNuevos: {stock_reservado: nRes}}); mat.stock_reservado = nRes;
+                    }
+                }
+            }
+        } else if (pedido.estado === 'listo para entregar' || pedido.estado === 'pagado') {
+            if(producto && producto.categoria === 'reventa') {
+                for(let i=1; i<=20; i++) {
+                    const matId = producto[`mat_${i}`]; const cantTeorica = parseFloat(producto[`cant_${i}`] || 0) * (parseInt(detalle.cantidad)||1);
+                    if(matId && cantTeorica > 0) {
+                        let mat = App.state.inventario.find(m => m.id === matId);
+                        if(mat) {
+                            let nReal = parseFloat(mat.stock_real||0) + cantTeorica;
+                            operaciones.push({action: "actualizar_fila", nombreHoja: "materiales", idFila: mat.id, datosNuevos: {stock_real: nReal}}); mat.stock_real = nReal;
+                        }
+                    }
+                }
+            }
+        }
+
+        operaciones.push({ action: "eliminar_fila", nombreHoja: "pedidos", idFila: id }); if(detalle) operaciones.push({ action: "eliminar_fila", nombreHoja: "pedido_detalle", idFila: detalle.id }); if(orden) { operaciones.push({ action: "eliminar_fila", nombreHoja: "ordenes_produccion", idFila: orden.id }); App.state.pago_artesanos.filter(p => p.orden_id === orden.id).forEach(pago => operaciones.push({ action: "eliminar_fila", nombreHoja: "pago_artesanos", idFila: pago.id })); } App.state.abonos.filter(a => a.pedido_id === id).forEach(ab => operaciones.push({ action: "eliminar_fila", nombreHoja: "abonos_clientes", idFila: ab.id }));
+        await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.state.pedidos = App.state.pedidos.filter(p => p.id !== id); if(detalle) App.state.pedido_detalle = App.state.pedido_detalle.filter(d => d.id !== detalle.id); if(orden) { App.state.ordenes_produccion = App.state.ordenes_produccion.filter(o => o.id !== orden.id); App.state.pago_artesanos = App.state.pago_artesanos.filter(p => p.orden_id !== orden.id); } App.state.abonos = App.state.abonos.filter(a => a.pedido_id !== id); App.ui.hideLoader(); App.ui.toast("Pedido eliminado"); App.router.handleRoute(); 
+    },
+    async eliminarCompra(id) { 
+        if(!confirm("⚠️ ¿Eliminar compra? Se restará el stock físico ingresado y se borrará el gasto.")) return; 
+        App.ui.showLoader("Eliminando..."); let operaciones = [ { action: "eliminar_fila", nombreHoja: "compras", idFila: id } ]; 
+        const movimientosAsociados = (App.state.movimientos_inventario || []).filter(m => m.origen_id === id); 
+        movimientosAsociados.forEach(m => {
+            const material = App.state.inventario.find(mat => mat.id === m.ref_id);
+            if(material) {
+                let nReal = Math.max(0, parseFloat(material.stock_real||0) - parseFloat(m.cantidad||0));
+                operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_real: nReal } });
+                material.stock_real = nReal;
+            }
+            operaciones.push({ action: "eliminar_fila", nombreHoja: "movimientos_inventario", idFila: m.id });
+        });
+        const gastosAsociados = App.state.gastos.filter(g => g.descripcion.includes(id)); gastosAsociados.forEach(gastoAsociado => operaciones.push({ action: "eliminar_fila", nombreHoja: "gastos", idFila: gastoAsociado.id })); 
+        const res = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.ui.hideLoader(); if(res.status === "success") { App.state.compras = App.state.compras.filter(c => c.id !== id); App.state.gastos = App.state.gastos.filter(g => !g.descripcion.includes(id)); App.state.movimientos_inventario = App.state.movimientos_inventario.filter(m => m.origen_id !== id); App.ui.toast("Compra eliminada."); App.router.handleRoute(); } else { App.ui.toast("Error al eliminar"); } 
+    },
+    async eliminarReparacion(id) {
+        if(!confirm("⚠️ ¿Eliminar reparación? Se eliminarán tareas y pagos de artesanos.")) return;
+        App.ui.showLoader("Eliminando..."); let operaciones = [{ action: "eliminar_fila", nombreHoja: "reparaciones", idFila: id }]; const pagos = App.state.pago_artesanos.filter(p => p.orden_id === id); pagos.forEach(p => operaciones.push({ action: "eliminar_fila", nombreHoja: "pago_artesanos", idFila: p.id })); const res = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); App.ui.hideLoader(); if(res.status === "success") { App.state.reparaciones = App.state.reparaciones.filter(r => r.id !== id); App.state.pago_artesanos = App.state.pago_artesanos.filter(p => p.orden_id !== id); App.ui.toast("Reparación eliminada"); App.router.handleRoute(); } else { App.ui.toast("Error al eliminar"); }
+    },
+    // 👆 FIN DE FUNCIONES RESTAURADAS 👆
+
     async guardarNuevaCompra(datos) { 
         App.ui.showLoader("Comprando..."); const compraId = "COM-" + Date.now(); const detallesCompra = []; let operaciones = []; let nuevosMovs = []; const mats = Array.isArray(datos.mat_id) ? datos.mat_id : (datos.mat_id ? [datos.mat_id] : []); const cants = Array.isArray(datos.cant) ? datos.cant : (datos.cant ? [datos.cant] : []); const precios = Array.isArray(datos.precio_u) ? datos.precio_u : (datos.precio_u ? [datos.precio_u] : []);
         let gastoPorTipo = {};
@@ -53,7 +116,6 @@ App.logic = {
                     gastoPorTipo[catGasto] = (gastoPorTipo[catGasto] || 0) + totalFila;
                     detallesCompra.push({ mat_id: matId, nombre: material.nombre, cantidad: cant, costo_unitario: precioUnitario }); 
                     
-                    // Solo sube el REAL físico
                     const nuevoStockReal = parseFloat(material.stock_real||0) + cant; 
                     operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_real: nuevoStockReal, costo_unitario: precioUnitario } }); 
                     material.stock_real = nuevoStockReal; material.costo_unitario = precioUnitario; 
@@ -77,7 +139,6 @@ App.logic = {
                 if(matId && cantTeorica > 0) { 
                     const material = App.state.inventario.find(m => m.id === matId); 
                     if(material) { 
-                        // Solo sube el RESERVADO (La hamaca sigue físicamente en la tienda)
                         const nReservado = parseFloat(material.stock_reservado||0) + cantTeorica; 
                         operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_reservado: nReservado } }); 
                         material.stock_reservado = nReservado; 
@@ -97,7 +158,6 @@ App.logic = {
             if(matId && cantTeorica > 0) { 
                 const material = App.state.inventario.find(m => m.id === matId); 
                 if(material) { 
-                    // Baja el Reservado y baja el Real (Salió por la puerta)
                     const nReservado = Math.max(0, parseFloat(material.stock_reservado||0) - cantTeorica);
                     const nReal = parseFloat(material.stock_real||0) - cantTeorica; 
                     operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_reservado: nReservado, stock_real: nReal } }); 
@@ -128,7 +188,6 @@ App.logic = {
                 recetaPersonalizada.push({ mat_id: matId, cant: cant, uso: usoStr }); 
                 const material = App.state.inventario.find(m => m.id === matId); 
                 if(material) { 
-                    // Sube el COMPROMETIDO (El hilo sigue en la tienda, pero es del taller)
                     const nComprometido = parseFloat(material.stock_comprometido||0) + cant; 
                     operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: material.id, datosNuevos: { stock_comprometido: nComprometido } }); 
                     material.stock_comprometido = nComprometido; 
@@ -162,7 +221,6 @@ App.logic = {
             if(matId && !isNaN(consumoTeorico) && !isNaN(consumoReal)) { 
                 const material = App.state.inventario.find(m => m.id === matId); 
                 if(material) { 
-                    // 1. Ajuste Inteligente de Inventario (Teórico vs Real)
                     const diferencia = consumoReal - consumoTeorico; 
                     const nComprometido = Math.max(0, parseFloat(material.stock_comprometido||0) - consumoTeorico);
                     const nReal = parseFloat(material.stock_real||0) - consumoReal;
@@ -173,18 +231,15 @@ App.logic = {
                     const mov = { id: "MOV-" + Date.now() + i, fecha: new Date().toISOString().split('T')[0], tipo_movimiento: "salida_produccion", origen: "orden", origen_id: ordenId, ref_tipo: "material", ref_id: material.id, cantidad: -consumoReal, costo_unitario: material.costo_unitario||0, total: (-consumoReal * (material.costo_unitario||0)), notas: `Consumo real en taller` }; 
                     nuevosMovs.push(mov); operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: mov }); 
                     
-                    // 2. Costeo Real Congelado
                     const costoFila = consumoReal * (parseFloat(material.costo_unitario) || 0);
                     costoRealMateriales += costoFila;
                     if(desgloseMateriales[usoMat] !== undefined) desgloseMateriales[usoMat] += costoFila; else desgloseMateriales['Adicional'] += costoFila;
                     
-                    // Guardamos la receta final con su costo unitario del día de hoy
                     nuevaRecetaReal.push({ mat_id: matId, cant: consumoReal, cant_teorica: consumoTeorico, uso: usoMat, costo_unitario: material.costo_unitario });
                 } 
             } 
         } 
 
-        // 3. Rentabilidad Definitiva
         const pagos = App.state.pago_artesanos.filter(p => p.orden_id === ordenId);
         const costoManoObra = pagos.reduce((sum, p) => sum + parseFloat(p.total||0), 0);
         const totalVenta = pedidoMaster && pedidoMaster.cliente_id !== "STOCK_INTERNO" ? parseFloat(pedidoMaster.total || 0) : 0;
@@ -192,11 +247,9 @@ App.logic = {
 
         const costosFinales = { materiales: costoRealMateriales, desglose_materiales: desgloseMateriales, mano_obra: costoManoObra, utilidad: utilidadReal, precio_venta: totalVenta };
 
-        // 4. Sellar la Orden
         operaciones.push({ action: "actualizar_fila", nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: { estado: 'listo', receta_personalizada: JSON.stringify(nuevaRecetaReal), costos_finales: JSON.stringify(costosFinales) } }); 
         orden.estado = 'listo'; orden.receta_personalizada = JSON.stringify(nuevaRecetaReal); orden.costos_finales = JSON.stringify(costosFinales);
 
-        // Devolución a Bodega Terminada (Stock Interno)
         if (datosFormulario.sumar_stock === "1" && producto) { 
             let matHamaca = App.state.inventario.find(m => m.nombre === producto.nombre && m.tipo === 'reventa'); 
             if(matHamaca) { 
@@ -219,7 +272,6 @@ App.logic = {
         App.ui.hideLoader(); App.ui.toast("¡Terminado y Costeado!"); App.router.handleRoute(); 
     },
     
-    // ... [Se mantienen intactas las demás funciones: eliminarPedido, guardarAbono, etc.]
     async guardarOrdenStock(datos) { 
         App.ui.showLoader("Procesando..."); const pedidoId = "PED-STOCK-" + Date.now(); const cantidadNum = parseInt(datos.cantidad) || 1; const datosPedido = { id: pedidoId, cliente_id: "STOCK_INTERNO", total: 0, anticipo: 0, notas: "Producción Interna", fecha_entrega: "", fecha_creacion: new Date().toISOString() }; const datosDetalle = { id: "PDET-" + Date.now(), pedido_id: pedidoId, producto_id: datos.producto_id, cantidad: cantidadNum, precio_unitario: 0 }; 
         let operaciones = []; let nuevosMovs = []; let recetaArray = []; const producto = App.state.productos.find(p => p.id === datos.producto_id); 
@@ -238,7 +290,6 @@ App.logic = {
     guardarCotizacion(datos) { datos.id = "COT-" + Date.now(); datos.fecha_creacion = new Date().toISOString(); App.state.cotizaciones.push(datos); localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); App.ui.toast("Cotización generada"); App.router.handleRoute(); App.logic.imprimirCotizacion(datos.id); },
     eliminarCotizacion(id) { if(!confirm("⚠️ ¿Eliminar cotización?")) return; App.state.cotizaciones = App.state.cotizaciones.filter(c => c.id !== id); localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); App.ui.toast("Eliminada"); App.router.handleRoute(); },
     
-
     verDiagnostico() {
         let html = `<table style="width:100%; font-size:0.85rem; border-collapse:collapse;"><tr style="border-bottom:1px solid #ccc; text-align:left;"><th>Tabla (Hoja)</th><th>Estado</th><th>Registros</th></tr>`;
         const tablas = [ { nombre: "materiales", state: "inventario" }, { nombre: "clientes", state: "clientes" }, { nombre: "productos", state: "productos" }, { nombre: "pedidos", state: "pedidos" }, { nombre: "pedido_detalle", state: "pedido_detalle" }, { nombre: "ordenes_produccion", state: "ordenes_produccion" }, { nombre: "artesanos", state: "artesanos" }, { nombre: "abonos_clientes", state: "abonos" }, { nombre: "gastos", state: "gastos" }, { nombre: "compras", state: "compras" }, { nombre: "proveedores", state: "proveedores" }, { nombre: "reparaciones", state: "reparaciones" }, { nombre: "tarifas_artesano", state: "tarifas_artesano" }, { nombre: "pago_artesanos", state: "pago_artesanos" }, { nombre: "movimientos_inventario", state: "movimientos_inventario" } ];
@@ -315,7 +366,7 @@ App.logic = {
         let htmlNota = `<html><head><title>Recepción de Reparación</title><style>body{font-family:sans-serif;background:#f9f9f9;padding:20px;color:#333;}.ticket{background:white;max-width:380px;margin:0 auto;padding:25px;border-radius:8px;box-shadow:0 4px 15px rgba(0,0,0,0.05);}.header{text-align:center;border-bottom:2px dashed #cbd5e0;padding-bottom:15px;margin-bottom:15px;position:relative;}.header img.logo{max-height:80px;margin:0 auto 10px auto;display:block;}.header h1{margin:0;color:#2d3748;font-size:24px;text-transform:uppercase;}.header p.subtitle{margin:4px 0; color:#4a5568; font-size:14px;}.info-p{margin:4px 0;font-size:14px;}table{width:100%;border-collapse:collapse;margin-top:15px;margin-bottom:15px;}th{border-bottom:1px solid #e2e8f0;padding:8px 0;text-align:left;font-size:13px;color:#718096;}td{padding:8px 0;font-size:14px;color:#2d3748;}.totales{border-top:2px solid #cbd5e0;padding-top:15px;}.totales-row{display:flex;justify-content:space-between;margin-bottom:5px;font-size:14px;}.saldo-final{display:flex;justify-content:space-between;margin-top:10px;font-size:18px;font-weight:bold;color:#D69E2E;background:#FFFBEB;padding:10px;border-radius:6px;}.footer{text-align:center;margin-top:30px;font-size:12px;color:#a0aec0;}@media print{body{background:white;padding:0;}.ticket{box-shadow:none;border:none;max-width:100%;}}</style></head><body><div class="ticket"><div class="header"><img class="logo" src="${App.state.config.logoUrl}" onerror="this.style.display='none'"><h1>${App.state.config.empresa}</h1><p class="subtitle">Recepción de Reparación</p></div><div style="margin-bottom:20px;"><p class="info-p"><strong>Folio:</strong> ${r.id.replace('REP-','')}</p><p class="info-p"><strong>Fecha:</strong> ${new Date(r.fecha_creacion).toLocaleDateString()}</p><p class="info-p"><strong>Cliente:</strong> ${c?App.ui.escapeHTML(c.nombre):'Cliente'}</p></div><div style="background:#f7fafc; padding:10px; border-radius:6px; margin-bottom:15px; border:1px solid #e2e8f0;"><p style="margin:0; font-size:14px; color:#4a5568;"><strong>Problema a reparar:</strong><br>${App.ui.escapeHTML(r.descripcion)}</p></div><div class="totales"><div class="totales-row"><span>Costo Estimado:</span> <span>$${r.precio}</span></div><div class="totales-row"><span>Anticipo Dejado:</span> <span style="color:#e53e3e;">-$${r.anticipo}</span></div><div class="saldo-final"><span>SALDO PENDIENTE:</span><span>$${saldoReal>0?saldoReal:0}</span></div></div><div class="footer"><p>Guarde este comprobante para recoger su artículo.</p><p style="margin-top:10px;font-weight:bold;color:#4A5568;">${App.state.config.redesSociales}</p></div></div><script>setTimeout(()=>{window.print();},500);<\/script></body></html>`;
         ventana.document.write(htmlNota); ventana.document.close();
     },
-   ejecutarBusquedaGlobal(query) {
+    ejecutarBusquedaGlobal(query) {
         const cont = document.getElementById('resultados-busqueda-global');
         if(!cont) return;
         if(!query || query.length < 2) { cont.innerHTML = 'Escribe al menos 2 letras para empezar a buscar...'; return; }
@@ -323,7 +374,6 @@ App.logic = {
         const q = String(query).toLowerCase();
         let resultados = [];
         
-        // 1. Buscar en Clientes
         (App.state.clientes || []).forEach(c => {
             const nombre = String(c.nombre || '').toLowerCase();
             const telefono = String(c.telefono || '').toLowerCase();
@@ -332,7 +382,6 @@ App.logic = {
             }
         });
         
-        // 2. Buscar en Pedidos
         (App.state.pedidos || []).forEach(p => {
             const idPed = String(p.id || '').toLowerCase();
             const notas = String(p.notas || '').toLowerCase();
@@ -341,7 +390,6 @@ App.logic = {
             }
         });
         
-        // 3. Buscar en Productos
         (App.state.productos || []).forEach(p => {
             const nombreProd = String(p.nombre || '').toLowerCase();
             if(nombreProd.includes(q)) {
@@ -349,7 +397,6 @@ App.logic = {
             }
         });
 
-        // 4. Buscar en Artesanos (NUEVO)
         (App.state.artesanos || []).forEach(a => {
             const nombreArt = String(a.nombre || '').toLowerCase();
             const telArt = String(a.telefono || '').toLowerCase();
@@ -358,7 +405,6 @@ App.logic = {
             }
         });
 
-        // 5. Buscar en Proveedores (NUEVO)
         (App.state.proveedores || []).forEach(prv => {
             const nombreProv = String(prv.nombre || '').toLowerCase();
             const telProv = String(prv.telefono || '').toLowerCase();
