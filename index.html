@@ -6,12 +6,10 @@
     <title>Descanso Maya ERP</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#6B46C1">
-    
+
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
-    <link rel="stylesheet" href="css/style.css?v=61">
-    
-    </head>
+    <link rel="stylesheet" href="css/style.css?v=1162">
+</head>
 <body>
     <div class="dm-app">
         <aside class="dm-sidebar">
@@ -22,12 +20,14 @@
                     <div class="dm-sidebar-subtitle">ERP Operativo</div>
                 </div>
             </div>
+
             <nav class="dm-sidebar-nav">
                 <a href="javascript:void(0)" class="dm-sidebar-link active" onclick="App.router.navigate('inicio')">🏠 Dashboard</a>
                 <a href="javascript:void(0)" class="dm-sidebar-link" onclick="App.router.navigate('pedidos')">📦 Pedidos</a>
                 <a href="javascript:void(0)" class="dm-sidebar-link" onclick="App.router.navigate('produccion')">🔨 Taller</a>
                 <a href="javascript:void(0)" class="dm-sidebar-link" onclick="App.router.navigate('inventario')">🧶 Inventario</a>
                 <a href="javascript:void(0)" class="dm-sidebar-link" onclick="App.router.navigate('finanzas')">📊 Finanzas</a>
+                <a href="javascript:void(0)" class="dm-sidebar-link" onclick="App.router.navigate('mas')">⚙️ Más</a>
             </nav>
         </aside>
 
@@ -39,13 +39,13 @@
                         <p class="dm-header-subtitle" id="app-header-subtitle">Resumen general</p>
                     </div>
                 </div>
+
                 <div class="dm-header-right">
                     <button class="dm-btn dm-btn-ghost" onclick="App.views.modalBuscadorGlobal()">🔍 Buscar</button>
                 </div>
             </header>
 
-            <div class="dm-content" id="app-content">
-                </div>
+            <div class="dm-content" id="app-content"></div>
         </main>
 
         <nav class="dm-bottom-nav" id="bottom-nav">
@@ -56,30 +56,34 @@
         </nav>
     </div>
 
-    <div id="loader" class="dm-modal-backdrop hidden" style="z-index: 9999; flex-direction:column; align-items:center; justify-content:center;"></div>
+    <div id="loader" class="dm-modal-backdrop hidden" style="z-index:9999; flex-direction:column; align-items:center; justify-content:center;"></div>
 
     <div id="sheet-bg" class="dm-modal-backdrop hidden">
         <div id="sheet-content" class="dm-modal"></div>
     </div>
-    
-    <script src="js/config.js?v=1167"></script>
-<script src="js/state.js?v=1167"></script>
-<script src="js/ui.js?v=1167"></script>
-<script src="js/api.js?v=1167"></script>
-<script src="js/logic/logic.core.js?v=1167"></script>
-<script src="js/logic/logic.pedidos.js?v=1167"></script>
-<script src="js/logic/logic.produccion.js?v=1167"></script>
-<script src="js/logic/logic.inventario.js?v=1167"></script>
-<script src="js/logic/logic.finanzas.js?v=1167"></script>
-<script src="js/logic/logic.reportes.js?v=1167"></script>
-<script src="js/views/views.core.js?v=1167"></script>
-<script src="js/views/views.pedidos.js?v=1167"></script>
-<script src="js/views/views.produccion.js?v=1167"></script>
-<script src="js/views/views.inventario.js?v=1167"></script>
-<script src="js/views/views.finanzas.js?v=1167"></script>
-<script src="js/views/views.reportes.js?v=1167"></script>
-    <script src="js/compat.js?v=1167"></script>
-<script src="js/main.js?v=1167"></script>
+
+    <script src="js/config.js?v=1162"></script>
+    <script src="js/state.js?v=1162"></script>
+    <script src="js/ui.js?v=1162"></script>
+    <script src="js/api.js?v=1162"></script>
+
+    <script src="js/logic/logic.core.js?v=1162"></script>
+    <script src="js/logic/logic.pedidos.js?v=1162"></script>
+    <script src="js/logic/logic.produccion.js?v=1162"></script>
+    <script src="js/logic/logic.inventario.js?v=1162"></script>
+    <script src="js/logic/logic.finanzas.js?v=1162"></script>
+    <script src="js/logic/logic.reportes.js?v=1162"></script>
+
+    <script src="js/views/views.core.js?v=1162"></script>
+    <script src="js/views/views.catalogos.js?v=1162"></script>
+    <script src="js/views/views.cobranza.js?v=1162"></script>
+    <script src="js/views/views.pedidos.js?v=1162"></script>
+    <script src="js/views/views.produccion.js?v=1162"></script>
+    <script src="js/views/views.inventario.js?v=1162"></script>
+    <script src="js/views/views.finanzas.js?v=1162"></script>
+    <script src="js/views/views.reportes.js?v=1162"></script>
+
+    <script src="js/compat.js?v=1162"></script>
+    <script src="js/main.js?v=1162"></script>
 </body>
 </html>
-
