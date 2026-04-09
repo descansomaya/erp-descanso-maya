@@ -1,5 +1,5 @@
 // ==========================================
-// VISTAS: NÚCLEO Y PANTALLAS PRINCIPALES (REDISEÑADAS)
+// VISTAS: NÚCLEO Y PANTALLAS PRINCIPALES
 // ==========================================
 
 App.views.login = function() { 
@@ -17,153 +17,38 @@ App.views.login = function() {
 App.views.inicio = function() { 
     document.getElementById('app-header-title').innerText = "Dashboard";
     document.getElementById('app-header-subtitle').innerText = "Resumen Operativo";
-
     const pedidosCount = App.state.pedidos ? App.state.pedidos.length : 0; 
     const prodCount = App.state.ordenes_produccion ? App.state.ordenes_produccion.filter(o => o.estado !== 'listo').length : 0; 
-    
     let alertasHTML = ''; 
-    const stockBajo = (App.state.inventario || []).filter(i => { 
-        const libre = parseFloat(i.stock_real||0) - parseFloat(i.stock_reservado||0) - parseFloat(i.stock_comprometido||0); 
-        return parseFloat(i.stock_minimo) > 0 && libre <= parseFloat(i.stock_minimo); 
-    }); 
-    
+    const stockBajo = (App.state.inventario || []).filter(i => { const libre = parseFloat(i.stock_real||0) - parseFloat(i.stock_reservado||0) - parseFloat(i.stock_comprometido||0); return parseFloat(i.stock_minimo) > 0 && libre <= parseFloat(i.stock_minimo); }); 
     if(stockBajo.length > 0) { 
-        alertasHTML += `<div class="dm-alert dm-alert-danger dm-mb-4">
-            <strong>⚠️ Alerta de Insumos Críticos</strong>
-            <ul style="margin:8px 0 0 20px; font-size:var(--dm-fs-sm);">`; 
-        stockBajo.forEach(i => { 
-            const libre = parseFloat(i.stock_real||0) - parseFloat(i.stock_reservado||0) - parseFloat(i.stock_comprometido||0); 
-            alertasHTML += `<li>${App.ui.escapeHTML(i.nombre)}: Quedan ${libre} libres</li>`; 
-        }); 
+        alertasHTML += `<div class="dm-alert dm-alert-danger dm-mb-4"><strong>⚠️ Alerta de Insumos Críticos</strong><ul style="margin:8px 0 0 20px; font-size:var(--dm-fs-sm);">`; 
+        stockBajo.forEach(i => { const libre = parseFloat(i.stock_real||0) - parseFloat(i.stock_reservado||0) - parseFloat(i.stock_comprometido||0); alertasHTML += `<li>${App.ui.escapeHTML(i.nombre)}: Quedan ${libre} libres</li>`; }); 
         alertasHTML += `</ul></div>`; 
     } 
-    
     let pedAtrasados = 0; let pedUrgentes = 0; const hoy = new Date(); hoy.setHours(0,0,0,0);
-    (App.state.pedidos || []).forEach(p => { 
-        if(p.estado !== 'entregado' && p.estado !== 'listo para entregar' && p.fecha_entrega) { 
-            const fEnt = new Date(p.fecha_entrega+'T00:00:00'); 
-            const diffDias = Math.ceil((fEnt - hoy)/(1000*60*60*24)); 
-            if(diffDias < 0) pedAtrasados++; 
-            else if(diffDias >= 0 && diffDias <= 3) pedUrgentes++; 
-        } 
-    });
-    
+    (App.state.pedidos || []).forEach(p => { if(p.estado !== 'entregado' && p.estado !== 'listo para entregar' && p.fecha_entrega) { const fEnt = new Date(p.fecha_entrega+'T00:00:00'); const diffDias = Math.ceil((fEnt - hoy)/(1000*60*60*24)); if(diffDias < 0) pedAtrasados++; else if(diffDias >= 0 && diffDias <= 3) pedUrgentes++; } });
     if(pedAtrasados > 0 || pedUrgentes > 0) {
-        alertasHTML += `<div class="dm-alert dm-alert-warning dm-mb-4">
-            <strong>🚨 Entregas Pendientes</strong>
-            <ul style="margin:8px 0 0 20px; font-size:var(--dm-fs-sm);">`;
+        alertasHTML += `<div class="dm-alert dm-alert-warning dm-mb-4"><strong>🚨 Entregas Pendientes</strong><ul style="margin:8px 0 0 20px; font-size:var(--dm-fs-sm);">`;
         if(pedAtrasados > 0) alertasHTML += `<li>¡Tienes <strong>${pedAtrasados} pedido(s) atrasado(s)</strong>!</li>`;
         if(pedUrgentes > 0) alertasHTML += `<li>Hay ${pedUrgentes} pedido(s) a entregar pronto.</li>`;
         alertasHTML += `</ul></div>`;
     }
-
-    return `
-    <div class="dm-section">
-        ${alertasHTML}
-        <div class="dm-section-header">
-            <h2 class="dm-section-title">Métricas Principales</h2>
-        </div>
-        
-        <div class="dm-grid dm-grid-kpi">
-            <div class="dm-kpi" onclick="App.router.navigate('pedidos')" style="cursor:pointer;">
-                <div class="dm-kpi-label">Ventas Totales</div>
-                <div class="dm-kpi-value">${pedidosCount}</div>
-                <div class="dm-kpi-meta"><span class="dm-badge dm-badge-info">📦 Pedidos</span></div>
-            </div>
-            
-            <div class="dm-kpi" onclick="App.router.navigate('produccion')" style="cursor:pointer;">
-                <div class="dm-kpi-label">En Taller</div>
-                <div class="dm-kpi-value">${prodCount}</div>
-                <div class="dm-kpi-meta"><span class="dm-badge dm-badge-warning">🔨 Producción</span></div>
-            </div>
-            
-            <div class="dm-kpi" onclick="App.router.navigate('nomina')" style="cursor:pointer;">
-                <div class="dm-kpi-label">Nómina</div>
-                <div class="dm-kpi-value" style="color:var(--dm-danger);">Pago</div>
-                <div class="dm-kpi-meta"><span class="dm-badge dm-badge-danger">🧑‍🎨 Artesanos</span></div>
-            </div>
-            
-            <div class="dm-kpi" onclick="App.router.navigate('finanzas')" style="cursor:pointer;">
-                <div class="dm-kpi-label">Flujos</div>
-                <div class="dm-kpi-value" style="color:var(--dm-success);">Ver</div>
-                <div class="dm-kpi-meta"><span class="dm-badge dm-badge-success">📊 Finanzas</span></div>
-            </div>
-        </div>
-    </div>`; 
+    return `<div class="dm-section">${alertasHTML}<div class="dm-section-header"><h2 class="dm-section-title">Métricas Principales</h2></div><div class="dm-grid dm-grid-kpi"><div class="dm-kpi" onclick="App.router.navigate('pedidos')" style="cursor:pointer;"><div class="dm-kpi-label">Ventas Totales</div><div class="dm-kpi-value">${pedidosCount}</div><div class="dm-kpi-meta"><span class="dm-badge dm-badge-info">📦 Pedidos</span></div></div><div class="dm-kpi" onclick="App.router.navigate('produccion')" style="cursor:pointer;"><div class="dm-kpi-label">En Taller</div><div class="dm-kpi-value">${prodCount}</div><div class="dm-kpi-meta"><span class="dm-badge dm-badge-warning">🔨 Producción</span></div></div><div class="dm-kpi" onclick="App.router.navigate('nomina')" style="cursor:pointer;"><div class="dm-kpi-label">Nómina</div><div class="dm-kpi-value" style="color:var(--dm-danger);">Pago</div><div class="dm-kpi-meta"><span class="dm-badge dm-badge-danger">🧑‍🎨 Artesanos</span></div></div><div class="dm-kpi" onclick="App.router.navigate('finanzas')" style="cursor:pointer;"><div class="dm-kpi-label">Flujos</div><div class="dm-kpi-value" style="color:var(--dm-success);">Ver</div><div class="dm-kpi-meta"><span class="dm-badge dm-badge-success">📊 Finanzas</span></div></div></div></div>`; 
 };
 
 App.views.mas = function() { 
-    document.getElementById('app-header-title').innerText = "Menú Adicional";
-    document.getElementById('app-header-subtitle').innerText = "Catálogos y configuración";
-
-    return `<div class="dm-section">
-        <h4 class="dm-label dm-mb-3">Módulos Administrativos</h4>
-        <div class="dm-list dm-mb-5">
-            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('cobranza')">
-                <div class="dm-row"><div class="dm-badge dm-badge-warning" style="font-size:1.2rem; padding:10px;">💰</div><strong class="dm-text-lg">Cobranza (CxC)</strong></div>
-            </div>
-            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('reportes')">
-                <div class="dm-row"><div class="dm-badge dm-badge-primary" style="font-size:1.2rem; padding:10px;">📊</div><strong class="dm-text-lg" style="color:var(--dm-primary);">Centro de Reportes (BI)</strong></div>
-            </div>
-        </div>
-
-        <h4 class="dm-label dm-mb-3">Catálogos y Operación</h4>
-        <div class="dm-list dm-mb-5">
-            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('clientes')">
-                <div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">👥</div><strong class="dm-text-lg">Clientes</strong></div>
-            </div>
-            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('proveedores')">
-                <div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🚚</div><strong class="dm-text-lg">Proveedores</strong></div>
-            </div>
-            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('artesanos')">
-                <div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🧑‍🎨</div><strong class="dm-text-lg">Artesanos / Tareas</strong></div>
-            </div>
-            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('productos')">
-                <div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🧶</div><strong class="dm-text-lg">Catálogo de Productos</strong></div>
-            </div>
-            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('reparaciones')">
-                <div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🪡</div><strong class="dm-text-lg">Reparaciones</strong></div>
-            </div>
-        </div>
-
-        <h4 class="dm-label dm-mb-3">Gestión Externa</h4>
-        <div class="dm-list dm-mb-5">
-            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('compras')">
-                <div class="dm-row"><div class="dm-badge dm-badge-success" style="font-size:1.2rem; padding:10px;">🛒</div><strong class="dm-text-lg" style="color:var(--dm-success);">Ingresar Compra CxP</strong></div>
-            </div>
-            <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('cotizaciones')">
-                <div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">📝</div><strong class="dm-text-lg">Cotizaciones</strong></div>
-            </div>
-            <div class="dm-list-card" style="padding:15px; cursor:pointer; background:var(--dm-surface-2);" onclick="App.router.navigate('configuracion')">
-                <div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px; background:#D1D5DB; color:#374151;">⚙️</div><strong class="dm-text-lg" style="color:#374151;">Configuración del Sistema</strong></div>
-            </div>
-        </div>
-    </div>`; 
+    document.getElementById('app-header-title').innerText = "Menú Adicional"; document.getElementById('app-header-subtitle').innerText = "Catálogos y configuración";
+    return `<div class="dm-section"><h4 class="dm-label dm-mb-3">Módulos Administrativos</h4><div class="dm-list dm-mb-5"><div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('cobranza')"><div class="dm-row"><div class="dm-badge dm-badge-warning" style="font-size:1.2rem; padding:10px;">💰</div><strong class="dm-text-lg">Cobranza (CxC)</strong></div></div><div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('reportes')"><div class="dm-row"><div class="dm-badge dm-badge-primary" style="font-size:1.2rem; padding:10px;">📊</div><strong class="dm-text-lg" style="color:var(--dm-primary);">Centro de Reportes (BI)</strong></div></div></div><h4 class="dm-label dm-mb-3">Catálogos y Operación</h4><div class="dm-list dm-mb-5"><div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('clientes')"><div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">👥</div><strong class="dm-text-lg">Clientes</strong></div></div><div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('proveedores')"><div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🚚</div><strong class="dm-text-lg">Proveedores</strong></div></div><div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('artesanos')"><div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🧑‍🎨</div><strong class="dm-text-lg">Artesanos / Tareas</strong></div></div><div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('productos')"><div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🧶</div><strong class="dm-text-lg">Catálogo de Productos</strong></div></div><div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('reparaciones')"><div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🪡</div><strong class="dm-text-lg">Reparaciones</strong></div></div></div><h4 class="dm-label dm-mb-3">Gestión Externa</h4><div class="dm-list dm-mb-5"><div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('compras')"><div class="dm-row"><div class="dm-badge dm-badge-success" style="font-size:1.2rem; padding:10px;">🛒</div><strong class="dm-text-lg" style="color:var(--dm-success);">Ingresar Compra CxP</strong></div></div><div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('cotizaciones')"><div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">📝</div><strong class="dm-text-lg">Cotizaciones</strong></div></div><div class="dm-list-card" style="padding:15px; cursor:pointer; background:var(--dm-surface-2);" onclick="App.router.navigate('configuracion')"><div class="dm-row"><div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px; background:#D1D5DB; color:#374151;">⚙️</div><strong class="dm-text-lg" style="color:#374151;">Configuración del Sistema</strong></div></div></div></div>`; 
 };
 
 App.views.configuracion = function() { 
-    document.getElementById('app-header-title').innerText = "Configuración";
-    document.getElementById('app-header-subtitle').innerText = "Ajustes del sistema";
-
-    return `<div class="dm-section">
-        <div class="dm-card">
-            <button class="dm-btn dm-btn-secondary dm-btn-block dm-mb-3" onclick="App.logic.descargarRespaldo()">💾 Descargar Respaldo JSON</button>
-            <button class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="window.exportarAExcel(App.state.movimientos_inventario, 'Kardex_Completo')">📥 Descargar Kardex a Excel</button>
-            <button class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="App.logic.verDiagnostico()">🛠️ Diagnóstico de Base de Datos</button>
-            <button class="dm-btn dm-btn-danger dm-btn-block" onclick="localStorage.removeItem('erp_session_token'); location.reload();">🔒 Cerrar Sesión Segura</button>
-        </div>
-    </div>`; 
+    document.getElementById('app-header-title').innerText = "Configuración"; document.getElementById('app-header-subtitle').innerText = "Ajustes del sistema";
+    return `<div class="dm-section"><div class="dm-card"><button class="dm-btn dm-btn-secondary dm-btn-block dm-mb-3" onclick="App.logic.descargarRespaldo()">💾 Descargar Respaldo JSON</button><button class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="window.exportarAExcel(App.state.movimientos_inventario, 'Kardex_Completo')">📥 Descargar Kardex a Excel</button><button class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="App.logic.verDiagnostico()">🛠️ Diagnóstico de Base de Datos</button><button class="dm-btn dm-btn-danger dm-btn-block" onclick="localStorage.removeItem('erp_session_token'); location.reload();">🔒 Cerrar Sesión Segura</button></div></div>`; 
 };
 
 App.views.modalBuscadorGlobal = function() { 
-    let html = `
-        <div class="dm-mb-4" style="position: sticky; top: 0; background: var(--dm-surface); padding-bottom: 10px; z-index: 10;">
-            <input type="text" id="input-busqueda-global" class="dm-input" placeholder="Buscar folio, cliente o producto..." onkeyup="App.logic.ejecutarBusquedaGlobal(this.value)" autocomplete="off">
-        </div>
-        <div id="resultados-busqueda-global" style="max-height:50vh; overflow-y:auto; padding-bottom: 20px; color: var(--dm-text-soft); text-align: center;">
-            Escribe al menos 2 letras para empezar a buscar...
-        </div>
-    `; 
+    let html = `<div class="dm-mb-4" style="position: sticky; top: 0; background: var(--dm-surface); padding-bottom: 10px; z-index: 10;"><input type="text" id="input-busqueda-global" class="dm-input" placeholder="Buscar folio, cliente o producto..." onkeyup="App.logic.ejecutarBusquedaGlobal(this.value)" autocomplete="off"></div><div id="resultados-busqueda-global" style="max-height:50vh; overflow-y:auto; padding-bottom: 20px; color: var(--dm-text-soft); text-align: center;">Escribe al menos 2 letras para empezar a buscar...</div>`; 
     App.ui.openSheet("🔍 Buscador", html); 
     setTimeout(() => document.getElementById('input-busqueda-global').focus(), 400);
 };
