@@ -70,9 +70,47 @@ Object.assign(App.logic, {
     },
     async guardarAbono(datos) { 
         const pedidoObj = App.state.pedidos.find(p => p.id === datos.pedido_id);
-        if(pedidoObj) { const abonosPrevios = App.state.abonos.filter(a => a.pedido_id === pedidoObj.id).reduce((s, a) => s + parseFloat(a.monto || 0), 0); const saldoPendiente = parseFloat(pedidoObj.total) - parseFloat(pedidoObj.anticipo) - abonosPrevios; const nuevoMonto = parseFloat(datos.monto) || 0; if(nuevoMonto > saldoPendiente + 0.1) { alert("❌ Validación: El monto a abonar es superior a la deuda. ¡Revisa la cantidad!"); return; } }
-        App.ui.showLoader("Registrando Pago..."); const nuevoAbono = { id: "ABO-" + Date.now(), pedido_id: datos.pedido_id, cliente_id: datos.cliente_id, monto: parseFloat(datos.monto) || 0, nota: datos.nota, fecha: new Date().toISOString() }; const res = await App.api.fetch("guardar_fila", { nombreHoja: "abonos_clientes", datos: nuevoAbono }); 
-        if (res.status === "success") { App.state.abonos.push(nuevoAbono); if(pedidoObj) { const abonosTotales = App.state.abonos.filter(a => a.pedido_id === pedidoObj.id).reduce((s, a) => s + parseFloat(a.monto || 0), 0); const saldoRealFinal = parseFloat(pedidoObj.total) - parseFloat(pedidoObj.anticipo) - abonosTotales; if(saldoRealFinal <= 0 && pedidoObj.estado !== 'pagado') { await App.api.fetch("actualizar_fila", { nombreHoja: "pedidos", idFila: pedidoObj.id, datosNuevos: { estado: 'pagado' } }); pedidoObj.estado = 'pagado'; } } App.ui.hideLoader(); App.ui.toast("Pago registrado exitosamente"); App.router.handleRoute(); } else { App.ui.hideLoader(); App.ui.toast("Error al guardar pago"); }
+        if(!pedidoObj) { App.ui.toast("Error: Pedido no encontrado"); return; }
+        
+        // 1. Calcular Saldo Exacto
+        const abonosPrevios = App.state.abonos.filter(a => a.pedido_id === pedidoObj.id).reduce((s, a) => s + parseFloat(a.monto || 0), 0); 
+        const saldoPendiente = parseFloat(pedidoObj.total) - parseFloat(pedidoObj.anticipo) - abonosPrevios; 
+        const nuevoMonto = parseFloat(datos.monto) || 0; 
+        
+        // 2. Validación Anti-Fraude/Error
+        if(nuevoMonto <= 0) { alert("❌ El abono debe ser mayor a $0."); return; }
+        if(nuevoMonto > saldoPendiente + 0.05) { alert(`❌ No puedes abonar más del saldo pendiente ($${saldoPendiente.toFixed(2)}).`); return; }
+        
+        App.ui.showLoader("Procesando Pago..."); 
+        const nuevoAbono = { 
+            id: "ABO-" + Date.now(), 
+            pedido_id: datos.pedido_id, 
+            cliente_id: datos.cliente_id, 
+            monto: nuevoMonto, 
+            nota: datos.nota || 'Abono en caja', 
+            metodo_pago: datos.metodo_pago || 'Efectivo', // NUEVO CAMPO
+            fecha: new Date().toISOString() 
+        }; 
+        
+        let operaciones = [{ action: "guardar_fila", nombreHoja: "abonos_clientes", datos: nuevoAbono }];
+
+        // 3. Reglas Automáticas de Estado
+        const saldoRealFinal = saldoPendiente - nuevoMonto; 
+        if(saldoRealFinal <= 0.05 && pedidoObj.estado !== 'pagado') { 
+            // Si liquida la deuda, marcar como pagado automáticamente
+            operaciones.push({ action: "actualizar_fila", nombreHoja: "pedidos", idFila: pedidoObj.id, datosNuevos: { estado: 'pagado' } }); 
+            pedidoObj.estado = 'pagado'; 
+        } 
+        
+        const res = await App.api.fetch("ejecutar_lote", { operaciones: operaciones }); 
+        if (res.status === "success") { 
+            App.state.abonos.push(nuevoAbono); 
+            App.ui.hideLoader(); 
+            App.ui.toast("Pago registrado exitosamente"); 
+            App.router.handleRoute(); 
+        } else { 
+            App.ui.hideLoader(); App.ui.toast("Error al guardar el pago"); 
+        }
     },
     guardarCotizacion(datos) { datos.id = "COT-" + Date.now(); datos.fecha_creacion = new Date().toISOString(); App.state.cotizaciones.push(datos); localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); App.ui.toast("Cotización generada"); App.router.handleRoute(); App.logic.imprimirCotizacion(datos.id); },
     eliminarCotizacion(id) { if(!confirm("⚠️ ¿Eliminar cotización?")) return; App.state.cotizaciones = App.state.cotizaciones.filter(c => c.id !== id); localStorage.setItem('erp_cotizaciones', JSON.stringify(App.state.cotizaciones)); App.ui.toast("Eliminada"); App.router.handleRoute(); },
