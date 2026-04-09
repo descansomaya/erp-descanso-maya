@@ -4,62 +4,67 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Descanso Maya ERP</title>
-	<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#6B46C1">
-    <link rel="stylesheet" href="styles.css">
-	<link rel="stylesheet" href="css/style.css?v=60">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#6B46C1">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="css/style.css?v=61">
+    
     </head>
 <body>
     <div class="dm-app">
-    <aside class="dm-sidebar">
-        <div class="dm-sidebar-brand">
-            <div class="dm-sidebar-logo">DM</div>
-            <div>
-                <div class="dm-sidebar-title">Descanso Maya</div>
-                <div class="dm-sidebar-subtitle">ERP Operativo</div>
-            </div>
-        </div>
-        <nav class="dm-sidebar-nav">
-            <a href="#" class="dm-sidebar-link active" onclick="App.router.navigate('inicio')">🏠 Dashboard</a>
-            <a href="#" class="dm-sidebar-link" onclick="App.router.navigate('pedidos')">📦 Pedidos</a>
-            <a href="#" class="dm-sidebar-link" onclick="App.router.navigate('produccion')">🔨 Taller</a>
-            <a href="#" class="dm-sidebar-link" onclick="App.router.navigate('inventario')">🧶 Inventario</a>
-            <a href="#" class="dm-sidebar-link" onclick="App.router.navigate('finanzas')">📊 Finanzas</a>
-        </nav>
-    </aside>
-
-    <main class="dm-main">
-        <header class="dm-header">
-            <div class="dm-header-left">
+        <aside class="dm-sidebar">
+            <div class="dm-sidebar-brand">
+                <div class="dm-sidebar-logo">DM</div>
                 <div>
-                    <h1 class="dm-header-title" id="app-header-title">Inicio</h1>
-                    <p class="dm-header-subtitle" id="app-header-subtitle">Resumen general</p>
+                    <div class="dm-sidebar-title">Descanso Maya</div>
+                    <div class="dm-sidebar-subtitle">ERP Operativo</div>
                 </div>
             </div>
-            <div class="dm-header-right">
-                <button class="dm-btn dm-btn-ghost" onclick="App.views.modalBuscadorGlobal()">🔍 Buscar</button>
-            </div>
-        </header>
+            <nav class="dm-sidebar-nav">
+                <a href="#" class="dm-sidebar-link active" onclick="App.router.navigate('inicio')">🏠 Dashboard</a>
+                <a href="#" class="dm-sidebar-link" onclick="App.router.navigate('pedidos')">📦 Pedidos</a>
+                <a href="#" class="dm-sidebar-link" onclick="App.router.navigate('produccion')">🔨 Taller</a>
+                <a href="#" class="dm-sidebar-link" onclick="App.router.navigate('inventario')">🧶 Inventario</a>
+                <a href="#" class="dm-sidebar-link" onclick="App.router.navigate('finanzas')">📊 Finanzas</a>
+            </nav>
+        </aside>
 
-        <div class="dm-content" id="app-content">
-            </div>
-    </main>
+        <main class="dm-main">
+            <header class="dm-header">
+                <div class="dm-header-left">
+                    <div>
+                        <h1 class="dm-header-title" id="app-header-title">Inicio</h1>
+                        <p class="dm-header-subtitle" id="app-header-subtitle">Resumen general</p>
+                    </div>
+                </div>
+                <div class="dm-header-right">
+                    <button class="dm-btn dm-btn-ghost" onclick="App.views.modalBuscadorGlobal()">🔍 Buscar</button>
+                </div>
+            </header>
 
-    <nav class="dm-bottom-nav" id="bottom-nav">
-        <a href="#" onclick="App.router.navigate('inicio')"><span>🏠</span>Inicio</a>
-        <a href="#" onclick="App.router.navigate('pedidos')"><span>📦</span>Pedidos</a>
-        <a href="#" onclick="App.router.navigate('produccion')"><span>🔨</span>Taller</a>
-        <a href="#" onclick="App.router.navigate('mas')"><span>⚙️</span>Más</a>
-    </nav>
-</div>
+            <div class="dm-content" id="app-content">
+                </div>
+        </main>
 
-<div id="loader" class="dm-modal-backdrop hidden" style="z-index: 9999; flex-direction:column; align-items:center; justify-content:center;"></div>
+        <nav class="dm-bottom-nav" id="bottom-nav">
+            <a href="#" onclick="App.router.navigate('inicio')"><span>🏠</span>Inicio</a>
+            <a href="#" onclick="App.router.navigate('pedidos')"><span>📦</span>Pedidos</a>
+            <a href="#" onclick="App.router.navigate('produccion')"><span>🔨</span>Taller</a>
+            <a href="#" onclick="App.router.navigate('mas')"><span>⚙️</span>Más</a>
+        </nav>
+    </div>
 
-<div id="sheet-bg" class="dm-modal-backdrop hidden">
-    <div id="sheet-content" class="dm-modal"></div>
-</div>
-	
-<script src="js/state.js?v=35"></script>
+    <div id="loader" class="dm-modal-backdrop hidden" style="z-index: 9999; flex-direction:column; align-items:center; justify-content:center;"></div>
+
+    <div id="sheet-bg" class="dm-modal-backdrop hidden">
+        <div id="sheet-content" class="dm-modal"></div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script src="js/state.js?v=35"></script>
     <script src="js/api.js?v=35"></script>
     <script src="js/ui.js?v=35"></script>
 
@@ -69,15 +74,16 @@
     <script src="js/logic/logic.inventario.js?v=35"></script>
     <script src="js/logic/logic.finanzas.js?v=35"></script>
     <script src="js/logic/logic.reportes.js?v=35"></script> 
-	
-	<script src="js/views/views.core.js?v=35"></script>
+    
+    <script src="js/views/views.core.js?v=35"></script>
     <script src="js/views/views.catalogos.js?v=35"></script>
     <script src="js/views/views.pedidos.js?v=35"></script>
     <script src="js/views/views.produccion.js?v=35"></script>
     <script src="js/views/views.inventario.js?v=35"></script>
     <script src="js/views/views.finanzas.js?v=35"></script>
     <script src="js/views/views.cobranza.js?v=35"></script>
-    <script src="js/views/views.reportes.js?v=31"></script>
+    <script src="js/views/views.reportes.js?v=35"></script>
+
     <script src="js/main.js?v=35"></script>
 </body>
 </html>
