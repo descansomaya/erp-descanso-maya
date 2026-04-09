@@ -9,17 +9,17 @@ App.views.pedidos = function() {
     const title = document.getElementById('app-header-title');
     const subtitle = document.getElementById('app-header-subtitle');
     if (title) title.innerText = 'Pedidos';
-    if (subtitle) subtitle.innerText = 'Gestión de ventas';
+    if (subtitle) subtitle.innerText = 'Gestión de pedidos';
 
     return `
-        <div class="dm-section">
+        <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4" style="padding:10px;">
-    <div class="dm-tabs" style="display:flex; gap:8px; overflow-x:auto; white-space:nowrap; scrollbar-width:none; -ms-overflow-style:none;">
-        <button class="dm-tab active tab-btn-ped" style="flex:0 0 auto; font-size:0.85rem; padding:10px 12px;" onclick="window.switchTabPed('activos', this)">🟢 Activos / Taller</button>
-        <button class="dm-tab tab-btn-ped" style="flex:0 0 auto; font-size:0.85rem; padding:10px 12px;" onclick="window.switchTabPed('listos', this)">🟠 Listos / Cobro</button>
-        <button class="dm-tab tab-btn-ped" style="flex:0 0 auto; font-size:0.85rem; padding:10px 12px;" onclick="window.switchTabPed('historial', this)">✅ Historial</button>
-    </div>
-</div>
+                <div class="dm-tabs tabs-pedidos-mobile" style="display:flex; gap:8px; overflow-x:auto; overflow-y:hidden; white-space:nowrap; scrollbar-width:none; -ms-overflow-style:none;">
+                    <button class="dm-tab active tab-btn-ped" style="flex:0 0 auto; min-width:max-content; font-size:0.82rem; padding:9px 12px;" onclick="window.switchTabPed('activos', this)">🟢 Activos / Taller</button>
+                    <button class="dm-tab tab-btn-ped" style="flex:0 0 auto; min-width:max-content; font-size:0.82rem; padding:9px 12px;" onclick="window.switchTabPed('listos', this)">🟠 Listos / Cobro</button>
+                    <button class="dm-tab tab-btn-ped" style="flex:0 0 auto; min-width:max-content; font-size:0.82rem; padding:9px 12px;" onclick="window.switchTabPed('historial', this)">✅ Historial</button>
+                </div>
+            </div>
 
             <div id="tab-activos" class="tab-content-ped" style="display:block;">
                 ${window.generarListaPedidos('activos')}
