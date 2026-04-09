@@ -1,3 +1,85 @@
+:root {
+  --primary: #6f42c1;
+  --primary-strong: #5b33a8;
+  --bg-soft: #f7f4fc;
+  --text-main: #2d223d;
+  --border-soft: #e6ddf5;
+  --white: #ffffff;
+  --danger: #d9534f;
+  --success: #198754;
+  --warning: #f0ad4e;
+}
+
+.btn,
+.dm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: none;
+  transition: .18s ease;
+}
+
+.btn-primary,
+.dm-btn-primary {
+  background: var(--primary);
+  color: var(--white);
+  border-color: var(--primary);
+}
+
+.btn-primary:hover,
+.dm-btn-primary:hover {
+  background: var(--primary-strong);
+  border-color: var(--primary-strong);
+}
+
+.btn-secondary,
+.dm-btn-secondary {
+  background: var(--white);
+  color: var(--text-main);
+  border-color: var(--border-soft);
+}
+
+.card,
+.dm-card {
+  background: var(--white);
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 6px 18px rgba(60, 20, 90, 0.06);
+}
+
+.form-group,
+.dm-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .btn,
+  .dm-btn {
+    width: 100%;
+  }
+}
+
 :root{
   /* =========================
      IDENTIDAD VISUAL
