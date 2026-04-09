@@ -107,44 +107,27 @@ App.logic.cambiarEstadoProduccion = function(id, nuevoEstado) {
     App.logic.actualizarRegistroGenerico('ordenes_produccion', id, data, 'produccion');
 };
 
-// 2. Recuperar el "Ver Detalles" de Producción
-// 2. Recuperar el "Ver Detalles" de Producción (CON COSTEO Y UTILIDAD)
+// ==========================================
+// 2. RECUPERAR DETALLES DE PRODUCCIÓN CON LÓGICA ORIGINAL DE TARIFAS
+// ==========================================
 window.verDetallesProduccion = function(ordenId) {
     const o = App.state.ordenes_produccion.find(x => x.id === ordenId);
     if(!o) return;
     
+    // Conexiones de tu base de datos relacional
     const pedDet = App.state.pedido_detalle.find(d => d.id === o.pedido_detalle_id) || {}; 
     const p = App.state.pedidos.find(x => x.id === pedDet.pedido_id) || {}; 
     const cliente = App.state.clientes.find(x => x.id === p.cliente_id) || {};
     const prod = App.state.productos.find(x => x.id === pedDet.producto_id) || {};
-    
     const nomCliente = p.cliente_id === 'STOCK_INTERNO' ? 'STOCK BODEGA' : (cliente.nombre || 'Desconocido');
 
-    // 1. Calcular costo de materiales aproximado (Si guardabas el costo en el inventario)
-    let costoMateriales = 0;
-    try {
-        const receta = JSON.parse(o.receta_usada || '[]');
-        receta.forEach(r => {
-            const mat = App.state.inventario.find(m => m.id === r.mat_id);
-            // Si tenías un campo de costo, se suma aquí. (Ej. mat.costo_unitario)
-            if(mat && mat.costo) costoMateriales += (parseFloat(mat.costo) * parseFloat(r.cant));
-        });
-    } catch(e){}
-
-    // 2. Costo de mano de obra (Rescata el que ya tenías guardado)
-    const costoManoObra = parseFloat(o.costo_mano_obra || o.pago_artesano || 0);
-    const costoTotal = costoMateriales + costoManoObra;
-    
-    // 3. Precio de venta (Del pedido original) y Utilidad
-    const precioVenta = parseFloat(p.total || 0) / (parseFloat(p.cantidad || 1));
-    const utilidad = precioVenta - costoTotal;
-
-    // 4. Selector de Artesanos (Rescata el que ya tenías asignado)
+    // Recuperamos las opciones de artesanos
     let artesanosOpts = '<option value="">-- Sin Asignar --</option>';
     (App.state.artesanos || []).forEach(art => {
         artesanosOpts += `<option value="${art.id}" ${o.artesano_id === art.id ? 'selected' : ''}>${art.nombre}</option>`;
     });
 
+    // Construimos el HTML respetando tus campos originales (tarifa_nombre, pago_estimado, etc.)
     let html = `
     <div class="dm-list-card dm-mb-4" style="background:var(--dm-surface-2); padding:15px; border:none;">
         <div class="dm-row-between dm-mb-2">
@@ -158,46 +141,72 @@ window.verDetallesProduccion = function(ordenId) {
     </div>
     
     <div class="dm-form-group">
-        <label class="dm-label">Notas del Pedido (Instrucciones)</label>
+        <label class="dm-label">Notas de Producción</label>
         <div class="dm-alert dm-alert-warning" style="background:#fff;">
-            ${p.notas ? App.ui.escapeHTML(p.notas) : '<i>Sin instrucciones especiales registradas.</i>'}
+            ${p.notas ? App.ui.escapeHTML(p.notas) : '<i>Sin instrucciones especiales.</i>'}
         </div>
     </div>
 
-    <h4 class="dm-label dm-mb-3">Asignación y Costos</h4>
-    <div class="dm-form-row">
+    <form id="dynamic-form">
+        <input type="hidden" name="id" value="${o.id}">
+        <h4 class="dm-label dm-mb-3">Asignación y Tabulador</h4>
+        
         <div class="dm-form-group">
-            <label class="dm-label">Artesano</label>
-            <select class="dm-select" onchange="App.logic.actualizarRegistroGenerico('ordenes_produccion', '${o.id}', { artesano_id: this.value }, 'produccion')">
+            <label class="dm-label">Seleccionar Artesano</label>
+            <select class="dm-select" name="artesano_id" id="select-artesano" onchange="window.cargarTarifas(this.value)" required>
                 ${artesanosOpts}
             </select>
         </div>
-        <div class="dm-form-group">
-            <label class="dm-label">Mano de Obra ($)</label>
-            <input type="number" step="0.01" class="dm-input" value="${costoManoObra}" onchange="App.logic.actualizarRegistroGenerico('ordenes_produccion', '${o.id}', { costo_mano_obra: this.value }, 'produccion')">
-        </div>
-    </div>
 
-    <h4 class="dm-label dm-mb-3 dm-mt-2">Finanzas de esta pieza</h4>
-    <div class="dm-grid-3 dm-mb-4" style="background:#fff; border:1px solid var(--dm-border); border-radius:var(--dm-radius-md); padding:15px; text-align:center;">
-        <div>
-            <small class="dm-muted dm-text-xs">Precio Venta</small><br>
-            <strong style="color:var(--dm-success);">$${precioVenta.toFixed(2)}</strong>
+        <div class="dm-form-row">
+            <div class="dm-form-group">
+                <label class="dm-label">Tipo de Trabajo (Tarifa)</label>
+                <select class="dm-select" id="select-tarifas" name="tarifa_artesano_id" onchange="window.calcTotalTrabajo()" required>
+                    <option value="">-- Seleccione Artesano Primero --</option>
+                </select>
+            </div>
+            
+            <div class="dm-form-group hidden">
+                <input type="number" id="cant-trabajo" value="1" oninput="window.calcTotalTrabajo()">
+                <input type="hidden" id="tarea_nombre" name="tarifa_nombre">
+            </div>
+
+            <div class="dm-form-group">
+                <label class="dm-label">Pago Estimado ($)</label>
+                <input type="number" step="0.01" class="dm-input" id="total-trabajo" name="pago_estimado" value="${o.pago_estimado || ''}" readonly style="background:#f3f4f6;">
+            </div>
         </div>
-        <div style="border-left:1px solid var(--dm-border); border-right:1px solid var(--dm-border);">
-            <small class="dm-muted dm-text-xs">Costo Prod.</small><br>
-            <strong style="color:var(--dm-danger);">$${costoTotal.toFixed(2)}</strong>
-        </div>
-        <div>
-            <small class="dm-muted dm-text-xs">Utilidad</small><br>
-            <strong style="color:var(--dm-primary);">$${utilidad.toFixed(2)}</strong>
-        </div>
-    </div>
+
+        <button type="submit" class="dm-btn dm-btn-primary dm-btn-block dm-mt-4">💾 Guardar Asignación</button>
+    </form>
     
     <div class="dm-row-between dm-mt-4">
         <button class="dm-btn dm-btn-secondary" onclick="App.ui.closeSheet()">Cerrar</button>
-        ${o.estado !== 'listo' ? `<button class="dm-btn dm-btn-primary" onclick="App.views.modalMateriaPrima('${o.id}')">🧶 Hilos (Receta)</button>` : ''}
+        ${o.estado !== 'listo' ? `<button class="dm-btn dm-btn-ghost" style="border:1px solid var(--dm-border);" onclick="App.views.modalMateriaPrima('${o.id}')">🧶 Asignar Hilos</button>` : ''}
     </div>`;
 
-    App.ui.openSheet("Detalle de Producción", html);
+    App.ui.openSheet("Detalle de Producción", html, (data) => {
+        // Al guardar, usamos tu lógica genérica para actualizar la base de datos
+        App.logic.actualizarRegistroGenerico('ordenes_produccion', o.id, data, 'produccion');
+        App.ui.toast("Asignación guardada con éxito");
+        App.ui.closeSheet();
+    });
+
+    // Si ya tenía un artesano asignado, cargamos sus tarifas automáticamente al abrir el modal
+    if(o.artesano_id) {
+        setTimeout(() => {
+            window.cargarTarifas(o.artesano_id);
+            // Pre-seleccionar la tarifa que ya tenía guardada si existe
+            if(o.pago_estimado) {
+                const selectTarifas = document.getElementById('select-tarifas');
+                for(let i=0; i<selectTarifas.options.length; i++) {
+                    if(selectTarifas.options[i].value == o.pago_estimado) {
+                        selectTarifas.selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+        }, 200);
+    }
 };
+
