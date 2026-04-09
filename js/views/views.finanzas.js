@@ -1,8 +1,36 @@
 // ==========================================
-// VISTAS: FINANZAS Y GASTOS
+// VISTAS: FINANZAS Y GASTOS (UI MEJORADA)
 // ==========================================
 
-App.views.finanzas = function() { document.getElementById('bottom-nav').style.display = 'flex'; setTimeout(() => App.logic.renderGraficasFinanzas('todo'), 50); return `<div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3 class="card-title" style="margin:0;">Finanzas</h3><select id="filtro-finanzas" onchange="App.logic.renderGraficasFinanzas(this.value)" style="padding:5px; border-radius:5px; border:1px solid #CBD5E0;"><option value="todo">Historial</option><option value="mes_actual">Este Mes</option><option value="mes_pasado">Mes Pasado</option><option value="trimestre_actual">Este Trimestre</option><option value="anio_actual">Este Año</option></select></div><div id="finanzas-contenedor">Cargando datos...</div></div><button class="fab" style="background: var(--danger);" onclick="App.views.formGasto()">+</button>`; };
+App.views.finanzas = function() { 
+    document.getElementById('bottom-nav').style.display = 'flex'; 
+    
+    // Por defecto, carga "Este Mes" para que sea más útil al abrir
+    setTimeout(() => App.logic.renderGraficasFinanzas('mes_actual'), 50); 
+    
+    return `<div class="card" style="padding-top:15px;">
+        <h3 class="card-title" style="margin-bottom:15px;">Dashboard Financiero</h3>
+        
+        <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 15px; scrollbar-width: none; -ms-overflow-style: none;">
+            <style>
+                .pill-fin { padding: 8px 16px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; border: 1px solid var(--primary); color: var(--primary); background: transparent; cursor: pointer; white-space: nowrap; transition: 0.2s all; }
+                .pill-fin.active { background: var(--primary); color: white; }
+                /* Ocultar barra de scroll en Webkit */
+                .pill-fin-container::-webkit-scrollbar { display: none; }
+            </style>
+            <button class="pill-fin active" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); App.logic.renderGraficasFinanzas('mes_actual')">Este Mes</button>
+            <button class="pill-fin" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); App.logic.renderGraficasFinanzas('mes_pasado')">Mes Pasado</button>
+            <button class="pill-fin" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); App.logic.renderGraficasFinanzas('trimestre_actual')">Este Trimestre</button>
+            <button class="pill-fin" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); App.logic.renderGraficasFinanzas('anio_actual')">Este Año</button>
+            <button class="pill-fin" onclick="document.querySelectorAll('.pill-fin').forEach(b=>b.classList.remove('active')); this.classList.add('active'); App.logic.renderGraficasFinanzas('todo')">Historial Completo</button>
+        </div>
+        
+        <div id="finanzas-contenedor">
+            <div style="text-align:center; padding: 30px; color: var(--text-muted);">Cargando finanzas...</div>
+        </div>
+    </div>
+    <button class="fab" style="background: var(--danger);" onclick="App.views.formGasto()">+</button>`; 
+};
 
 App.views.detalleFinanzas = function(tipo, filtro) { 
     const hoy = new Date(); let mesActual = hoy.getMonth(); let anioActual = hoy.getFullYear(); let mesPasado = mesActual - 1; let anioPasado = anioActual; if(mesPasado < 0) { mesPasado = 11; anioPasado--; } let triActual = Math.floor(mesActual / 3); 
@@ -75,10 +103,8 @@ App.views.detalleFinanzas = function(tipo, filtro) {
             } 
         }); 
         (App.state.compras || []).forEach(c => { 
-            // 👇 SOLUCIÓN AL BUG DE CERO FALSO 👇
             const pagado = c.monto_pagado !== undefined && c.monto_pagado !== "" ? parseFloat(c.monto_pagado) : parseFloat(c.total||0);
             const deuda = parseFloat(c.total||0) - pagado; 
-            
             if(deuda > 0) { 
                 hayDeudas=true; 
                 const pv = (App.state.proveedores || []).find(x => x.id === c.proveedor_id); 
