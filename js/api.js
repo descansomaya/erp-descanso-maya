@@ -2,9 +2,7 @@ window.App = window.App || {};
 App.api = App.api || {};
 
 App.api.getBaseUrl = function () {
-    return (window.App && App.config && App.config.api && App.config.api.gasUrl)
-        ? App.config.api.gasUrl
-        : '';
+    return window.App?.config?.api?.gasUrl || '';
 };
 
 App.api.fetch = async function (action, payload = {}) {
@@ -12,7 +10,16 @@ App.api.fetch = async function (action, payload = {}) {
         const baseUrl = App.api.getBaseUrl();
 
         if (!baseUrl) {
-            console.error('App.config actual:', window.App?.config);
+            const debugInfo = {
+                hasWindowApp: !!window.App,
+                hasConfig: !!window.App?.config,
+                hasApiConfig: !!window.App?.config?.api,
+                gasUrl: window.App?.config?.api?.gasUrl || null
+            };
+
+            console.error('DEBUG App config:', debugInfo);
+            alert('DEBUG URL GAS\\n' + JSON.stringify(debugInfo, null, 2));
+
             throw new Error('No hay URL configurada para Apps Script');
         }
 
