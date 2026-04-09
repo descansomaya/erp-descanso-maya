@@ -43,10 +43,11 @@ App.views.inicio = function() {
 
 App.views.mas = function() { 
     return `<div class="grid-2">
-        <div class="card stat-card" style="cursor:pointer; background:#FEFCBF; grid-column: span 2;" onclick="App.router.navigate('cobranza')"><div class="label" style="margin-top:0; color:#B7791F; font-size:1.1rem;">💰 Cobranza (Cuentas por Cobrar)</div></div>
+        <div class="card stat-card" style="cursor:pointer; background:#FEFCBF; grid-column: span 2;" onclick="App.router.navigate('cobranza')"><div class="label" style="margin-top:0; color:#B7791F; font-size:1.1rem;">💰 Cobranza (CxC)</div></div>
+        <div class="card stat-card" style="cursor:pointer; background:#EBF8FF; grid-column: span 2;" onclick="App.router.navigate('reportes')"><div class="label" style="margin-top:0; color:#2B6CB0; font-size:1.1rem;">📊 Centro de Reportes (BI)</div></div>
         <div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('clientes')"><div class="label" style="margin-top:0;">👥 Clientes</div></div>
         <div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('proveedores')"><div class="label" style="margin-top:0;">🚚 Proveedores</div></div>
-        <div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('artesanos')"><div class="label" style="margin-top:0;">🧑‍🎨 Artesanos / Tareas</div></div>
+        <div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('artesanos')"><div class="label" style="margin-top:0;">🧑‍🎨 Artesanos</div></div>
         <div class="card stat-card" style="cursor:pointer; background: #F0FFF4;" onclick="App.router.navigate('inventario')"><div class="label" style="margin-top:0; color:#276749;">📦 Bodega / Insumos</div></div>
         <div class="card stat-card" style="cursor:pointer;" onclick="App.router.navigate('productos')"><div class="label" style="margin-top:0;">🧶 Productos / Recetas</div></div>
         <div class="card stat-card" style="cursor:pointer; background: #EBF8FF;" onclick="App.router.navigate('compras')"><div class="label" style="margin-top:0; color:#3182CE;">🛒 Ingresar Compra</div></div>
@@ -55,6 +56,7 @@ App.views.mas = function() {
         <div class="card stat-card" style="cursor:pointer; background: #EDF2F7; grid-column: span 2;" onclick="App.router.navigate('configuracion')"><div class="label" style="margin-top:0; color: #4A5568;">⚙️ Configuración</div></div>
     </div>`; 
 };
+
 App.views.configuracion = function() { return `<div class="card"><h3 class="card-title">Configuración</h3><button class="btn btn-primary" style="width: 100%; margin-bottom: 15px;" onclick="App.logic.descargarRespaldo()">💾 Descargar Respaldo JSON</button><button class="btn btn-secondary" style="width: 100%; margin-bottom: 15px; border-color:#38A169; color:#38A169; background:transparent;" onclick="window.exportarAExcel(App.state.movimientos_inventario, 'Kardex_Completo')">📥 Descargar Kardex a Excel</button><button class="btn btn-secondary" style="width: 100%; margin-bottom: 15px; border-color:#2B6CB0; color:#2B6CB0; background:transparent;" onclick="App.logic.verDiagnostico()">🛠️ Diagnóstico de Base de Datos</button><button class="btn btn-secondary" style="width: 100%; background: #FED7D7; color: var(--danger); border: none;" onclick="localStorage.removeItem('erp_session_token'); location.reload();">🔒 Cerrar Sesión</button></div>`; };
 
 App.views.modalBuscadorGlobal = function() { 
