@@ -315,18 +315,21 @@ App.router = {
         if (App.views && typeof App.views[hash] === 'function') {
             if (contentDiv) contentDiv.innerHTML = App.views[hash]();
 
-            if (headerTitle) {
-                if (hash === 'inicio') {
-                    headerTitle.textContent = 'Inicio';
-                    if (headerSubtitle) headerSubtitle.textContent = 'Resumen general';
-                } else if (hash === 'inventario') {
-                    headerTitle.textContent = 'Inventario';
-                    if (headerSubtitle) headerSubtitle.textContent = 'Control de materiales';
-                } else {
-                    headerTitle.textContent = hash.charAt(0).toUpperCase() + hash.slice(1);
-                    if (headerSubtitle) headerSubtitle.textContent = 'Gestión de ' + hash;
-                }
-            }
+          if (headerTitle) {
+    if (hash === 'inicio') {
+        headerTitle.textContent = 'Inicio';
+        if (headerSubtitle) headerSubtitle.textContent = 'Resumen general';
+    } else if (hash === 'inventario') {
+        headerTitle.textContent = 'Inventario';
+        if (headerSubtitle) headerSubtitle.textContent = 'Control de materiales';
+    } else if (hash === 'mas') {
+        headerTitle.textContent = 'Más';
+        if (headerSubtitle) headerSubtitle.textContent = 'Accesos y configuración';
+    } else {
+        headerTitle.textContent = hash.charAt(0).toUpperCase() + hash.slice(1);
+        if (headerSubtitle) headerSubtitle.textContent = 'Gestión de ' + hash;
+    }
+}
         } else {
             if (contentDiv) {
                 contentDiv.innerHTML = `<div class="dm-card"><p class="dm-center dm-muted">Módulo no encontrado.</p></div>`;
