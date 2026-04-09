@@ -3,8 +3,51 @@
 // ==========================================
 
 App.api = { 
-    // 👇 PEGA TU ENLACE REAL AQUÍ ABAJO 👇
-    gasUrl: "https://script.google.com/macros/s/AKfycbxL3KzjesyZIfiC-Dyr0SwwzwNnPsv5FgHpt-JhyscNpN1eTvRwAh_rdgoxdVnKTAwu/exec", 
+
+    window.App = window.App || {};
+App.api = App.api || {};
+
+App.api.baseUrl = (App.config && App.config.api && App.config.api.gasUrl) || '';
+
+App.api.request = async function (action, payload = {}) {
+  if (!App.api.baseUrl) {
+    throw new Error('No hay URL configurada para Apps Script');
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), (App.config?.api?.timeoutMs || 30000));
+
+  try {
+    const response = await fetch(App.api.baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8'
+      },
+      body: JSON.stringify({
+        action,
+        ...payload
+      }),
+      signal: controller.signal
+    });
+
+    const text = await response.text();
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      throw new Error('Respuesta inválida del servidor');
+    }
+
+    if (!response.ok) {
+      throw new Error(data?.message || 'Error en la petición');
+    }
+
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
     
     async fetch(action, payload = {}) { 
         try { 
