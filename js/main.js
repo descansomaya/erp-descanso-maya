@@ -108,11 +108,11 @@ App.logic.cambiarEstadoProduccion = function(id, nuevoEstado) {
 };
 
 // 2. Recuperar el "Ver Detalles" de Producción
+// 2. Recuperar el "Ver Detalles" de Producción (CON COSTEO Y UTILIDAD)
 window.verDetallesProduccion = function(ordenId) {
     const o = App.state.ordenes_produccion.find(x => x.id === ordenId);
     if(!o) return;
     
-    const a = App.state.artesanos.find(x => x.id === o.artesano_id) || {}; 
     const pedDet = App.state.pedido_detalle.find(d => d.id === o.pedido_detalle_id) || {}; 
     const p = App.state.pedidos.find(x => x.id === pedDet.pedido_id) || {}; 
     const cliente = App.state.clientes.find(x => x.id === p.cliente_id) || {};
@@ -120,15 +120,36 @@ window.verDetallesProduccion = function(ordenId) {
     
     const nomCliente = p.cliente_id === 'STOCK_INTERNO' ? 'STOCK BODEGA' : (cliente.nombre || 'Desconocido');
 
+    // 1. Calcular costo de materiales aproximado (Si guardabas el costo en el inventario)
+    let costoMateriales = 0;
+    try {
+        const receta = JSON.parse(o.receta_usada || '[]');
+        receta.forEach(r => {
+            const mat = App.state.inventario.find(m => m.id === r.mat_id);
+            // Si tenías un campo de costo, se suma aquí. (Ej. mat.costo_unitario)
+            if(mat && mat.costo) costoMateriales += (parseFloat(mat.costo) * parseFloat(r.cant));
+        });
+    } catch(e){}
+
+    // 2. Costo de mano de obra (Rescata el que ya tenías guardado)
+    const costoManoObra = parseFloat(o.costo_mano_obra || o.pago_artesano || 0);
+    const costoTotal = costoMateriales + costoManoObra;
+    
+    // 3. Precio de venta (Del pedido original) y Utilidad
+    const precioVenta = parseFloat(p.total || 0) / (parseFloat(p.cantidad || 1));
+    const utilidad = precioVenta - costoTotal;
+
+    // 4. Selector de Artesanos (Rescata el que ya tenías asignado)
+    let artesanosOpts = '<option value="">-- Sin Asignar --</option>';
+    (App.state.artesanos || []).forEach(art => {
+        artesanosOpts += `<option value="${art.id}" ${o.artesano_id === art.id ? 'selected' : ''}>${art.nombre}</option>`;
+    });
+
     let html = `
     <div class="dm-list-card dm-mb-4" style="background:var(--dm-surface-2); padding:15px; border:none;">
         <div class="dm-row-between dm-mb-2">
-            <span class="dm-text-sm dm-muted">Folio Pedido:</span>
-            <strong>${(p.id||'').replace('PED-','')}</strong>
-        </div>
-        <div class="dm-row-between dm-mb-2">
-            <span class="dm-text-sm dm-muted">Cliente / Destino:</span>
-            <strong style="color:var(--dm-primary);">${nomCliente}</strong>
+            <span class="dm-text-sm dm-muted">Folio / Cliente:</span>
+            <strong style="color:var(--dm-primary);">${(p.id||'').replace('PED-','')} - ${nomCliente}</strong>
         </div>
         <div class="dm-row-between">
             <span class="dm-text-sm dm-muted">Producto a tejer:</span>
@@ -143,14 +164,39 @@ window.verDetallesProduccion = function(ordenId) {
         </div>
     </div>
 
-    <div class="dm-form-group">
-        <label class="dm-label">Artesano Asignado</label>
-        <div class="dm-input" style="background:#f9fafb; pointer-events:none;">${a.nombre || 'Nadie asignado aún'}</div>
+    <h4 class="dm-label dm-mb-3">Asignación y Costos</h4>
+    <div class="dm-form-row">
+        <div class="dm-form-group">
+            <label class="dm-label">Artesano</label>
+            <select class="dm-select" onchange="App.logic.actualizarRegistroGenerico('ordenes_produccion', '${o.id}', { artesano_id: this.value }, 'produccion')">
+                ${artesanosOpts}
+            </select>
+        </div>
+        <div class="dm-form-group">
+            <label class="dm-label">Mano de Obra ($)</label>
+            <input type="number" step="0.01" class="dm-input" value="${costoManoObra}" onchange="App.logic.actualizarRegistroGenerico('ordenes_produccion', '${o.id}', { costo_mano_obra: this.value }, 'produccion')">
+        </div>
+    </div>
+
+    <h4 class="dm-label dm-mb-3 dm-mt-2">Finanzas de esta pieza</h4>
+    <div class="dm-grid-3 dm-mb-4" style="background:#fff; border:1px solid var(--dm-border); border-radius:var(--dm-radius-md); padding:15px; text-align:center;">
+        <div>
+            <small class="dm-muted dm-text-xs">Precio Venta</small><br>
+            <strong style="color:var(--dm-success);">$${precioVenta.toFixed(2)}</strong>
+        </div>
+        <div style="border-left:1px solid var(--dm-border); border-right:1px solid var(--dm-border);">
+            <small class="dm-muted dm-text-xs">Costo Prod.</small><br>
+            <strong style="color:var(--dm-danger);">$${costoTotal.toFixed(2)}</strong>
+        </div>
+        <div>
+            <small class="dm-muted dm-text-xs">Utilidad</small><br>
+            <strong style="color:var(--dm-primary);">$${utilidad.toFixed(2)}</strong>
+        </div>
     </div>
     
     <div class="dm-row-between dm-mt-4">
-        <button class="dm-btn dm-btn-secondary" onclick="App.ui.closeSheet()">Cerrar Detalles</button>
-        ${o.estado !== 'listo' ? `<button class="dm-btn dm-btn-primary" onclick="App.views.modalMateriaPrima('${o.id}')">🧶 Ver/Editar Hilos</button>` : ''}
+        <button class="dm-btn dm-btn-secondary" onclick="App.ui.closeSheet()">Cerrar</button>
+        ${o.estado !== 'listo' ? `<button class="dm-btn dm-btn-primary" onclick="App.views.modalMateriaPrima('${o.id}')">🧶 Hilos (Receta)</button>` : ''}
     </div>`;
 
     App.ui.openSheet("Detalle de Producción", html);
