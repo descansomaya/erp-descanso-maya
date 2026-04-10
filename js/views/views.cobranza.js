@@ -7,7 +7,12 @@ App.views = App.views || {};
 
 App.views.cobranza = function() {
     const bottomNav = document.getElementById('bottom-nav');
+    const title = document.getElementById('app-header-title');
+    const subtitle = document.getElementById('app-header-subtitle');
+
     if (bottomNav) bottomNav.style.display = 'flex';
+    if (title) title.innerText = 'Cobranza';
+    if (subtitle) subtitle.innerText = 'Cuentas por cobrar';
 
     const pedidos = App.state.pedidos || [];
     const clientes = App.state.clientes || [];
@@ -83,7 +88,7 @@ App.views.cobranza = function() {
                         ${c && c.telefono ? `
                             <button
                                 class="dm-btn dm-btn-secondary dm-btn-sm"
-                                style="color:#38A169; border-color:#38A169;"
+                                style="color:#38A169; border-color:#38A693;"
                                 onclick="App.views.enviarRecordatorioSeguro('${p.id}', '${p.estado === 'listo para entregar' ? 'listo' : 'cobro'}')"
                             >
                                 💬 Recordatorio
@@ -99,22 +104,25 @@ App.views.cobranza = function() {
     });
 
     reparaciones.forEach(r => {
+        const c = clientes.find(cli => cli.id === r.cliente_id);
+        const nombreCli = c ? c.nombre : 'Cliente';
         const saldo = parseFloat(r.precio || 0) - parseFloat(r.anticipo || 0);
 
         if (saldo > 0) {
             totalPorCobrar += saldo;
-
-            const c = clientes.find(cli => cli.id === r.cliente_id);
 
             const tarjeta = `
                 <div class="dm-list-card" style="border:1px dashed #805AD5; background:#FAF5FF;">
                     <div class="dm-row-between" style="align-items:flex-start; gap:12px; margin-bottom:8px;">
                         <div style="flex:1; min-width:0;">
                             <div class="dm-fw-bold" style="color:#6B46C1; word-break:break-word;">
-                                ${App.ui.safe((r.id || '').replace('REP-', ''))} (Rep) - ${App.ui.safe(c ? c.nombre : 'Cliente')}
+                                ${App.ui.safe((r.id || '').replace('REP-', ''))} (Rep) - ${App.ui.safe(nombreCli)}
                             </div>
                             <div class="dm-text-sm dm-muted">
                                 ${App.ui.safe(r.descripcion || 'Servicio')}
+                            </div>
+                            <div class="dm-text-sm dm-muted dm-mt-2">
+                                Estado: ${App.ui.safe(r.estado || 'pendiente')}
                             </div>
                         </div>
 
@@ -139,22 +147,39 @@ App.views.cobranza = function() {
 
                     <div class="dm-list-card-actions">
                         <button
-                            class="dm-btn dm-btn-secondary dm-btn-sm"
-                            style="color:#6B46C1; border-color:#6B46C1;"
-                            onclick="App.views.moduloNoDisponible('Reparaciones')"
+                            class="dm-btn dm-btn-primary dm-btn-sm"
+                            style="background:var(--success); border-color:var(--success);"
+                            onclick="App.views.abrirCobroSeguro('${r.id}', '${r.cliente_id}', ${saldo})"
                         >
-                            🪡 Reparación pendiente
+                            💰 Cobrar
                         </button>
+
+                        <button
+                            class="dm-btn dm-btn-secondary dm-btn-sm"
+                            onclick="App.logic.imprimirNota('${r.id}')"
+                        >
+                            🖨️ Nota
+                        </button>
+
+                        ${c && c.telefono ? `
+                            <button
+                                class="dm-btn dm-btn-secondary dm-btn-sm"
+                                style="color:#38A169; border-color:#38A169;"
+                                onclick="App.views.enviarRecordatorioSeguro('${r.id}', '${r.estado === 'lista' || r.estado === 'entregada' ? 'listo' : 'cobro'}')"
+                            >
+                                💬 Recordatorio
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
             `;
 
-            if (r.estado === 'entregada') listosConDeuda.push(tarjeta);
+            if (r.estado === 'lista' || r.estado === 'entregada') listosConDeuda.push(tarjeta);
             else enProcesoConDeuda.push(tarjeta);
         }
     });
 
-    let html = `
+    return `
         <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4">
                 <h3 class="dm-card-title">Cuentas por Cobrar (CxC)</h3>
@@ -170,31 +195,29 @@ App.views.cobranza = function() {
 
             <div class="dm-mb-4">
                 <h4 style="margin-bottom:10px; color:#C53030; display:flex; align-items:center; gap:8px;">
-                    🚨 Listos para Entregar (Prioridad)
+                    🚨 Listos para Entregar / Cerrar
                     <span class="dm-badge dm-badge-danger">${listosConDeuda.length}</span>
                 </h4>
 
                 ${listosConDeuda.length === 0
-                    ? `<div class="dm-alert dm-alert-info">No hay pedidos listos pendientes de pago.</div>`
+                    ? `<div class="dm-alert dm-alert-info">No hay trabajos listos pendientes de pago.</div>`
                     : `<div class="dm-list">${listosConDeuda.join('')}</div>`
                 }
             </div>
 
             <div class="dm-mb-4">
                 <h4 style="margin-bottom:10px; color:#2B6CB0; display:flex; align-items:center; gap:8px;">
-                    ⏳ En Producción (Abonos Pendientes)
+                    ⏳ En proceso / Abonos pendientes
                     <span class="dm-badge dm-badge-primary">${enProcesoConDeuda.length}</span>
                 </h4>
 
                 ${enProcesoConDeuda.length === 0
-                    ? `<div class="dm-alert dm-alert-info">No hay deudas en taller.</div>`
+                    ? `<div class="dm-alert dm-alert-info">No hay saldos pendientes en proceso.</div>`
                     : `<div class="dm-list">${enProcesoConDeuda.join('')}</div>`
                 }
             </div>
         </div>
     `;
-
-    return html;
 };
 
 // ==========================================
@@ -207,8 +230,13 @@ App.views.abrirCobroSeguro = function(pedidoId, clienteId, saldo) {
         return;
     }
 
-    if (typeof App.views.modalAbonos === 'function') {
+    if (typeof App.views.modalAbonos === 'function' && String(pedidoId).startsWith('PED-')) {
         App.views.modalAbonos(pedidoId);
+        return;
+    }
+
+    if (String(pedidoId).startsWith('REP-')) {
+        App.views.formCobroReparacion(pedidoId, clienteId, saldo);
         return;
     }
 
@@ -222,4 +250,64 @@ App.views.enviarRecordatorioSeguro = function(pedidoId, tipo) {
     }
 
     App.ui.toast('La función de WhatsApp no está disponible en esta versión.', 'warning');
+};
+
+App.views.formCobroReparacion = function(reparacionId, clienteId, saldo) {
+    const reparacion = (App.state.reparaciones || []).find(r => r.id === reparacionId);
+    if (!reparacion) {
+        App.ui.toast('Reparación no encontrada', 'danger');
+        return;
+    }
+
+    const formHTML = `
+        <form id="dynamic-form">
+            <input type="hidden" name="pedido_id" value="${reparacionId}">
+            <input type="hidden" name="cliente_id" value="${clienteId || reparacion.cliente_id || ''}">
+
+            <div class="dm-alert dm-alert-info dm-mb-4">
+                Saldo pendiente: $${parseFloat(saldo || 0).toFixed(2)}
+            </div>
+
+            <div class="dm-form-row">
+                <div class="dm-form-group">
+                    <label class="dm-label">Abonar ($)</label>
+                    <input
+                        type="number"
+                        step="0.01"
+                        class="dm-input"
+                        name="monto"
+                        max="${saldo}"
+                        required
+                    >
+                </div>
+
+                <div class="dm-form-group">
+                    <label class="dm-label">Método</label>
+                    <select class="dm-select" name="metodo_pago">
+                        <option value="Efectivo">Efectivo</option>
+                        <option value="Transferencia">Transferencia</option>
+                        <option value="Tarjeta">Tarjeta</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="dm-form-group">
+                <label class="dm-label">Nota</label>
+                <input
+                    type="text"
+                    class="dm-input"
+                    name="nota"
+                    value="Abono reparación"
+                >
+            </div>
+
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
+                Registrar Abono
+            </button>
+        </form>
+    `;
+
+    App.ui.openSheet('Cobrar reparación', formHTML, (data) => {
+        App.logic.guardarAbono(data);
+    });
 };
