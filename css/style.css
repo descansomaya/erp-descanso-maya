@@ -1409,3 +1409,397 @@ h1,h2,h3,h4,h5,h6,p{
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* ==========================================
+   AJUSTES GLOBALES ERP DESCANSO MAYA
+   Base visual + móvil + consistencia
+========================================== */
+
+/* ---------- Espaciado general ---------- */
+.dm-section {
+  padding-bottom: 24px;
+}
+
+.dm-content {
+  min-height: 100%;
+}
+
+/* ---------- Cards y listas ---------- */
+.dm-card,
+.card {
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(60, 20, 90, 0.06);
+}
+
+.dm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dm-list-card {
+  background: var(--dm-surface, #fff);
+  border: 1px solid var(--dm-border, #e5e7eb);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 4px 12px rgba(60, 20, 90, 0.04);
+}
+
+.dm-list-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.dm-list-card-title {
+  font-weight: 700;
+  color: var(--dm-text, #1f2937);
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.dm-list-card-subtitle {
+  color: var(--dm-text-soft, #6b7280);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.dm-list-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dm-list-card-meta {
+  width: 100%;
+}
+
+/* ---------- Formularios ---------- */
+.dm-form-group,
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.dm-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dm-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--dm-text, #1f2937);
+}
+
+.dm-input,
+.dm-select,
+.dm-textarea,
+input,
+select,
+textarea {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 12px;
+  border: 1px solid var(--dm-border, #d1d5db);
+  padding: 10px 12px;
+  background: #fff;
+  color: var(--dm-text, #1f2937);
+  font: inherit;
+}
+
+.dm-textarea,
+textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.dm-input:focus,
+.dm-select:focus,
+.dm-textarea:focus,
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--dm-primary, #6B46C1);
+  box-shadow: 0 0 0 3px rgba(107, 70, 193, 0.12);
+}
+
+/* ---------- Botones ---------- */
+.dm-btn,
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: .18s ease;
+}
+
+.dm-btn-sm {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+}
+
+.dm-btn-block {
+  width: 100%;
+}
+
+.dm-btn:hover,
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+/* ---------- Tabs ---------- */
+.dm-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dm-tab {
+  border: 1px solid var(--dm-border, #d1d5db);
+  background: #fff;
+  color: var(--dm-text, #1f2937);
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dm-tab.active {
+  background: var(--dm-primary, #6B46C1);
+  color: #fff;
+  border-color: var(--dm-primary, #6B46C1);
+}
+
+/* ---------- Badges ---------- */
+.dm-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ---------- KPI / métricas ---------- */
+.dm-grid-kpi {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dm-kpi {
+  background: var(--dm-surface, #fff);
+  border: 1px solid var(--dm-border, #e5e7eb);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(60, 20, 90, 0.04);
+}
+
+.dm-kpi-label {
+  color: var(--dm-text-soft, #6b7280);
+  font-size: 0.84rem;
+  margin-bottom: 8px;
+}
+
+.dm-kpi-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.dm-kpi-meta {
+  margin-top: 10px;
+}
+
+/* ---------- Grids utilitarios ---------- */
+.dm-grid-2,
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dm-grid-3,
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* ---------- FAB ---------- */
+.dm-fab,
+.fab {
+  position: fixed;
+  right: 16px;
+  bottom: 88px;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  border: none;
+  background: var(--dm-primary, #6B46C1);
+  color: #fff;
+  font-size: 1.6rem;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(60, 20, 90, 0.24);
+  cursor: pointer;
+  z-index: 40;
+}
+
+/* ---------- Bottom nav ---------- */
+.dm-bottom-nav {
+  z-index: 50;
+}
+
+.dm-bottom-nav a.active {
+  color: var(--dm-primary, #6B46C1);
+  font-weight: 700;
+}
+
+/* ---------- Móvil ---------- */
+@media (max-width: 768px) {
+  .dm-section {
+    padding-bottom: 96px;
+  }
+
+  .dm-main {
+    padding-bottom: 84px;
+  }
+
+  .dm-grid-kpi,
+  .dm-grid-2,
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .dm-grid-3,
+  .grid-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .dm-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .dm-list-card-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dm-list-card-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .dm-list-card-actions .dm-btn,
+  .dm-list-card-actions .btn {
+    width: 100%;
+  }
+
+  .dm-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding-bottom: 4px;
+  }
+
+  .dm-tabs::-webkit-scrollbar,
+  .tabs-pedidos-mobile::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dm-tab,
+  .tab-btn-ped,
+  .tab-btn-prod {
+    flex: 0 0 auto;
+    min-width: max-content;
+    font-size: 0.82rem;
+    padding: 9px 12px;
+    border-radius: 999px;
+  }
+
+  .dm-bottom-nav {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    padding: 10px 12px;
+  }
+
+  .dm-bottom-nav a {
+    min-width: 0;
+    font-size: 0.76rem;
+    text-align: center;
+  }
+
+  .dm-bottom-nav a span {
+    display: block;
+    font-size: 1.08rem;
+    line-height: 1.1;
+    margin-bottom: 4px;
+  }
+
+  .dm-fab,
+  .fab {
+    right: 14px;
+    bottom: 86px;
+    width: 54px;
+    height: 54px;
+  }
+
+  .dm-card,
+  .card,
+  .dm-list-card {
+    border-radius: 14px;
+  }
+
+  .dm-kpi-value {
+    font-size: 1.4rem;
+  }
+}
+
+/* ---------- Pantallas muy pequeñas ---------- */
+@media (max-width: 420px) {
+  .dm-header-title {
+    font-size: 1.15rem;
+  }
+
+  .dm-header-subtitle {
+    font-size: 0.82rem;
+  }
+
+  .dm-bottom-nav a {
+    font-size: 0.72rem;
+  }
+
+  .dm-bottom-nav a span {
+    font-size: 1rem;
+  }
+
+  .dm-btn,
+  .btn {
+    padding: 10px 12px;
+  }
+}
