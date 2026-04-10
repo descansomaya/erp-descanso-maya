@@ -1,5 +1,5 @@
 // ==========================================
-// VISTAS: FINANZAS Y GASTOS (ESTABLE)
+// VISTAS: FINANZAS Y GASTOS
 // ==========================================
 
 window.App = window.App || {};
@@ -7,55 +7,99 @@ App.views = App.views || {};
 
 App.views.finanzas = function() {
     const bottomNav = document.getElementById('bottom-nav');
+    const title = document.getElementById('app-header-title');
+    const subtitle = document.getElementById('app-header-subtitle');
+
     if (bottomNav) bottomNav.style.display = 'flex';
+    if (title) title.innerText = 'Finanzas';
+    if (subtitle) subtitle.innerText = 'Dashboard ejecutivo y flujo de caja';
 
     setTimeout(() => {
         if (App.logic?.renderGraficasFinanzas) {
             App.logic.renderGraficasFinanzas('mes_actual');
         }
-    }, 50);
+    }, 60);
 
     return `
-        <div class="card" style="padding-top:15px;">
-            <h3 class="card-title" style="margin-bottom:15px;">Dashboard Financiero</h3>
+        <div class="dm-section" style="padding-bottom:90px;">
+            <div class="dm-card dm-mb-4" style="background:linear-gradient(135deg, #ffffff 0%, #faf7ff 100%);">
+                <div class="dm-row-between" style="align-items:flex-start; gap:16px;">
+                    <div>
+                        <h3 class="dm-card-title">Dashboard Financiero</h3>
+                        <p class="dm-muted dm-mt-2" style="max-width:680px;">
+                            Consulta ingresos reales, salidas de caja, cuentas por cobrar, cuentas por pagar y distribución por categorías.
+                        </p>
+                    </div>
 
-            <div class="pill-fin-container" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:10px; margin-bottom:10px; scrollbar-width:none; -ms-overflow-style:none;">
-                <button class="pill-fin active" onclick="App.views.activarFiltroFinanzas(this, 'mes_actual', false)">Este Mes</button>
-                <button class="pill-fin" onclick="App.views.activarFiltroFinanzas(this, 'mes_pasado', false)">Mes Pasado</button>
-                <button class="pill-fin" onclick="App.views.activarFiltroFinanzas(this, 'trimestre_actual', false)">Trimestre</button>
-                <button class="pill-fin" onclick="App.views.activarFiltroFinanzas(this, 'anio_actual', false)">Este Año</button>
-                <button class="pill-fin" onclick="App.views.activarFiltroFinanzas(this, 'todo', false)">Historial</button>
-                <button class="pill-fin" onclick="App.views.activarFiltroFinanzas(this, 'custom', true)">Personalizado 📅</button>
+                    <div class="dm-list-card-actions" style="margin-top:0;">
+                        <button
+                            class="dm-btn dm-btn-secondary dm-btn-sm"
+                            onclick="App.views.formGasto()"
+                            style="border-color:var(--dm-danger); color:var(--dm-danger);"
+                        >
+                            ＋ Gasto
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            <div id="filtro-rango-fechas" style="display:none; gap:10px; margin-bottom:15px; background:#F7FAFC; padding:10px; border-radius:8px; border:1px solid #E2E8F0; align-items:flex-end;">
-                <div style="flex:1;">
-                    <label style="font-size:0.75rem; color:var(--text-muted);">Desde:</label>
-                    <input type="date" id="fecha-desde" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border);">
+            <div class="dm-card dm-mb-4" style="padding:12px;">
+                <div class="dm-tabs" style="display:flex; gap:8px; overflow-x:auto; flex-wrap:nowrap; white-space:nowrap;">
+                    <button class="dm-tab active pill-fin" onclick="App.views.activarFiltroFinanzas(this, 'mes_actual', false)">Este mes</button>
+                    <button class="dm-tab pill-fin" onclick="App.views.activarFiltroFinanzas(this, 'mes_pasado', false)">Mes pasado</button>
+                    <button class="dm-tab pill-fin" onclick="App.views.activarFiltroFinanzas(this, 'trimestre_actual', false)">Trimestre</button>
+                    <button class="dm-tab pill-fin" onclick="App.views.activarFiltroFinanzas(this, 'anio_actual', false)">Este año</button>
+                    <button class="dm-tab pill-fin" onclick="App.views.activarFiltroFinanzas(this, 'todo', false)">Historial</button>
+                    <button class="dm-tab pill-fin" onclick="App.views.activarFiltroFinanzas(this, 'custom', true)">Personalizado 📅</button>
                 </div>
-                <div style="flex:1;">
-                    <label style="font-size:0.75rem; color:var(--text-muted);">Hasta:</label>
-                    <input type="date" id="fecha-hasta" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border);">
+
+                <div
+                    id="filtro-rango-fechas"
+                    class="dm-card dm-mt-3"
+                    style="display:none; background:var(--dm-surface-2); border:1px solid var(--dm-border); padding:12px;"
+                >
+                    <div class="dm-form-row">
+                        <div class="dm-form-group">
+                            <label class="dm-label">Desde</label>
+                            <input type="date" id="fecha-desde" class="dm-input">
+                        </div>
+
+                        <div class="dm-form-group">
+                            <label class="dm-label">Hasta</label>
+                            <input type="date" id="fecha-hasta" class="dm-input">
+                        </div>
+                    </div>
+
+                    <button class="dm-btn dm-btn-primary dm-btn-block" onclick="App.logic.renderGraficasFinanzas('custom')">
+                        Aplicar rango
+                    </button>
                 </div>
-                <button class="btn btn-primary" style="padding:8px 12px;" onclick="App.logic.renderGraficasFinanzas('custom')">🔎</button>
             </div>
 
             <div id="finanzas-contenedor">
-                <div style="text-align:center; padding:30px; color:var(--text-muted);">Cargando finanzas...</div>
+                <div class="dm-card">
+                    <div class="dm-center dm-muted" style="padding:36px 0;">
+                        Cargando finanzas...
+                    </div>
+                </div>
             </div>
         </div>
 
-        <button class="fab" style="background: var(--danger);" onclick="App.views.formGasto()">+</button>
+        <button class="dm-fab" style="background:var(--dm-danger);" onclick="App.views.formGasto()">+</button>
     `;
 };
 
 App.views.activarFiltroFinanzas = function(btn, filtro, mostrarCustom) {
-    document.querySelectorAll('.pill-fin').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.pill-fin').forEach(b => {
+        b.classList.remove('active');
+        b.classList.remove('dm-tab-active');
+    });
+
     if (btn) btn.classList.add('active');
 
     const rango = document.getElementById('filtro-rango-fechas');
     if (rango) {
-        rango.style.display = mostrarCustom ? 'flex' : 'none';
+        rango.style.display = mostrarCustom ? 'block' : 'none';
     }
 
     if (!mostrarCustom && App.logic?.renderGraficasFinanzas) {
@@ -65,17 +109,17 @@ App.views.activarFiltroFinanzas = function(btn, filtro, mostrarCustom) {
 
 App.views.detalleFinanzas = function(tipo, filtro) {
     const hoy = new Date();
-    let mesActual = hoy.getMonth();
-    let anioActual = hoy.getFullYear();
+    const mesActual = hoy.getMonth();
+    const anioActual = hoy.getFullYear();
+
     let mesPasado = mesActual - 1;
     let anioPasado = anioActual;
-
     if (mesPasado < 0) {
         mesPasado = 11;
         anioPasado--;
     }
 
-    let triActual = Math.floor(mesActual / 3);
+    const triActual = Math.floor(mesActual / 3);
 
     const filtrarFecha = (str) => {
         if (filtro === 'todo') return true;
@@ -102,36 +146,40 @@ App.views.detalleFinanzas = function(tipo, filtro) {
             ? '<span style="color:#D69E2E;">(Bodega)</span>'
             : '<span style="color:#3182CE;">(Pedido)</span>';
 
-    let html = '<ul style="list-style:none; padding:0; margin:0;">';
+    let html = `<div class="dm-list">`;
 
     if (tipo === 'ventas') {
         if (pedFiltrados.length === 0 && repFiltradas.length === 0) {
-            html += '<li>No hay ventas ni reparaciones registradas.</li>';
+            html += `<div class="dm-alert dm-alert-info">No hay ventas ni reparaciones registradas.</div>`;
         }
 
         pedFiltrados.forEach(p => {
             const fecha = p.fecha_creacion ? String(p.fecha_creacion).split('T')[0] : '';
             html += `
-                <li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;">
-                    <span>
-                        <strong>${App.ui.safe((p.id || '').replace('PED-', ''))} ${getEtiqueta(p.cliente_id)}</strong><br>
-                        <small>${fecha}</small>
-                    </span>
-                    <span style="color:var(--primary); font-weight:bold;">$${parseFloat(p.total || 0).toFixed(2)}</span>
-                </li>
+                <div class="dm-list-card">
+                    <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
+                        <div>
+                            <strong>${App.ui.safe((p.id || '').replace('PED-', ''))} ${getEtiqueta(p.cliente_id)}</strong><br>
+                            <small class="dm-muted">${fecha}</small>
+                        </div>
+                        <div style="color:var(--primary); font-weight:bold;">$${parseFloat(p.total || 0).toFixed(2)}</div>
+                    </div>
+                </div>
             `;
         });
 
         repFiltradas.forEach(r => {
             const fecha = r.fecha_creacion ? String(r.fecha_creacion).split('T')[0] : '';
             html += `
-                <li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;">
-                    <span>
-                        <strong>${App.ui.safe((r.id || '').replace('REP-', ''))} <span style="color:#805AD5;">(Rep)</span></strong><br>
-                        <small>${fecha}</small>
-                    </span>
-                    <span style="color:var(--primary); font-weight:bold;">$${parseFloat(r.precio || 0).toFixed(2)}</span>
-                </li>
+                <div class="dm-list-card">
+                    <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
+                        <div>
+                            <strong>${App.ui.safe((r.id || '').replace('REP-', ''))} <span style="color:#805AD5;">(Rep)</span></strong><br>
+                            <small class="dm-muted">${fecha}</small>
+                        </div>
+                        <div style="color:var(--primary); font-weight:bold;">$${parseFloat(r.precio || 0).toFixed(2)}</div>
+                    </div>
+                </div>
             `;
         });
     }
@@ -141,32 +189,36 @@ App.views.detalleFinanzas = function(tipo, filtro) {
         const antsRep = repFiltradas.filter(r => parseFloat(r.anticipo || 0) > 0);
 
         if (ants.length === 0 && aboFiltrados.length === 0 && antsRep.length === 0) {
-            html += '<li>No hay ingresos.</li>';
+            html += `<div class="dm-alert dm-alert-info">No hay ingresos.</div>`;
         }
 
         ants.forEach(p => {
             const fecha = p.fecha_creacion ? String(p.fecha_creacion).split('T')[0] : '';
             html += `
-                <li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;">
-                    <span>
-                        <strong>Anticipo ${App.ui.safe((p.id || '').replace('PED-', ''))} ${getEtiqueta(p.cliente_id)}</strong><br>
-                        <small>${fecha}</small>
-                    </span>
-                    <span style="color:var(--success); font-weight:bold;">$${parseFloat(p.anticipo || 0).toFixed(2)}</span>
-                </li>
+                <div class="dm-list-card">
+                    <div class="dm-row-between">
+                        <div>
+                            <strong>Anticipo ${App.ui.safe((p.id || '').replace('PED-', ''))} ${getEtiqueta(p.cliente_id)}</strong><br>
+                            <small class="dm-muted">${fecha}</small>
+                        </div>
+                        <div style="color:var(--success); font-weight:bold;">$${parseFloat(p.anticipo || 0).toFixed(2)}</div>
+                    </div>
+                </div>
             `;
         });
 
         antsRep.forEach(r => {
             const fecha = r.fecha_creacion ? String(r.fecha_creacion).split('T')[0] : '';
             html += `
-                <li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;">
-                    <span>
-                        <strong>Pago ${App.ui.safe((r.id || '').replace('REP-', ''))} <span style="color:#805AD5;">(Rep)</span></strong><br>
-                        <small>${fecha}</small>
-                    </span>
-                    <span style="color:var(--success); font-weight:bold;">$${parseFloat(r.anticipo || 0).toFixed(2)}</span>
-                </li>
+                <div class="dm-list-card">
+                    <div class="dm-row-between">
+                        <div>
+                            <strong>Pago ${App.ui.safe((r.id || '').replace('REP-', ''))} <span style="color:#805AD5;">(Rep)</span></strong><br>
+                            <small class="dm-muted">${fecha}</small>
+                        </div>
+                        <div style="color:var(--success); font-weight:bold;">$${parseFloat(r.anticipo || 0).toFixed(2)}</div>
+                    </div>
+                </div>
             `;
         });
 
@@ -174,36 +226,42 @@ App.views.detalleFinanzas = function(tipo, filtro) {
             const fecha = a.fecha ? String(a.fecha).split('T')[0] : '';
             const p = (App.state.pedidos || []).find(x => x.id === a.pedido_id) || {};
             html += `
-                <li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;">
-                    <span>
-                        <strong>Abono a ${App.ui.safe((a.pedido_id || '').replace('PED-', ''))} ${getEtiqueta(p.cliente_id)}</strong><br>
-                        <small>${fecha}</small>
-                    </span>
-                    <span style="color:var(--success); font-weight:bold;">$${parseFloat(a.monto || 0).toFixed(2)}</span>
-                </li>
+                <div class="dm-list-card">
+                    <div class="dm-row-between">
+                        <div>
+                            <strong>Abono a ${App.ui.safe((a.pedido_id || '').replace('PED-', ''))} ${getEtiqueta(p.cliente_id)}</strong><br>
+                            <small class="dm-muted">${fecha}</small>
+                        </div>
+                        <div style="color:var(--success); font-weight:bold;">$${parseFloat(a.monto || 0).toFixed(2)}</div>
+                    </div>
+                </div>
             `;
         });
     }
 
     else if (tipo === 'gastos') {
         if (gasFiltrados.length === 0) {
-            html += '<li>No hay gastos registrados.</li>';
+            html += `<div class="dm-alert dm-alert-info">No hay gastos registrados.</div>`;
         }
 
         gasFiltrados.forEach(g => {
             const fecha = g.fecha ? String(g.fecha).split('T')[0] : '';
             html += `
-                <li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between; align-items:center;">
-                    <span>
-                        <strong>${App.ui.escapeHTML(g.descripcion || '')}</strong><br>
-                        <small>${fecha}</small>
-                    </span>
-                    <div style="text-align:right;">
-                        <span style="color:var(--danger); font-weight:bold; display:block; margin-bottom:5px;">$${parseFloat(g.monto || 0).toFixed(2)}</span>
-                        <button class="btn btn-secondary" style="padding:2px 6px; font-size:0.7rem; margin-right:4px;" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formGasto('${g.id}'), 300)">✏️</button>
-                        <button class="btn btn-secondary" style="padding:2px 6px; font-size:0.7rem; color:red; border-color:red;" onclick="App.ui.closeSheet(); App.logic.eliminarRegistroGenerico('gastos', '${g.id}', 'gastos')">🗑️</button>
+                <div class="dm-list-card">
+                    <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
+                        <div style="flex:1;">
+                            <strong>${App.ui.escapeHTML(g.descripcion || '')}</strong><br>
+                            <small class="dm-muted">${fecha}</small>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="color:var(--danger); font-weight:bold; margin-bottom:6px;">$${parseFloat(g.monto || 0).toFixed(2)}</div>
+                            <div class="dm-list-card-actions" style="margin-top:0; justify-content:flex-end;">
+                                <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formGasto('${g.id}'), 300)">✏️</button>
+                                <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.ui.closeSheet(); App.logic.eliminarRegistroGenerico('gastos', '${g.id}', 'gastos')">🗑️</button>
+                            </div>
+                        </div>
                     </div>
-                </li>
+                </div>
             `;
         });
     }
@@ -222,13 +280,15 @@ App.views.detalleFinanzas = function(tipo, filtro) {
                 hayCobros = true;
                 const fecha = p.fecha_creacion ? String(p.fecha_creacion).split('T')[0] : '';
                 html += `
-                    <li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;">
-                        <span>
-                            <strong>${App.ui.safe((p.id || '').replace('PED-', ''))} ${getEtiqueta(p.cliente_id)}</strong><br>
-                            <small>${fecha}</small>
-                        </span>
-                        <span style="color:#D69E2E; font-weight:bold;">$${saldo.toFixed(2)}</span>
-                    </li>
+                    <div class="dm-list-card">
+                        <div class="dm-row-between">
+                            <div>
+                                <strong>${App.ui.safe((p.id || '').replace('PED-', ''))} ${getEtiqueta(p.cliente_id)}</strong><br>
+                                <small class="dm-muted">${fecha}</small>
+                            </div>
+                            <div style="color:#D69E2E; font-weight:bold;">$${saldo.toFixed(2)}</div>
+                        </div>
+                    </div>
                 `;
             }
         });
@@ -239,18 +299,20 @@ App.views.detalleFinanzas = function(tipo, filtro) {
                 hayCobros = true;
                 const fecha = r.fecha_creacion ? String(r.fecha_creacion).split('T')[0] : '';
                 html += `
-                    <li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;">
-                        <span>
-                            <strong>${App.ui.safe((r.id || '').replace('REP-', ''))} <span style="color:#805AD5;">(Rep)</span></strong><br>
-                            <small>${fecha}</small>
-                        </span>
-                        <span style="color:#D69E2E; font-weight:bold;">$${saldo.toFixed(2)}</span>
-                    </li>
+                    <div class="dm-list-card">
+                        <div class="dm-row-between">
+                            <div>
+                                <strong>${App.ui.safe((r.id || '').replace('REP-', ''))} <span style="color:#805AD5;">(Rep)</span></strong><br>
+                                <small class="dm-muted">${fecha}</small>
+                            </div>
+                            <div style="color:#D69E2E; font-weight:bold;">$${saldo.toFixed(2)}</div>
+                        </div>
+                    </div>
                 `;
             }
         });
 
-        if (!hayCobros) html += '<li>No hay saldo pendiente.</li>';
+        if (!hayCobros) html += `<div class="dm-alert dm-alert-info">No hay saldo pendiente.</div>`;
     }
 
     else if (tipo === 'por_pagar') {
@@ -262,13 +324,15 @@ App.views.detalleFinanzas = function(tipo, filtro) {
                 const a = (App.state.artesanos || []).find(x => x.id === pa.artesano_id);
                 const fecha = pa.fecha ? String(pa.fecha).split('T')[0] : '';
                 html += `
-                    <li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;">
-                        <span>
-                            <strong>${App.ui.safe(a ? a.nombre : 'Artesano')} (Nómina)</strong><br>
-                            <small>${fecha}</small>
-                        </span>
-                        <span style="color:#E53E3E; font-weight:bold;">$${parseFloat(pa.total || 0).toFixed(2)}</span>
-                    </li>
+                    <div class="dm-list-card">
+                        <div class="dm-row-between">
+                            <div>
+                                <strong>${App.ui.safe(a ? a.nombre : 'Artesano')} (Nómina)</strong><br>
+                                <small class="dm-muted">${fecha}</small>
+                            </div>
+                            <div style="color:#E53E3E; font-weight:bold;">$${parseFloat(pa.total || 0).toFixed(2)}</div>
+                        </div>
+                    </div>
                 `;
             }
         });
@@ -285,21 +349,23 @@ App.views.detalleFinanzas = function(tipo, filtro) {
                 const pv = (App.state.proveedores || []).find(x => x.id === c.proveedor_id);
                 const fecha = c.fecha ? String(c.fecha).split('T')[0] : '';
                 html += `
-                    <li style="padding:8px 0; border-bottom:1px dashed #ccc; display:flex; justify-content:space-between;">
-                        <span>
-                            <strong>${App.ui.safe(pv ? pv.nombre : 'Proveedor')} (Compra)</strong><br>
-                            <small>${fecha}</small>
-                        </span>
-                        <span style="color:#E53E3E; font-weight:bold;">$${deuda.toFixed(2)}</span>
-                    </li>
+                    <div class="dm-list-card">
+                        <div class="dm-row-between">
+                            <div>
+                                <strong>${App.ui.safe(pv ? pv.nombre : 'Proveedor')} (Compra)</strong><br>
+                                <small class="dm-muted">${fecha}</small>
+                            </div>
+                            <div style="color:#E53E3E; font-weight:bold;">$${deuda.toFixed(2)}</div>
+                        </div>
+                    </div>
                 `;
             }
         });
 
-        if (!hayDeudas) html += '<li>No hay deudas por pagar. ¡Estás al día!</li>';
+        if (!hayDeudas) html += `<div class="dm-alert dm-alert-info">No hay deudas por pagar. ¡Estás al día!</div>`;
     }
 
-    html += '</ul><button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="App.ui.closeSheet()">Cerrar</button>';
+    html += `</div><button class="dm-btn dm-btn-primary dm-btn-block dm-mt-3" onclick="App.ui.closeSheet()">Cerrar</button>`;
 
     App.ui.openSheet(
         tipo === 'ventas' ? 'Detalle de Ventas'
@@ -319,43 +385,43 @@ App.views.formGasto = function(id = null) {
 
     if (obj) {
         htmlGastos = `
-            <div class="form-group">
-                <label>Descripción del Gasto</label>
-                <input type="text" name="descripcion" value="${App.ui.escapeHTML(obj.descripcion || '')}" required>
+            <div class="dm-form-group">
+                <label class="dm-label">Descripción del gasto</label>
+                <input type="text" class="dm-input" name="descripcion" value="${App.ui.escapeHTML(obj.descripcion || '')}" required>
             </div>
-            <div class="form-group">
-                <label>Monto ($)</label>
-                <input type="number" step="0.01" name="monto" value="${obj.monto || ''}" required>
+            <div class="dm-form-group">
+                <label class="dm-label">Monto ($)</label>
+                <input type="number" step="0.01" class="dm-input" name="monto" value="${obj.monto || ''}" required>
             </div>
         `;
     } else {
         htmlGastos = `
             <div id="cont-gastos">
-                <div class="grid-2 fila-dinamica" style="margin-bottom:5px;">
-                    <div class="form-group" style="margin:0;">
-                        <input type="text" name="descripcion[]" placeholder="Descripción" required>
+                <div class="dm-form-row fila-dinamica dm-mb-2">
+                    <div class="dm-form-group">
+                        <input type="text" class="dm-input" name="descripcion[]" placeholder="Descripción" required>
                     </div>
-                    <div class="form-group" style="margin:0; display:flex; gap:5px;">
-                        <input type="number" step="0.01" name="monto[]" placeholder="$ Monto" required>
+                    <div class="dm-form-group">
+                        <input type="number" step="0.01" class="dm-input" name="monto[]" placeholder="$ Monto" required>
                     </div>
                 </div>
             </div>
             <button
                 type="button"
-                class="btn btn-secondary"
-                style="width:100%; margin-top:10px; margin-bottom:15px; border:1px dashed var(--danger); color:var(--danger); background:transparent;"
+                class="dm-btn dm-btn-secondary dm-btn-block dm-mb-4"
+                style="border:1px dashed var(--dm-danger); color:var(--dm-danger); background:transparent;"
                 onclick="window.agregarFilaGasto()"
             >
-                + Añadir Gasto a la lista
+                + Añadir gasto a la lista
             </button>
         `;
     }
 
     const formHTML = `
         <form id="dynamic-form">
-            <div class="form-group">
-                <label>Categoría</label>
-                <select name="categoria" required>
+            <div class="dm-form-group">
+                <label class="dm-label">Categoría</label>
+                <select class="dm-select" name="categoria" required>
                     <option value="Materiales e Insumos" ${obj && obj.categoria === 'Materiales e Insumos' ? 'selected' : ''}>Materiales (Hilos, Accesorios)</option>
                     <option value="Hamacas (Reventa)" ${obj && obj.categoria === 'Hamacas (Reventa)' ? 'selected' : ''}>Hamacas (Reventa)</option>
                     <option value="Servicios y Otros" ${obj && obj.categoria === 'Servicios y Otros' ? 'selected' : ''}>Servicios</option>
@@ -364,21 +430,21 @@ App.views.formGasto = function(id = null) {
                 </select>
             </div>
 
-            <div class="form-group">
-                <label>Fecha</label>
-                <input type="date" name="fecha" value="${obj ? obj.fecha : new Date().toISOString().split('T')[0]}" required>
+            <div class="dm-form-group">
+                <label class="dm-label">Fecha</label>
+                <input type="date" class="dm-input" name="fecha" value="${obj ? obj.fecha : new Date().toISOString().split('T')[0]}" required>
             </div>
 
             ${htmlGastos}
 
-            <button type="submit" class="btn btn-primary" style="width:100%; background:var(--danger); border-color:var(--danger);">
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block" style="background:var(--dm-danger); border-color:var(--dm-danger);">
                 ${obj ? 'Guardar Cambios' : 'Registrar Gastos'}
             </button>
         </form>
     `;
 
     App.ui.openSheet(
-        obj ? 'Editar Gasto' : 'Nuevos Gastos Múltiples',
+        obj ? 'Editar Gasto' : 'Nuevos Gastos',
         formHTML,
         (data) => {
             if (obj) App.logic.actualizarRegistroGenerico('gastos', id, data, 'gastos');
