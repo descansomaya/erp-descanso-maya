@@ -16,5 +16,5 @@ App.state = {
     pedidos: [], pedido_detalle: [], ordenes_produccion: [], artesanos: [], 
     inventario: [], productos: [], clientes: [], abonos: [], gastos: [], 
     compras: [], proveedores: [], reparaciones: [], tarifas_artesano: [], 
-    pago_artesanos: [], movimientos_inventario: [] 
+    pago_artesanos: [], movimientos_inventario: [] cotizaciones: []
 };
