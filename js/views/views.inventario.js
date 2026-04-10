@@ -5,76 +5,90 @@
 window.App = window.App || {};
 App.views = App.views || {};
 
+// ==========================================
+// INVENTARIO
+// ==========================================
 App.views.inventario = function() {
     const title = document.getElementById('app-header-title');
     const subtitle = document.getElementById('app-header-subtitle');
+    const bottomNav = document.getElementById('bottom-nav');
+
     if (title) title.innerText = 'Inventario';
     if (subtitle) subtitle.innerText = 'Insumos y reventa';
+    if (bottomNav) bottomNav.style.display = 'flex';
+
+    const inventario = App.state.inventario || [];
 
     let html = `
         <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4">
-                <div class="dm-row-between" style="gap:10px;">
-                    <input
-                        type="text"
-                        id="bus-inv"
-                        class="dm-input"
-                        onkeyup="window.filtrarLista('bus-inv', 'dm-list-card')"
-                        placeholder="🔍 Buscar insumo..."
-                    >
-                </div>
+                <h3 class="dm-card-title">Inventario</h3>
+                <p class="dm-muted dm-mb-3" style="margin-top:6px;">Consulta stock físico, apartado y comprometido.</p>
+
+                <input
+                    type="text"
+                    id="bus-inv"
+                    class="dm-input"
+                    onkeyup="window.filtrarLista('bus-inv', 'tarj-inv')"
+                    placeholder="🔍 Buscar insumo..."
+                >
             </div>
 
             <div class="dm-list">
     `;
 
-    if (!App.state.inventario || App.state.inventario.length === 0) {
-        html += `<div class="dm-alert dm-alert-info">No hay insumos.</div>`;
+    if (inventario.length === 0) {
+        html += `<div class="dm-alert dm-alert-info">No hay insumos registrados.</div>`;
     } else {
-        App.state.inventario.forEach(i => {
+        inventario.forEach(i => {
             const real = parseFloat(i.stock_real || 0);
             const reservado = parseFloat(i.stock_reservado || 0);
             const comprometido = parseFloat(i.stock_comprometido || 0);
             const libre = real - reservado - comprometido;
+            const minimo = parseFloat(i.stock_minimo || 0);
 
-            const badgeClass =
-                (parseFloat(i.stock_minimo || 0) > 0 && libre <= parseFloat(i.stock_minimo || 0))
-                    ? 'dm-badge-danger'
-                    : 'dm-badge-success';
+            const badgeClass = (minimo > 0 && libre <= minimo)
+                ? 'dm-badge-danger'
+                : 'dm-badge-success';
 
             html += `
-                <div class="dm-list-card">
-                    <div class="dm-list-card-top" style="align-items:flex-start; gap:12px;">
+                <div class="dm-list-card tarj-inv">
+                    <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
                         <div style="flex:1; min-width:0;">
                             <div class="dm-list-card-title" style="word-break:break-word;">
                                 ${App.ui.escapeHTML(i.nombre)}
                             </div>
-                            <div class="dm-list-card-subtitle">${App.ui.safe(i.tipo || 'OTRO')}</div>
+                            <div class="dm-list-card-subtitle">
+                                ${App.ui.safe(i.tipo || 'OTRO')} · ${App.ui.safe(i.unidad || '')}
+                            </div>
                         </div>
 
                         <div style="flex:0 0 auto;">
                             <span class="dm-badge ${badgeClass}">
-                                Libre: ${libre} ${App.ui.safe(i.unidad || '')}
+                                Libre: ${App.ui.number(libre, 1)} ${App.ui.safe(i.unidad || '')}
                             </span>
                         </div>
                     </div>
 
-                    <div
-                        class="dm-list-card-meta dm-grid-3 dm-mt-3 dm-mb-3"
-                        style="background:var(--dm-surface-2); padding:10px; border-radius:var(--dm-radius-md); text-align:center;"
-                    >
-                        <div>
-                            <small class="dm-muted">Físico</small><br>
-                            <strong>${real}</strong>
+                    <div class="dm-card dm-mt-3 dm-mb-3" style="background:var(--dm-surface-2); padding:10px;">
+                        <div class="dm-grid-3" style="text-align:center;">
+                            <div>
+                                <small class="dm-muted">Físico</small><br>
+                                <strong>${App.ui.number(real, 1)}</strong>
+                            </div>
+                            <div>
+                                <small class="dm-muted">Apartado</small><br>
+                                <strong style="color:var(--dm-warning);">${App.ui.number(reservado, 1)}</strong>
+                            </div>
+                            <div>
+                                <small class="dm-muted">Taller</small><br>
+                                <strong style="color:var(--dm-primary);">${App.ui.number(comprometido, 1)}</strong>
+                            </div>
                         </div>
-                        <div>
-                            <small class="dm-muted">Apartado</small><br>
-                            <strong style="color:var(--dm-warning);">${reservado}</strong>
-                        </div>
-                        <div>
-                            <small class="dm-muted">Taller</small><br>
-                            <strong style="color:var(--dm-primary);">${comprometido}</strong>
-                        </div>
+                    </div>
+
+                    <div class="dm-text-sm dm-muted dm-mb-2">
+                        Stock mínimo: <strong>${App.ui.number(minimo, 1)}</strong>
                     </div>
 
                     <div class="dm-list-card-actions">
@@ -96,6 +110,9 @@ App.views.inventario = function() {
     return html;
 };
 
+// ==========================================
+// FORMULARIO DE INSUMO
+// ==========================================
 App.views.formMaterial = function(id = null, callback = null) {
     const obj = id ? (App.state.inventario || []).find(m => m.id === id) : null;
 
@@ -134,7 +151,7 @@ App.views.formMaterial = function(id = null, callback = null) {
 
             <div class="dm-form-row">
                 <div class="dm-form-group">
-                    <label class="dm-label">Stock Físico</label>
+                    <label class="dm-label">Stock físico</label>
                     <input
                         type="number"
                         step="0.1"
@@ -146,7 +163,7 @@ App.views.formMaterial = function(id = null, callback = null) {
                 </div>
 
                 <div class="dm-form-group">
-                    <label class="dm-label">Stock Mínimo</label>
+                    <label class="dm-label">Stock mínimo</label>
                     <input
                         type="number"
                         step="0.1"
@@ -158,7 +175,9 @@ App.views.formMaterial = function(id = null, callback = null) {
                 </div>
             </div>
 
-            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Guardar</button>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
+                ${obj ? 'Guardar Cambios' : 'Crear Insumo'}
+            </button>
         </form>
     `;
 
@@ -171,6 +190,9 @@ App.views.formMaterial = function(id = null, callback = null) {
     });
 };
 
+// ==========================================
+// KARDEX
+// ==========================================
 App.views.modalKardex = function(matId) {
     const movs = (App.state.movimientos_inventario || [])
         .filter(m => m.material_id === matId)
@@ -179,21 +201,25 @@ App.views.modalKardex = function(matId) {
     let html = `<div class="dm-list">`;
 
     if (movs.length === 0) {
-        html += `<div class="dm-alert dm-alert-info">No hay movimientos.</div>`;
+        html += `<div class="dm-alert dm-alert-info">No hay movimientos para este insumo.</div>`;
     }
 
     movs.forEach(m => {
+        const fecha = m.fecha ? String(m.fecha).split('T')[0] : '';
+        const esEntrada = m.tipo === 'entrada';
+
         html += `
-            <div class="dm-list-card dm-mb-2" style="padding:10px;">
+            <div class="dm-list-card" style="padding:10px;">
                 <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
-                    <div>
-                        <strong style="color:${m.tipo === 'entrada' ? 'var(--dm-success)' : 'var(--dm-danger)'};">
-                            ${m.tipo === 'entrada' ? '+' : '-'} ${App.ui.safe(m.cantidad)}
+                    <div style="flex:1;">
+                        <strong style="color:${esEntrada ? 'var(--dm-success)' : 'var(--dm-danger)'};">
+                            ${esEntrada ? '+' : '-'} ${App.ui.safe(m.cantidad)}
                         </strong><br>
                         <small class="dm-muted">${App.ui.safe(m.motivo || '')}</small>
                     </div>
+
                     <div class="dm-right">
-                        <small class="dm-muted">${String(m.fecha || '').split('T')[0]}</small>
+                        <small class="dm-muted">${fecha}</small>
                     </div>
                 </div>
             </div>
@@ -201,111 +227,178 @@ App.views.modalKardex = function(matId) {
     });
 
     html += `</div>`;
-    App.ui.openSheet('Kardex', html);
+    App.ui.openSheet('Kardex del Insumo', html);
 };
 
+// ==========================================
+// COMPRAS
+// ==========================================
 App.views.compras = function() {
     const title = document.getElementById('app-header-title');
     const subtitle = document.getElementById('app-header-subtitle');
+    const bottomNav = document.getElementById('bottom-nav');
+
     if (title) title.innerText = 'Compras';
     if (subtitle) subtitle.innerText = 'Cuentas por pagar';
+    if (bottomNav) bottomNav.style.display = 'flex';
 
-    let html = `<div class="dm-section" style="padding-bottom:90px;"><div class="dm-list">`;
-    let compras = [...(App.state.compras || [])].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    const compras = [...(App.state.compras || [])].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+    let html = `
+        <div class="dm-section" style="padding-bottom:90px;">
+            <div class="dm-card dm-mb-4">
+                <h3 class="dm-card-title">Compras</h3>
+                <p class="dm-muted" style="margin-top:6px;">Proveedores, pagos y saldos pendientes.</p>
+            </div>
+
+            <div class="dm-list">
+    `;
 
     if (compras.length === 0) {
         html += `<div class="dm-alert dm-alert-info">No hay compras registradas.</div>`;
+    } else {
+        compras.forEach(comp => {
+            const prov = (App.state.proveedores || []).find(x => x.id === comp.proveedor_id) || {};
+            const pagado = parseFloat(comp.monto_pagado !== undefined ? comp.monto_pagado : comp.total || 0);
+            const total = parseFloat(comp.total || 0);
+            const deuda = total - pagado;
+            const fecha = comp.fecha ? String(comp.fecha).split('T')[0] : '';
+
+            html += `
+                <div class="dm-list-card">
+                    <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
+                        <div style="flex:1; min-width:0;">
+                            <div class="dm-list-card-title" style="word-break:break-word;">
+                                ${App.ui.safe(prov.nombre || 'Proveedor')}
+                            </div>
+                            <div class="dm-list-card-subtitle">
+                                ${fecha || 'Sin fecha'}
+                            </div>
+                            <div class="dm-mt-2">
+                                <span class="dm-badge ${deuda > 0 ? 'dm-badge-danger' : 'dm-badge-success'}">
+                                    ${deuda > 0 ? 'DEUDA' : 'PAGADO'}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div style="text-align:right; flex:0 0 auto;">
+                            <div class="dm-fw-bold dm-text-lg">${App.ui.money(total)}</div>
+                            <div class="dm-text-sm dm-muted">
+                                Resta:
+                                <strong style="color:${deuda > 0 ? 'var(--dm-danger)' : 'var(--dm-success)'};">
+                                    ${App.ui.money(deuda)}
+                                </strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dm-card dm-mt-3 dm-mb-3" style="background:var(--dm-surface-2); padding:10px;">
+                        <div class="dm-row-between dm-text-sm">
+                            <span class="dm-muted">Pagado:</span>
+                            <strong>${App.ui.money(pagado)}</strong>
+                        </div>
+                    </div>
+
+                    <div class="dm-list-card-actions">
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verDetallesCompra('${comp.id}')">
+                            📋 Ver Detalles
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
     }
 
-    compras.forEach(comp => {
-        const prov = (App.state.proveedores || []).find(x => x.id === comp.proveedor_id) || {};
-        const pag = parseFloat(comp.monto_pagado !== undefined ? comp.monto_pagado : comp.total || 0);
-        const tot = parseFloat(comp.total || 0);
-        const deu = tot - pag;
-
-        html += `
-            <div class="dm-list-card">
-                <div class="dm-list-card-top" style="align-items:flex-start; gap:12px;">
-                    <div style="flex:1; min-width:0;">
-                        <div class="dm-list-card-title" style="word-break:break-word;">
-                            ${App.ui.safe(prov.nombre || 'Proveedor')}
-                        </div>
-                        <div class="dm-list-card-subtitle dm-mt-2">
-                            <span class="dm-badge ${deu > 0 ? 'dm-badge-danger' : 'dm-badge-success'}">
-                                ${deu > 0 ? 'DEUDA' : 'PAGADO'}
-                            </span>
-                        </div>
-                    </div>
-
-                    <div class="dm-right" style="flex:0 0 auto;">
-                        <div class="dm-fw-bold dm-text-lg">$${tot.toFixed(2)}</div>
-                        <div class="dm-text-sm dm-muted">
-                            Resta:
-                            <strong style="color:${deu > 0 ? 'var(--dm-danger)' : 'var(--dm-success)'};">
-                                $${deu.toFixed(2)}
-                            </strong>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="dm-list-card-actions">
-                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verDetallesCompra('${comp.id}')">
-                        Ver Detalles / Abonar
-                    </button>
-                </div>
+    html += `
             </div>
-        `;
-    });
+        </div>
 
-    html += `</div></div><button class="dm-fab" onclick="App.views.formCompra()">+</button>`;
+        <button class="dm-fab" onclick="App.views.formCompra()">+</button>
+    `;
+
     return html;
 };
 
+// ==========================================
+// FORMULARIO DE COMPRA
+// ==========================================
 App.views.formCompra = function() {
     let hProv = '<option value="">-- Proveedor --</option>';
     (App.state.proveedores || []).forEach(p => {
         hProv += `<option value="${p.id}">${App.ui.safe(p.nombre)}</option>`;
     });
 
-    let html = `
+    const html = `
         <form id="dynamic-form">
             <div class="dm-form-group">
                 <label class="dm-label">Proveedor</label>
-                <select class="dm-select" name="proveedor_id" required>${hProv}</select>
+                <select class="dm-select" name="proveedor_id" required>
+                    ${hProv}
+                </select>
             </div>
 
             <div class="dm-form-group">
                 <label class="dm-label">Fecha</label>
-                <input type="date" class="dm-input" name="fecha" value="${new Date().toISOString().split('T')[0]}" required>
+                <input
+                    type="date"
+                    class="dm-input"
+                    name="fecha"
+                    value="${new Date().toISOString().split('T')[0]}"
+                    required
+                >
             </div>
 
-            <h4 class="dm-label dm-mb-2">Insumos</h4>
-            <div id="cont-compras"></div>
+            <div class="dm-card dm-mb-4" style="background:var(--dm-surface-2);">
+                <h4 class="dm-label dm-mb-2">Insumos</h4>
+                <div id="cont-compras"></div>
 
-            <button type="button" class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="window.agregarFilaCompra()">
-                + Añadir Insumo
-            </button>
+                <button
+                    type="button"
+                    class="dm-btn dm-btn-ghost dm-btn-block dm-mt-3"
+                    onclick="window.agregarFilaCompra()"
+                >
+                    + Añadir Insumo
+                </button>
+            </div>
 
             <div class="dm-form-row">
                 <div class="dm-form-group">
                     <label class="dm-label">Total ($)</label>
-                    <input type="number" step="0.01" class="dm-input" name="total" readonly style="background:#f3f4f6;">
+                    <input
+                        type="number"
+                        step="0.01"
+                        class="dm-input"
+                        name="total"
+                        readonly
+                        style="background:#f3f4f6;"
+                    >
                 </div>
 
                 <div class="dm-form-group">
-                    <label class="dm-label">Pagado Hoy ($)</label>
-                    <input type="number" step="0.01" class="dm-input" name="monto_pagado" required>
+                    <label class="dm-label">Pagado hoy ($)</label>
+                    <input
+                        type="number"
+                        step="0.01"
+                        class="dm-input"
+                        name="monto_pagado"
+                        required
+                    >
                 </div>
             </div>
 
-            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Registrar Compra</button>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
+                Registrar Compra
+            </button>
         </form>
     `;
 
-    App.ui.openSheet('Nueva Compra', html, (d) => App.logic.guardarNuevaCompra(d));
+    App.ui.openSheet('Nueva Compra', html, (data) => App.logic.guardarNuevaCompra(data));
     setTimeout(() => window.agregarFilaCompra(), 200);
 };
 
+// ==========================================
+// DETALLE DE COMPRA
+// ==========================================
 App.views.verDetallesCompra = function(id) {
     const c = (App.state.compras || []).find(x => x.id === id);
     if (!c) return;
@@ -313,21 +406,32 @@ App.views.verDetallesCompra = function(id) {
     let html = `<div class="dm-list">`;
 
     try {
-        const det = JSON.parse(c.detalles);
-        det.forEach(d => {
-            html += `
-                <div class="dm-list-card" style="padding:10px;">
-                    <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
-                        <div style="flex:1; min-width:0;">
-                            <strong style="word-break:break-word;">${App.ui.safe(d.nombre || 'Insumo')}</strong><br>
-                            <small class="dm-muted">${App.ui.safe(d.cantidad)} uds x $${parseFloat(d.costo_unitario || 0).toFixed(2)}</small>
+        const det = JSON.parse(c.detalles || '[]');
+
+        if (!Array.isArray(det) || det.length === 0) {
+            html += `<div class="dm-alert dm-alert-info">No hay detalles capturados para esta compra.</div>`;
+        } else {
+            det.forEach(d => {
+                const cantidad = parseFloat(d.cantidad || 0);
+                const costo = parseFloat(d.costo_unitario || 0);
+                const subtotal = cantidad * costo;
+
+                html += `
+                    <div class="dm-list-card" style="padding:10px;">
+                        <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
+                            <div style="flex:1; min-width:0;">
+                                <strong style="word-break:break-word;">${App.ui.safe(d.nombre || 'Insumo')}</strong><br>
+                                <small class="dm-muted">${App.ui.safe(d.cantidad)} uds x ${App.ui.money(costo)}</small>
+                            </div>
+                            <div class="dm-fw-bold">${App.ui.money(subtotal)}</div>
                         </div>
-                        <div class="dm-fw-bold">$${(parseFloat(d.cantidad || 0) * parseFloat(d.costo_unitario || 0)).toFixed(2)}</div>
                     </div>
-                </div>
-            `;
-        });
-    } catch (e) {}
+                `;
+            });
+        }
+    } catch (e) {
+        html += `<div class="dm-alert dm-alert-warning">No fue posible leer el detalle de esta compra.</div>`;
+    }
 
     html += `</div>`;
     App.ui.openSheet('Detalles de Compra', html);
