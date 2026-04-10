@@ -2,34 +2,41 @@ window.App = window.App || {};
 App.actions = App.actions || {};
 App.forms = App.forms || {};
 App.debug = App.debug || {};
+App.logic = App.logic || {};
 
+// ==========================================
+// MANEJO GLOBAL DE ERRORES
+// ==========================================
 window.onerror = function (message, source, lineno) {
-    alert('Hubo un error al cargar:\n' + message + '\nLínea: ' + lineno);
+    console.error("Error global:", { message, source, lineno });
+    alert("Hubo un error al cargar:\n" + message + "\nLínea: " + lineno);
 };
 
-// ==============================
-// Helpers globales existentes
-// ==============================
+// ==========================================
+// HELPERS GLOBALES COMPATIBLES
+// ==========================================
 window.cargarTarifas = function (artesanoId) {
     const tarifas = (App.state?.tarifas_artesano || []).filter(t => t.artesano_id === artesanoId);
-    const select = document.getElementById('select-tarifas');
+    const select = document.getElementById("select-tarifas");
     if (!select) return;
 
     select.innerHTML =
         '<option value="">-- Seleccione Trabajo --</option>' +
-        tarifas.map(t => `<option value="${t.monto || 0}">${App.ui.escapeHTML(t.clasificacion || 'Tarea')} ($${t.monto || 0})</option>`).join('');
+        tarifas.map(t =>
+            `<option value="${t.monto || 0}">${App.ui.escapeHTML(t.clasificacion || "Tarea")} ($${t.monto || 0})</option>`
+        ).join("");
 };
 
 window.calcTotalTrabajo = function () {
-    const sel = document.getElementById('select-tarifas');
-    const cant = document.getElementById('cant-trabajo')?.value;
-    const tot = document.getElementById('total-trabajo');
-    const tareaNombre = document.getElementById('tarea_nombre');
+    const sel = document.getElementById("select-tarifas");
+    const cant = document.getElementById("cant-trabajo")?.value;
+    const tot = document.getElementById("total-trabajo");
+    const tareaNombre = document.getElementById("tarea_nombre");
 
     if (sel && cant && tot && sel.value) {
         tot.value = (parseFloat(sel.value) * parseFloat(cant || 1)).toFixed(2);
         if (tareaNombre) {
-            tareaNombre.value = sel.options[sel.selectedIndex]?.text?.split(' ($')[0] || '';
+            tareaNombre.value = sel.options[sel.selectedIndex]?.text?.split(" ($")[0] || "";
         }
     }
 };
@@ -39,29 +46,32 @@ window.filtrarLista = function (inputId, claseItem) {
     if (!input) return;
 
     const filtro = input.value.toLowerCase();
-    const items = document.querySelectorAll('.' + claseItem);
+    const items = document.querySelectorAll("." + claseItem);
 
     items.forEach(item => {
-        const texto = (item.innerText || '').toLowerCase();
-        item.style.display = texto.includes(filtro) ? '' : 'none';
+        const texto = (item.innerText || "").toLowerCase();
+        item.style.display = texto.includes(filtro) ? "" : "none";
     });
 };
 
+// ==========================================
+// FORM HELPERS
+// ==========================================
 App.forms.calcularTotalPedido = function () {
     const prodSelect = document.querySelector('select[name="producto_id"]');
     const cantInput = document.querySelector('input[name="cantidad"]');
     const mayoreoCheck = document.querySelector('input[name="es_mayoreo"]');
     const totalInput = document.querySelector('input[name="total"]');
-    const infoExtra = document.getElementById('info-extra-prod');
+    const infoExtra = document.getElementById("info-extra-prod");
 
     if (!prodSelect || !cantInput || !totalInput || !prodSelect.value) {
-        if (infoExtra) infoExtra.innerHTML = '';
+        if (infoExtra) infoExtra.innerHTML = "";
         return;
     }
 
     const prod = (App.state?.productos || []).find(p => p.id === prodSelect.value);
     if (!prod) {
-        if (infoExtra) infoExtra.innerHTML = '';
+        if (infoExtra) infoExtra.innerHTML = "";
         return;
     }
 
@@ -76,9 +86,9 @@ App.forms.calcularTotalPedido = function () {
     if (infoExtra) {
         infoExtra.innerHTML = `
             <small style="color:var(--primary);">
-                <strong>Clasificación:</strong> ${App.ui.safe(prod.clasificacion || 'N/A')} |
-                <strong>Tamaño:</strong> ${App.ui.safe(prod.tamano || 'N/A')} |
-                <strong>Color:</strong> ${App.ui.safe(prod.color || 'N/A')}
+                <strong>Clasificación:</strong> ${App.ui.safe(prod.clasificacion || "N/A")} |
+                <strong>Tamaño:</strong> ${App.ui.safe(prod.tamano || "N/A")} |
+                <strong>Color:</strong> ${App.ui.safe(prod.color || "N/A")}
             </small>
         `;
     }
@@ -87,15 +97,15 @@ App.forms.calcularTotalPedido = function () {
 window.calcularTotalPedido = () => App.forms.calcularTotalPedido();
 
 App.forms.agregarFilaReceta = function () {
-    const cont = document.getElementById('cont-receta');
+    const cont = document.getElementById("cont-receta");
     if (!cont) return;
 
     const opcMat = (App.state?.inventario || [])
         .map(m => `<option value="${m.id}">${App.ui.safe(m.nombre)} (${App.ui.safe(m.unidad)})</option>`)
-        .join('');
+        .join("");
 
-    const div = document.createElement('div');
-    div.className = 'dm-row dm-mb-3 fila-dinamica';
+    const div = document.createElement("div");
+    div.className = "dm-row dm-mb-3 fila-dinamica";
     div.innerHTML = `
         <div class="dm-w-full">
             <select class="dm-select" name="mat_id[]" required>
@@ -140,16 +150,16 @@ window.calcTotalCompra = function () {
 };
 
 App.forms.agregarFilaCompra = function () {
-    const cont = document.getElementById('cont-compras');
+    const cont = document.getElementById("cont-compras");
     if (!cont) return;
 
     const opcMat = (App.state?.inventario || [])
         .map(m => `<option value="${m.id}">${App.ui.safe(m.nombre)} (Físico: ${m.stock_real || 0})</option>`)
-        .join('');
+        .join("");
 
-    const div = document.createElement('div');
-    div.className = 'fila-compra dm-card dm-mb-3';
-    div.style.padding = '10px';
+    const div = document.createElement("div");
+    div.className = "fila-compra dm-card dm-mb-3";
+    div.style.padding = "10px";
     div.innerHTML = `
         <div class="dm-mb-2">
             <select class="dm-select" name="mat_id[]" required>
@@ -170,11 +180,11 @@ App.forms.agregarFilaCompra = function () {
 window.agregarFilaCompra = () => App.forms.agregarFilaCompra();
 
 App.forms.agregarFilaGasto = function () {
-    const cont = document.getElementById('cont-gastos');
+    const cont = document.getElementById("cont-gastos");
     if (!cont) return;
 
-    const div = document.createElement('div');
-    div.className = 'dm-row dm-mb-3 fila-dinamica';
+    const div = document.createElement("div");
+    div.className = "dm-row dm-mb-3 fila-dinamica";
     div.innerHTML = `
         <input type="text" class="dm-input" name="descripcion[]" placeholder="Descripción" required style="flex:2;">
         <input type="number" step="0.01" class="dm-input" name="monto[]" placeholder="$ Monto" required style="flex:1;">
@@ -187,8 +197,8 @@ window.agregarFilaGasto = () => App.forms.agregarFilaGasto();
 
 window.generarFilaRecetaProd = function (matId, cant, uso) {
     const opcMat = (App.state?.inventario || [])
-        .map(m => `<option value="${m.id}" ${matId === m.id ? 'selected' : ''}>${App.ui.safe(m.nombre)} (${m.stock_real || 0} físicos)</option>`)
-        .join('');
+        .map(m => `<option value="${m.id}" ${matId === m.id ? "selected" : ""}>${App.ui.safe(m.nombre)} (${m.stock_real || 0} físicos)</option>`)
+        .join("");
 
     return `
         <div class="dm-row dm-mb-3 fila-dinamica">
@@ -199,13 +209,13 @@ window.generarFilaRecetaProd = function (matId, cant, uso) {
                 </select>
             </div>
             <div style="width:100px;">
-                <input type="number" step="0.1" class="dm-input" name="cant[]" value="${cant || ''}" placeholder="Cant" required>
+                <input type="number" step="0.1" class="dm-input" name="cant[]" value="${cant || ""}" placeholder="Cant" required>
             </div>
             <div>
                 <select class="dm-select" name="uso[]" required>
-                    <option value="Cuerpo" ${uso === 'Cuerpo' ? 'selected' : ''}>Cuerpo</option>
-                    <option value="Brazos" ${uso === 'Brazos' ? 'selected' : ''}>Brazos</option>
-                    <option value="Adicional" ${uso === 'Adicional' ? 'selected' : ''}>Otro</option>
+                    <option value="Cuerpo" ${uso === "Cuerpo" ? "selected" : ""}>Cuerpo</option>
+                    <option value="Brazos" ${uso === "Brazos" ? "selected" : ""}>Brazos</option>
+                    <option value="Adicional" ${uso === "Adicional" ? "selected" : ""}>Otro</option>
                 </select>
             </div>
             <button type="button" onclick="this.parentElement.remove()" class="dm-btn dm-btn-danger">X</button>
@@ -214,58 +224,60 @@ window.generarFilaRecetaProd = function (matId, cant, uso) {
 };
 
 window.agregarFilaRecetaProd = function () {
-    const cont = document.getElementById('cont-receta-prod');
+    const cont = document.getElementById("cont-receta-prod");
     if (!cont) return;
-    cont.insertAdjacentHTML('beforeend', window.generarFilaRecetaProd('', '', 'Cuerpo'));
+    cont.insertAdjacentHTML("beforeend", window.generarFilaRecetaProd("", "", "Cuerpo"));
 };
 
 window.exportarAExcel = function (datos, nombreArchivo) {
     if (!datos || datos.length === 0) {
-        alert('No hay datos para exportar');
+        alert("No hay datos para exportar");
         return;
     }
 
-    const cabeceras = Object.keys(datos[0]).join(',');
+    const cabeceras = Object.keys(datos[0]).join(",");
     const filas = datos.map(obj =>
         Object.values(obj)
-            .map(v => `"${String(v ?? '').replace(/"/g, '""')}"`)
-            .join(',')
+            .map(v => `"${String(v ?? "").replace(/"/g, '""')}"`)
+            .join(",")
     );
 
-    const blob = new Blob(["\uFEFF" + cabeceras + '\n' + filas.join('\n')], {
-        type: 'text/csv;charset=utf-8;'
+    const blob = new Blob(["\uFEFF" + cabeceras + "\n" + filas.join("\n")], {
+        type: "text/csv;charset=utf-8;"
     });
 
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = nombreArchivo + '.csv';
+    a.download = nombreArchivo + ".csv";
     a.click();
 };
 
 window.switchTabProd = function (tabId, btn) {
-    document.querySelectorAll('.tab-content-prod').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.tab-btn-prod').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll(".tab-content-prod").forEach(el => el.style.display = "none");
+    document.querySelectorAll(".tab-btn-prod").forEach(el => el.classList.remove("active"));
 
-    const tab = document.getElementById('tab-' + tabId);
-    if (tab) tab.style.display = 'block';
-    if (btn) btn.classList.add('active');
+    const tab = document.getElementById("tab-" + tabId);
+    if (tab) tab.style.display = "block";
+    if (btn) btn.classList.add("active");
 };
 
 window.switchTabPed = function (tabId, btn) {
-    document.querySelectorAll('.tab-content-ped').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.tab-btn-ped').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll(".tab-content-ped").forEach(el => el.style.display = "none");
+    document.querySelectorAll(".tab-btn-ped").forEach(el => el.classList.remove("active"));
 
-    const tab = document.getElementById('tab-' + tabId);
-    if (tab) tab.style.display = 'block';
-    if (btn) btn.classList.add('active');
+    const tab = document.getElementById("tab-" + tabId);
+    if (tab) tab.style.display = "block";
+    if (btn) btn.classList.add("active");
 };
 
-// ==============================
-// Router
-// ==============================
+// ==========================================
+// ROUTER
+// ==========================================
 App.router = {
     init() {
-        window.addEventListener('hashchange', () => this.handleRoute());
+        window.removeEventListener("hashchange", this._boundHandleRoute);
+        this._boundHandleRoute = () => this.handleRoute();
+        window.addEventListener("hashchange", this._boundHandleRoute);
         this.handleRoute();
     },
 
@@ -273,19 +285,32 @@ App.router = {
         window.location.hash = route;
     },
 
+    getTitleConfig(hash) {
+        const map = {
+            inicio: { title: "Inicio", subtitle: "Resumen general" },
+            inventario: { title: "Inventario", subtitle: "Control de materiales" },
+            mas: { title: "Más", subtitle: "Accesos y configuración" }
+        };
+
+        return map[hash] || {
+            title: hash.charAt(0).toUpperCase() + hash.slice(1),
+            subtitle: "Gestión de " + hash
+        };
+    },
+
     handleRoute() {
-        const contentDiv = document.getElementById('app-content');
-        const headerTitle = document.getElementById('app-header-title');
-        const headerSubtitle = document.getElementById('app-header-subtitle');
+        const contentDiv = document.getElementById("app-content");
+        const headerTitle = document.getElementById("app-header-title");
+        const headerSubtitle = document.getElementById("app-header-subtitle");
 
         if (!App.state?.sessionToken) {
             App.ui.hideLoader();
 
-            if (headerTitle) headerTitle.textContent = 'Acceso Restringido';
-            if (headerSubtitle) headerSubtitle.textContent = 'Ingresa tu PIN';
+            if (headerTitle) headerTitle.textContent = "Acceso Restringido";
+            if (headerSubtitle) headerSubtitle.textContent = "Ingresa tu PIN";
 
             if (contentDiv) {
-                if (typeof App.views?.login === 'function') {
+                if (typeof App.views?.login === "function") {
                     contentDiv.innerHTML = App.views.login();
                 } else {
                     contentDiv.innerHTML = `
@@ -293,7 +318,7 @@ App.router = {
                             <h2 class="dm-mb-3">Descanso Maya</h2>
                             <p class="dm-alert dm-alert-danger dm-mb-3">Archivo de vistas dañado o cargando...</p>
                             <input type="password" id="pin-input" class="dm-input dm-mb-3" placeholder="PIN">
-                            <button class="dm-btn dm-btn-primary" onclick="App.logic.verificarPIN(document.getElementById('pin-input').value)">Entrar forzado</button>
+                            <button class="dm-btn dm-btn-primary" onclick="App.logic.verificarPIN(document.getElementById('pin-input').value)">Entrar</button>
                         </div>
                     `;
                 }
@@ -301,35 +326,23 @@ App.router = {
             return;
         }
 
-        let hash = window.location.hash.substring(1) || 'inicio';
+        const hash = window.location.hash.substring(1) || "inicio";
 
-        document.querySelectorAll('.dm-bottom-nav a').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.dm-sidebar-link').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll(".dm-bottom-nav a").forEach(el => el.classList.remove("active"));
+        document.querySelectorAll(".dm-sidebar-link").forEach(el => el.classList.remove("active"));
 
         const activeMobile = document.querySelector(`.dm-bottom-nav a[onclick*="${hash}"]`);
         const activeDesktop = document.querySelector(`.dm-sidebar-link[onclick*="${hash}"]`);
 
-        if (activeMobile) activeMobile.classList.add('active');
-        if (activeDesktop) activeDesktop.classList.add('active');
+        if (activeMobile) activeMobile.classList.add("active");
+        if (activeDesktop) activeDesktop.classList.add("active");
 
-        if (App.views && typeof App.views[hash] === 'function') {
+        if (App.views && typeof App.views[hash] === "function") {
             if (contentDiv) contentDiv.innerHTML = App.views[hash]();
 
-          if (headerTitle) {
-    if (hash === 'inicio') {
-        headerTitle.textContent = 'Inicio';
-        if (headerSubtitle) headerSubtitle.textContent = 'Resumen general';
-    } else if (hash === 'inventario') {
-        headerTitle.textContent = 'Inventario';
-        if (headerSubtitle) headerSubtitle.textContent = 'Control de materiales';
-    } else if (hash === 'mas') {
-        headerTitle.textContent = 'Más';
-        if (headerSubtitle) headerSubtitle.textContent = 'Accesos y configuración';
-    } else {
-        headerTitle.textContent = hash.charAt(0).toUpperCase() + hash.slice(1);
-        if (headerSubtitle) headerSubtitle.textContent = 'Gestión de ' + hash;
-    }
-}
+            const titleConfig = this.getTitleConfig(hash);
+            if (headerTitle) headerTitle.textContent = titleConfig.title;
+            if (headerSubtitle) headerSubtitle.textContent = titleConfig.subtitle;
         } else {
             if (contentDiv) {
                 contentDiv.innerHTML = `<div class="dm-card"><p class="dm-center dm-muted">Módulo no encontrado.</p></div>`;
@@ -338,9 +351,12 @@ App.router = {
     }
 };
 
+// ==========================================
+// APP START
+// ==========================================
 App.start = function () {
     try {
-        if (this.ui && typeof this.ui.init === 'function') {
+        if (this.ui && typeof this.ui.init === "function") {
             this.ui.init();
         }
 
@@ -350,14 +366,14 @@ App.start = function () {
 
         if (!this.state?.sessionToken) {
             this.router.init();
-        } else if (this.logic && typeof this.logic.cargarDatosIniciales === 'function') {
+        } else if (this.logic && typeof this.logic.cargarDatosIniciales === "function") {
             this.logic.cargarDatosIniciales();
         } else {
             this.router.init();
         }
     } catch (error) {
-        console.error('Error al iniciar App:', error);
-        const content = document.getElementById('app-content');
+        console.error("Error al iniciar App:", error);
+        const content = document.getElementById("app-content");
         if (content) {
             content.innerHTML = `
                 <div class="dm-card">
@@ -368,19 +384,19 @@ App.start = function () {
     }
 };
 
-document.addEventListener('DOMContentLoaded', () => App.start());
+document.addEventListener("DOMContentLoaded", () => App.start());
 
-// ==============================
-// Parches actuales
-// ==============================
+// ==========================================
+// PARCHES ACTUALES
+// ==========================================
 App.logic.cambiarEstadoProduccion = function (id, nuevoEstado) {
-    App.ui.showLoader('Actualizando estado...');
-    let data = { estado: nuevoEstado };
+    App.ui.showLoader("Actualizando estado...");
+    const data = { estado: nuevoEstado };
 
-    if (nuevoEstado === 'proceso') data.fecha_inicio = new Date().toISOString();
-    if (nuevoEstado === 'listo') data.fecha_fin = new Date().toISOString();
+    if (nuevoEstado === "proceso") data.fecha_inicio = new Date().toISOString();
+    if (nuevoEstado === "listo") data.fecha_fin = new Date().toISOString();
 
-    App.logic.actualizarRegistroGenerico('ordenes_produccion', id, data, 'produccion');
+    App.logic.actualizarRegistroGenerico("ordenes_produccion", id, data, "produccion");
 };
 
 window.verDetallesProduccion = function (ordenId) {
@@ -391,29 +407,29 @@ window.verDetallesProduccion = function (ordenId) {
     const p = (App.state?.pedidos || []).find(x => x.id === pedDet.pedido_id) || {};
     const cliente = (App.state?.clientes || []).find(x => x.id === p.cliente_id) || {};
     const prod = (App.state?.productos || []).find(x => x.id === pedDet.producto_id) || {};
-    const nomCliente = p.cliente_id === 'STOCK_INTERNO' ? 'STOCK BODEGA' : (cliente.nombre || 'Desconocido');
+    const nomCliente = p.cliente_id === "STOCK_INTERNO" ? "STOCK BODEGA" : (cliente.nombre || "Desconocido");
 
     let artesanosOpts = '<option value="">-- Sin Asignar --</option>';
     (App.state?.artesanos || []).forEach(art => {
-        artesanosOpts += `<option value="${art.id}" ${o.artesano_id === art.id ? 'selected' : ''}>${App.ui.safe(art.nombre)}</option>`;
+        artesanosOpts += `<option value="${art.id}" ${o.artesano_id === art.id ? "selected" : ""}>${App.ui.safe(art.nombre)}</option>`;
     });
 
-    let html = `
+    const html = `
     <div class="dm-list-card dm-mb-4" style="background:var(--dm-surface-2); padding:15px; border:none;">
         <div class="dm-row-between dm-mb-2">
             <span class="dm-text-sm dm-muted">Folio / Cliente:</span>
-            <strong style="color:var(--dm-primary);">${App.ui.safe((p.id || '').replace('PED-', ''))} - ${App.ui.safe(nomCliente)}</strong>
+            <strong style="color:var(--dm-primary);">${App.ui.safe((p.id || "").replace("PED-", ""))} - ${App.ui.safe(nomCliente)}</strong>
         </div>
         <div class="dm-row-between">
             <span class="dm-text-sm dm-muted">Producto a tejer:</span>
-            <strong>${App.ui.safe(prod.nombre || 'No definido')}</strong>
+            <strong>${App.ui.safe(prod.nombre || "No definido")}</strong>
         </div>
     </div>
 
     <div class="dm-form-group">
         <label class="dm-label">Notas de Producción</label>
         <div class="dm-alert dm-alert-warning" style="background:#fff;">
-            ${p.notas ? App.ui.escapeHTML(p.notas) : '<i>Sin instrucciones especiales.</i>'}
+            ${p.notas ? App.ui.escapeHTML(p.notas) : "<i>Sin instrucciones especiales.</i>"}
         </div>
     </div>
 
@@ -443,7 +459,7 @@ window.verDetallesProduccion = function (ordenId) {
 
             <div class="dm-form-group">
                 <label class="dm-label">Pago Estimado ($)</label>
-                <input type="number" step="0.01" class="dm-input" id="total-trabajo" name="pago_estimado" value="${o.pago_estimado || ''}" readonly style="background:#f3f4f6;">
+                <input type="number" step="0.01" class="dm-input" id="total-trabajo" name="pago_estimado" value="${o.pago_estimado || ""}" readonly style="background:#f3f4f6;">
             </div>
         </div>
 
@@ -452,12 +468,12 @@ window.verDetallesProduccion = function (ordenId) {
 
     <div class="dm-row-between dm-mt-4">
         <button class="dm-btn dm-btn-secondary" onclick="App.ui.closeSheet()">Cerrar</button>
-        ${o.estado !== 'listo' ? `<button class="dm-btn dm-btn-ghost" style="border:1px solid var(--dm-border);" onclick="App.views.modalMateriaPrima('${o.id}')">🧶 Asignar Hilos</button>` : ''}
+        ${o.estado !== "listo" ? `<button class="dm-btn dm-btn-ghost" style="border:1px solid var(--dm-border);" onclick="App.views.modalMateriaPrima('${o.id}')">🧶 Asignar Hilos</button>` : ""}
     </div>`;
 
-    App.ui.openSheet('Detalle de Producción', html, (data) => {
-        App.logic.actualizarRegistroGenerico('ordenes_produccion', o.id, data, 'produccion');
-        App.ui.toast('Asignación guardada con éxito');
+    App.ui.openSheet("Detalle de Producción", html, (data) => {
+        App.logic.actualizarRegistroGenerico("ordenes_produccion", o.id, data, "produccion");
+        App.ui.toast("Asignación guardada con éxito");
         App.ui.closeSheet();
     });
 
@@ -465,7 +481,7 @@ window.verDetallesProduccion = function (ordenId) {
         setTimeout(() => {
             window.cargarTarifas(o.artesano_id);
             if (o.pago_estimado) {
-                const selectTarifas = document.getElementById('select-tarifas');
+                const selectTarifas = document.getElementById("select-tarifas");
                 if (selectTarifas) {
                     for (let i = 0; i < selectTarifas.options.length; i++) {
                         if (selectTarifas.options[i].value == o.pago_estimado) {
