@@ -18,9 +18,6 @@ App.views.cobranza = function() {
     let enProcesoConDeuda = [];
     let totalPorCobrar = 0;
 
-    // ==============================
-    // 1. Analizar pedidos
-    // ==============================
     pedidos.forEach(p => {
         const abonosPedido = abonos
             .filter(a => a.pedido_id === p.id)
@@ -76,6 +73,13 @@ App.views.cobranza = function() {
                             💰 Cobrar
                         </button>
 
+                        <button
+                            class="dm-btn dm-btn-secondary dm-btn-sm"
+                            onclick="App.logic.imprimirNota('${p.id}')"
+                        >
+                            🖨️ Nota
+                        </button>
+
                         ${c && c.telefono ? `
                             <button
                                 class="dm-btn dm-btn-secondary dm-btn-sm"
@@ -94,9 +98,6 @@ App.views.cobranza = function() {
         }
     });
 
-    // ==============================
-    // 2. Analizar reparaciones
-    // ==============================
     reparaciones.forEach(r => {
         const saldo = parseFloat(r.precio || 0) - parseFloat(r.anticipo || 0);
 
@@ -206,7 +207,6 @@ App.views.abrirCobroSeguro = function(pedidoId, clienteId, saldo) {
         return;
     }
 
-    // Fallback: usar el modal de abonos del pedido
     if (typeof App.views.modalAbonos === 'function') {
         App.views.modalAbonos(pedidoId);
         return;
