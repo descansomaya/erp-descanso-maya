@@ -217,8 +217,13 @@ App.views.mas = function() {
                     </div>
                 </div>
             </div>
-        </div>
-    `;
+        </div>;
+        <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('reparaciones')">
+    <div class="dm-row">
+        <div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🪡</div>
+        <strong class="dm-text-lg">Reparaciones</strong>
+    </div>
+</div>
 };
 
 App.views.configuracion = function() {
