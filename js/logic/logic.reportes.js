@@ -2,60 +2,103 @@
 // LÓGICA: INTELIGENCIA DE NEGOCIOS Y REPORTES
 // ==========================================
 
+window.App = window.App || {};
+App.logic = App.logic || {};
+
 Object.assign(App.logic, {
     generarReporteRentabilidad() {
-        let stats = {};
-        (App.state.ordenes_produccion || []).forEach(o => {
-            if(o.estado === 'listo' && o.costos_finales) {
-                const detalle = (App.state.pedido_detalle || []).find(d => d.id === o.pedido_detalle_id) || (App.state.pedido_detalle || []).find(d => d.pedido_id === o.pedido_detalle_id);
-                if(detalle) {
-                    const prod = (App.state.productos || []).find(p => p.id === detalle.producto_id);
-                    if(prod) {
-                        try {
-                            const cf = JSON.parse(o.costos_finales);
-                            if(cf.precio_venta > 0) { // Solo contamos los vendidos a clientes, no el stock interno
-                                if(!stats[prod.id]) stats[prod.id] = { nombre: prod.nombre, ventas: 0, costo_mat: 0, costo_mo: 0, utilidad: 0, cantidad: 0 };
-                                stats[prod.id].ventas += parseFloat(cf.precio_venta||0);
-                                stats[prod.id].costo_mat += parseFloat(cf.materiales||0);
-                                stats[prod.id].costo_mo += parseFloat(cf.mano_obra||0);
-                                stats[prod.id].utilidad += parseFloat(cf.utilidad||0);
-                                stats[prod.id].cantidad += 1;
-                            }
-                        } catch(e){}
-                    }
+        const stats = {};
+
+        (App.state.ordenes_produccion || []).forEach((orden) => {
+            if (orden.estado !== "listo" || !orden.costos_finales) return;
+
+            const detalle = (App.state.pedido_detalle || []).find(d => d.id === orden.pedido_detalle_id);
+            if (!detalle) return;
+
+            const producto = (App.state.productos || []).find(p => p.id === detalle.producto_id);
+            if (!producto) return;
+
+            try {
+                const cf = JSON.parse(orden.costos_finales);
+
+                if (parseFloat(cf.precio_venta || 0) <= 0) return;
+
+                if (!stats[producto.id]) {
+                    stats[producto.id] = {
+                        nombre: producto.nombre,
+                        ventas: 0,
+                        costo_mat: 0,
+                        costo_mo: 0,
+                        utilidad: 0,
+                        cantidad: 0
+                    };
                 }
+
+                stats[producto.id].ventas += parseFloat(cf.precio_venta || 0);
+                stats[producto.id].costo_mat += parseFloat(cf.materiales || 0);
+                stats[producto.id].costo_mo += parseFloat(cf.mano_obra || 0);
+                stats[producto.id].utilidad += parseFloat(cf.utilidad || 0);
+                stats[producto.id].cantidad += 1;
+            } catch (e) {
+                console.warn("No se pudo interpretar costos_finales en orden:", orden.id, e);
             }
         });
+
         return Object.values(stats).sort((a, b) => b.utilidad - a.utilidad);
     },
 
     generarReporteTopProductos() {
-        let stats = {};
-        (App.state.pedido_detalle || []).forEach(d => {
-            const pedido = (App.state.pedidos || []).find(p => p.id === d.pedido_id);
-            if(pedido && pedido.cliente_id !== 'STOCK_INTERNO') {
-                const prod = (App.state.productos || []).find(p => p.id === d.producto_id);
-                if(prod) {
-                    if(!stats[prod.id]) stats[prod.id] = { nombre: prod.nombre, cantidad: 0, ingresos: 0 };
-                    stats[prod.id].cantidad += parseInt(d.cantidad || 1);
-                    stats[prod.id].ingresos += parseFloat(pedido.total || 0);
-                }
+        const stats = {};
+
+        (App.state.pedido_detalle || []).forEach((detalle) => {
+            const pedido = (App.state.pedidos || []).find(p => p.id === detalle.pedido_id);
+            if (!pedido || pedido.cliente_id === "STOCK_INTERNO") return;
+
+            const producto = (App.state.productos || []).find(p => p.id === detalle.producto_id);
+            if (!producto) return;
+
+            if (!stats[producto.id]) {
+                stats[producto.id] = {
+                    nombre: producto.nombre,
+                    cantidad: 0,
+                    ingresos: 0
+                };
             }
+
+            const cantidadDetalle = parseInt(detalle.cantidad || 1);
+            const precioUnitario = parseFloat(detalle.precio_unitario || 0);
+
+            stats[producto.id].cantidad += cantidadDetalle;
+            stats[producto.id].ingresos += cantidadDetalle * precioUnitario;
         });
+
         return Object.values(stats).sort((a, b) => b.cantidad - a.cantidad);
     },
 
     generarReporteComprasProv() {
-        let stats = {};
-        (App.state.compras || []).forEach(c => {
-            const prov = (App.state.proveedores || []).find(p => p.id === c.proveedor_id);
-            const nombre = prov ? prov.nombre : 'Desconocido';
-            if(!stats[nombre]) stats[nombre] = { nombre: nombre, total_comprado: 0, deuda: 0 };
-            const total = parseFloat(c.total||0);
-            const pagado = c.monto_pagado !== undefined && c.monto_pagado !== "" ? parseFloat(c.monto_pagado) : total;
+        const stats = {};
+
+        (App.state.compras || []).forEach((compra) => {
+            const prov = (App.state.proveedores || []).find(p => p.id === compra.proveedor_id);
+            const nombre = prov ? prov.nombre : "Desconocido";
+
+            if (!stats[nombre]) {
+                stats[nombre] = {
+                    nombre,
+                    total_comprado: 0,
+                    deuda: 0
+                };
+            }
+
+            const total = parseFloat(compra.total || 0);
+            const pagado = compra.monto_pagado !== undefined && compra.monto_pagado !== ""
+                ? parseFloat(compra.monto_pagado)
+                : total;
+
             stats[nombre].total_comprado += total;
             stats[nombre].deuda += (total - pagado);
         });
+
         return Object.values(stats).sort((a, b) => b.total_comprado - a.total_comprado);
     }
 });
