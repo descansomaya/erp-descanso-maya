@@ -17,10 +17,8 @@ App.api.fetch = async function (action, payload = {}) {
                 gasUrl: window.App?.config?.api?.gasUrl || null
             };
 
-            console.error('DEBUG App config:', debugInfo);
-            alert('DEBUG URL GAS\\n' + JSON.stringify(debugInfo, null, 2));
-
-            throw new Error('No hay URL configurada para Apps Script');
+            cconsole.error('DEBUG App config:', debugInfo);
+throw new Error('No hay URL configurada para Apps Script');
         }
 
         let requestBody = {
