@@ -48,7 +48,7 @@ window.generarListaPedidos = function(tipo) {
     let pedidos = (App.state.pedidos || []).filter(p => {
         if (tipo === 'activos') return p.estado !== 'entregado' && p.estado !== 'listo para entregar';
         if (tipo === 'listos') return p.estado === 'listo para entregar';
-        return p.estado === 'entregado';
+        return p.estado === 'entregado' || p.estado === 'pagado';
     });
 
     if (pedidos.length === 0) {
@@ -70,7 +70,7 @@ window.generarListaPedidos = function(tipo) {
         const fecha = p.fecha_creacion ? String(p.fecha_creacion).split('T')[0] : '';
 
         let estColor = 'dm-badge-primary';
-        if (estado === 'entregado') estColor = 'dm-badge-success';
+        if (estado === 'entregado' || estado === 'pagado') estColor = 'dm-badge-success';
         else if (estado === 'listo para entregar') estColor = 'dm-badge-warning';
 
         html += `
@@ -112,6 +112,8 @@ window.generarListaPedidos = function(tipo) {
                     <button class="dm-btn dm-btn-info dm-btn-sm" onclick="App.views.modalDetallesPedido('${p.id}')">📦 Detalles</button>
                     <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formPedido('${p.id}')">✏️ Editar</button>
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💳 Abonos</button>
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirNota('${p.id}')">🖨️ Nota</button>
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.enviarWhatsApp('${p.id}', '${p.estado === 'listo para entregar' ? 'listo' : 'cobro'}')">💬 WhatsApp</button>
                 </div>
             </div>
         `;
@@ -247,7 +249,7 @@ App.views.modalAbonos = function(pedidoId) {
 
                         <button
                             class="dm-btn dm-btn-danger dm-btn-sm"
-                            onclick="App.logic.eliminarRegistroGenerico('abonos_clientes','${a.id}','pedidos')"
+                            onclick="App.logic.eliminarRegistroGenerico('abonos_clientes','${a.id}','abonos')"
                         >
                             X
                         </button>
@@ -262,6 +264,7 @@ App.views.modalAbonos = function(pedidoId) {
         html += `
             <form id="dynamic-form">
                 <input type="hidden" name="pedido_id" value="${pedidoId}">
+                <input type="hidden" name="cliente_id" value="${pedido.cliente_id || ''}">
 
                 <div class="dm-form-row">
                     <div class="dm-form-group">
@@ -297,7 +300,7 @@ App.views.modalAbonos = function(pedidoId) {
 
     App.ui.openSheet('Abonos del Pedido', html, (data) => {
         if (saldo > 0) {
-            App.logic.guardarNuevoGenerico('abonos_clientes', data, 'ABO', 'pedidos');
+            App.logic.guardarAbono(data);
         }
     });
 };
@@ -306,34 +309,14 @@ App.views.modalAbonos = function(pedidoId) {
 // COTIZACIONES
 // ==========================================
 App.views.cotizaciones = function() {
-    const title = document.getElementById('app-header-title');
-    const subtitle = document.getElementById('app-header-subtitle');
-    const bottomNav = document.getElementById('bottom-nav');
-
-    if (title) title.innerText = 'Cotizaciones';
-    if (subtitle) subtitle.innerText = 'Presupuestos';
-    if (bottomNav) bottomNav.style.display = 'flex';
-
-    let html = `<div class="dm-section" style="padding-bottom:90px;"><div class="dm-list">`;
-    const cotizaciones = App.state.cotizaciones || [];
-
-    if (cotizaciones.length === 0) {
-        html += `<div class="dm-alert dm-alert-info">No hay cotizaciones.</div>`;
-    }
-
-    cotizaciones.forEach(c => {
-        html += `
-            <div class="dm-list-card">
-                <div class="dm-list-card-title">${App.ui.safe(c.cliente_nombre || 'Cliente')}</div>
-                <div class="dm-list-card-actions">
-                    <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formCotizacion('${c.id}')">Ver Detalles</button>
-                </div>
+    App.views.moduloNoDisponible('Cotizaciones');
+    return `
+        <div class="dm-section" style="padding-bottom:90px;">
+            <div class="dm-alert dm-alert-warning">
+                El módulo de cotizaciones está pendiente de activación porque aún no existe la hoja correspondiente en Google Sheets.
             </div>
-        `;
-    });
-
-    html += `</div></div><button class="dm-fab" onclick="App.views.formCotizacion()">+</button>`;
-    return html;
+        </div>
+    `;
 };
 
 App.views.formCotizacion = function(id = null) {
@@ -411,7 +394,13 @@ App.views.modalDetallesPedido = function(pedidoId) {
         `;
     });
 
-    html += `</div>`;
+    html += `
+        </div>
+        <div class="dm-list-card-actions dm-mt-3">
+            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirNota('${pedidoId}')">🖨️ Imprimir Nota</button>
+            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.enviarWhatsApp('${pedidoId}', 'cobro')">💬 WhatsApp</button>
+        </div>
+    `;
 
     App.ui.openSheet(`Detalles del Pedido: ${pedidoId}`, html, () => {
         App.ui.closeSheet();
