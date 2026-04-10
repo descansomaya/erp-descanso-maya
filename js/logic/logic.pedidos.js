@@ -502,14 +502,173 @@ Object.assign(App.logic, {
     },
 
     imprimirNota(pedidoId) {
-        /* Legacy / pendiente */
+        try {
+            const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
+            if (!pedido) {
+                App.ui.toast("Pedido no encontrado", "danger");
+                return;
+            }
+
+            const cliente = (App.state.clientes || []).find(c => c.id === pedido.cliente_id);
+            const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
+
+            let totalAbonos = (App.state.abonos || [])
+                .filter(a => a.pedido_id === pedidoId)
+                .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+
+            const saldo = parseFloat(pedido.total || 0) - parseFloat(pedido.anticipo || 0) - totalAbonos;
+
+            const filas = detalles.map(det => {
+                const prod = (App.state.productos || []).find(p => p.id === det.producto_id);
+                const nombre = prod ? prod.nombre : "Producto";
+                const cantidad = parseFloat(det.cantidad || 0);
+                const precio = parseFloat(det.precio_unitario || 0);
+                const subtotal = cantidad * precio;
+
+                return `
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #ddd;">${App.ui.escapeHTML(nombre)}</td>
+                        <td style="padding:8px; border-bottom:1px solid #ddd; text-align:center;">${cantidad}</td>
+                        <td style="padding:8px; border-bottom:1px solid #ddd; text-align:right;">$${precio.toFixed(2)}</td>
+                        <td style="padding:8px; border-bottom:1px solid #ddd; text-align:right;">$${subtotal.toFixed(2)}</td>
+                    </tr>
+                `;
+            }).join("");
+
+            const html = `
+                <html>
+                <head>
+                    <title>Nota ${pedido.id}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 24px; color: #222; }
+                        h1, h2, h3 { margin: 0 0 10px 0; }
+                        .muted { color: #666; font-size: 12px; }
+                        .box { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                        th { text-align: left; background: #f5f5f5; padding: 8px; border-bottom: 1px solid #ddd; }
+                        td { font-size: 14px; }
+                        .right { text-align: right; }
+                    </style>
+                </head>
+                <body>
+                    <h2>Descanso Maya</h2>
+                    <div class="muted">Nota / Resumen de pedido</div>
+                    <hr>
+
+                    <div class="box">
+                        <strong>Folio:</strong> ${App.ui.escapeHTML(pedido.id)}<br>
+                        <strong>Cliente:</strong> ${App.ui.escapeHTML(cliente ? cliente.nombre : "STOCK BODEGA")}<br>
+                        <strong>Fecha:</strong> ${App.ui.escapeHTML(String(pedido.fecha_creacion || "").split("T")[0])}<br>
+                        <strong>Entrega:</strong> ${App.ui.escapeHTML(pedido.fecha_entrega || "-")}<br>
+                        <strong>Estado:</strong> ${App.ui.escapeHTML(pedido.estado || "-")}
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th style="text-align:center;">Cant.</th>
+                                <th class="right">P. Unit.</th>
+                                <th class="right">Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filas || `<tr><td colspan="4" style="padding:8px;">Sin detalles</td></tr>`}
+                        </tbody>
+                    </table>
+
+                    <div class="box" style="margin-top:16px;">
+                        <div><strong>Total:</strong> $${parseFloat(pedido.total || 0).toFixed(2)}</div>
+                        <div><strong>Anticipo:</strong> $${parseFloat(pedido.anticipo || 0).toFixed(2)}</div>
+                        <div><strong>Abonos:</strong> $${totalAbonos.toFixed(2)}</div>
+                        <div><strong>Saldo:</strong> $${saldo.toFixed(2)}</div>
+                    </div>
+
+                    ${pedido.notas ? `<div class="box"><strong>Notas:</strong><br>${App.ui.escapeHTML(pedido.notas)}</div>` : ""}
+
+                    <script>
+                        window.onload = function() {
+                            window.print();
+                        };
+                    </script>
+                </body>
+                </html>
+            `;
+
+            const w = window.open("", "_blank", "width=900,height=700");
+            if (!w) {
+                App.ui.toast("El navegador bloqueó la ventana de impresión", "warning");
+                return;
+            }
+
+            w.document.open();
+            w.document.write(html);
+            w.document.close();
+        } catch (error) {
+            console.error("Error en imprimirNota:", error);
+            App.ui.toast(error.message || "Error al imprimir nota", "danger");
+        }
     },
 
     imprimirCotizacion(cotId) {
-        /* Legacy / pendiente */
+        App.ui.toast("Cotizaciones impresas sigue pendiente de activación.", "warning");
     },
 
     enviarWhatsApp(pedidoId, tipoMensaje) {
-        /* Legacy / pendiente */
+        try {
+            const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId)
+                || (App.state.reparaciones || []).find(r => r.id === pedidoId);
+
+            if (!pedido) {
+                App.ui.toast("Registro no encontrado", "danger");
+                return;
+            }
+
+            const cliente = (App.state.clientes || []).find(c => c.id === pedido.cliente_id);
+            if (!cliente || !cliente.telefono) {
+                App.ui.toast("El cliente no tiene teléfono registrado", "warning");
+                return;
+            }
+
+            const telefono = String(cliente.telefono).replace(/\D/g, "");
+            if (!telefono) {
+                App.ui.toast("Teléfono inválido", "warning");
+                return;
+            }
+
+            const esReparacion = String(pedido.id || "").startsWith("REP-");
+            const total = parseFloat(esReparacion ? pedido.precio : pedido.total || 0);
+            const anticipo = parseFloat(pedido.anticipo || 0);
+
+            const abonosExtra = esReparacion
+                ? 0
+                : (App.state.abonos || [])
+                    .filter(a => a.pedido_id === pedido.id)
+                    .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+
+            const saldo = total - anticipo - abonosExtra;
+
+            let mensaje = "";
+
+            if (tipoMensaje === "listo") {
+                mensaje = `Hola ${cliente.nombre || ""}, tu ${esReparacion ? "reparación" : "pedido"} ${pedido.id} ya está listo para entregar.`;
+                if (saldo > 0) {
+                    mensaje += ` Tu saldo pendiente es de $${saldo.toFixed(2)} MXN.`;
+                }
+                mensaje += ` Quedamos atentos. Descanso Maya.`;
+            } else {
+                mensaje = `Hola ${cliente.nombre || ""}, te contactamos de Descanso Maya sobre tu ${esReparacion ? "reparación" : "pedido"} ${pedido.id}.`;
+                if (saldo > 0) {
+                    mensaje += ` Tienes un saldo pendiente de $${saldo.toFixed(2)} MXN.`;
+                }
+                mensaje += ` Quedamos atentos para apoyarte.`;
+            }
+
+            const waUrl = `https://wa.me/52${telefono}?text=${encodeURIComponent(mensaje)}`;
+            window.open(waUrl, "_blank");
+        } catch (error) {
+            console.error("Error en enviarWhatsApp:", error);
+            App.ui.toast(error.message || "Error al abrir WhatsApp", "danger");
+        }
     }
 });
