@@ -389,15 +389,7 @@ document.addEventListener("DOMContentLoaded", () => App.start());
 // ==========================================
 // PARCHES ACTUALES
 // ==========================================
-App.logic.cambiarEstadoProduccion = function (id, nuevoEstado) {
-    App.ui.showLoader("Actualizando estado...");
-    const data = { estado: nuevoEstado };
 
-    if (nuevoEstado === "proceso") data.fecha_inicio = new Date().toISOString();
-    if (nuevoEstado === "listo") data.fecha_fin = new Date().toISOString();
-
-    App.logic.actualizarRegistroGenerico("ordenes_produccion", id, data, "produccion");
-};
 
 window.verDetallesProduccion = function (ordenId) {
     const o = (App.state?.ordenes_produccion || []).find(x => x.id === ordenId);
