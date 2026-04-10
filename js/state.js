@@ -10,7 +10,6 @@ App.api = App.api || {};
 App.ui = App.ui || {};
 
 App.state = {
-    // CONFIG
     config: {
         empresa: "Descanso Maya",
         moneda: "MXN",
@@ -18,10 +17,8 @@ App.state = {
         redesSociales: "@descansomaya.mx"
     },
 
-    // SESIÓN
     sessionToken: localStorage.getItem('erp_session_token') || null,
 
-    // CORE DATA (Sheets)
     inventario: [],
     clientes: [],
     productos: [],
@@ -39,6 +36,5 @@ App.state = {
     movimientos_inventario: [],
     abonos_proveedores: [],
 
-    // FUTURO / OPCIONAL (no activo aún)
     cotizaciones: []
 };
