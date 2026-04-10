@@ -5,19 +5,25 @@
 window.App = window.App || {};
 App.views = App.views || {};
 
+// ==========================================
+// PEDIDOS
+// ==========================================
 App.views.pedidos = function() {
     const title = document.getElementById('app-header-title');
     const subtitle = document.getElementById('app-header-subtitle');
+    const bottomNav = document.getElementById('bottom-nav');
+
     if (title) title.innerText = 'Pedidos';
     if (subtitle) subtitle.innerText = 'Gestión de pedidos';
+    if (bottomNav) bottomNav.style.display = 'flex';
 
     return `
         <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4" style="padding:10px;">
                 <div class="dm-tabs tabs-pedidos-mobile" style="display:flex; gap:8px; overflow-x:auto; overflow-y:hidden; white-space:nowrap; scrollbar-width:none; -ms-overflow-style:none;">
-                    <button class="dm-tab active tab-btn-ped" style="flex:0 0 auto; min-width:max-content; font-size:0.82rem; padding:9px 12px;" onclick="window.switchTabPed('activos', this)">🟢 Activos / Taller</button>
-                    <button class="dm-tab tab-btn-ped" style="flex:0 0 auto; min-width:max-content; font-size:0.82rem; padding:9px 12px;" onclick="window.switchTabPed('listos', this)">🟠 Listos / Cobro</button>
-                    <button class="dm-tab tab-btn-ped" style="flex:0 0 auto; min-width:max-content; font-size:0.82rem; padding:9px 12px;" onclick="window.switchTabPed('historial', this)">✅ Historial</button>
+                    <button class="dm-tab active tab-btn-ped" onclick="window.switchTabPed('activos', this)">🟢 Activos / Taller</button>
+                    <button class="dm-tab tab-btn-ped" onclick="window.switchTabPed('listos', this)">🟠 Listos / Cobro</button>
+                    <button class="dm-tab tab-btn-ped" onclick="window.switchTabPed('historial', this)">✅ Historial</button>
                 </div>
             </div>
 
@@ -54,13 +60,14 @@ window.generarListaPedidos = function(tipo) {
     let html = `<div class="dm-list">`;
 
     pedidos.forEach(p => {
-        const c = (App.state.clientes || []).find(x => x.id === p.cliente_id) || {};
+        const cliente = (App.state.clientes || []).find(x => x.id === p.cliente_id) || {};
         const abonos = (App.state.abonos || [])
             .filter(a => a.pedido_id === p.id)
             .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
 
         const saldo = parseFloat(p.total || 0) - parseFloat(p.anticipo || 0) - abonos;
         const estado = String(p.estado || '').toLowerCase();
+        const fecha = p.fecha_creacion ? String(p.fecha_creacion).split('T')[0] : '';
 
         let estColor = 'dm-badge-primary';
         if (estado === 'entregado') estColor = 'dm-badge-success';
@@ -68,17 +75,18 @@ window.generarListaPedidos = function(tipo) {
 
         html += `
             <div class="dm-list-card">
-                <div class="dm-list-card-top">
-                    <div>
+                <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
+                    <div style="flex:1; min-width:0;">
                         <div class="dm-list-card-title">
-                            ${App.ui.safe(p.id || '')} - ${App.ui.safe(c.nombre || 'STOCK')}
+                            ${App.ui.safe(p.id || '')} - ${App.ui.safe(cliente.nombre || 'STOCK BODEGA')}
                         </div>
                         <div class="dm-list-card-subtitle dm-mt-2">
                             <span class="dm-badge ${estColor}">${App.ui.safe((p.estado || '').toUpperCase())}</span>
+                            ${fecha ? `<span class="dm-text-sm dm-muted" style="display:inline-block; margin-left:8px;">${fecha}</span>` : ''}
                         </div>
                     </div>
 
-                    <div class="dm-right">
+                    <div style="text-align:right; flex:0 0 auto;">
                         <div class="dm-fw-bold dm-text-lg">$${parseFloat(p.total || 0).toFixed(2)}</div>
                         <div class="dm-text-sm dm-muted">
                             Saldo:
@@ -86,6 +94,17 @@ window.generarListaPedidos = function(tipo) {
                                 $${saldo.toFixed(2)}
                             </strong>
                         </div>
+                    </div>
+                </div>
+
+                <div class="dm-card dm-mt-3" style="background:var(--dm-surface-2); padding:10px;">
+                    <div class="dm-row-between dm-text-sm">
+                        <span class="dm-muted">Anticipo:</span>
+                        <strong>$${parseFloat(p.anticipo || 0).toFixed(2)}</strong>
+                    </div>
+                    <div class="dm-row-between dm-text-sm">
+                        <span class="dm-muted">Abonos:</span>
+                        <strong>$${abonos.toFixed(2)}</strong>
                     </div>
                 </div>
 
@@ -105,27 +124,29 @@ window.generarListaPedidos = function(tipo) {
 App.views.formPedido = function(id = null) {
     const obj = id ? (App.state.pedidos || []).find(p => p.id === id) : null;
 
-    let htmlC = '<option value="STOCK_INTERNO">STOCK BODEGA</option>';
+    let htmlClientes = '<option value="STOCK_INTERNO">STOCK BODEGA</option>';
     (App.state.clientes || []).forEach(c => {
-        htmlC += `<option value="${c.id}" ${obj && obj.cliente_id === c.id ? 'selected' : ''}>${App.ui.safe(c.nombre)}</option>`;
+        htmlClientes += `<option value="${c.id}" ${obj && obj.cliente_id === c.id ? 'selected' : ''}>${App.ui.safe(c.nombre)}</option>`;
     });
 
-    let htmlP = '<option value="">-- Producto --</option>';
+    let htmlProductos = '<option value="">-- Producto --</option>';
     (App.state.productos || []).forEach(p => {
-        htmlP += `<option value="${p.id}" ${obj && obj.producto_id === p.id ? 'selected' : ''}>${App.ui.safe(p.nombre)}</option>`;
+        htmlProductos += `<option value="${p.id}" ${obj && obj.producto_id === p.id ? 'selected' : ''}>${App.ui.safe(p.nombre)}</option>`;
     });
 
     const formHTML = `
         <form id="dynamic-form">
             <div class="dm-form-group">
                 <label class="dm-label">Cliente</label>
-                <select class="dm-select" name="cliente_id">${htmlC}</select>
+                <select class="dm-select" name="cliente_id">
+                    ${htmlClientes}
+                </select>
             </div>
 
             <div class="dm-form-group">
                 <label class="dm-label">Producto</label>
                 <select class="dm-select" name="producto_id" required onchange="window.calcularTotalPedido()">
-                    ${htmlP}
+                    ${htmlProductos}
                 </select>
                 <div id="info-extra-prod" class="dm-mt-2"></div>
             </div>
@@ -133,62 +154,103 @@ App.views.formPedido = function(id = null) {
             <div class="dm-form-row">
                 <div class="dm-form-group">
                     <label class="dm-label">Cantidad</label>
-                    <input type="number" class="dm-input" name="cantidad" value="${obj ? obj.cantidad : '1'}" required oninput="window.calcularTotalPedido()">
+                    <input
+                        type="number"
+                        class="dm-input"
+                        name="cantidad"
+                        value="${obj ? obj.cantidad : '1'}"
+                        required
+                        oninput="window.calcularTotalPedido()"
+                    >
                 </div>
 
                 <div class="dm-form-group">
-                    <label class="dm-label">Entrega</label>
-                    <input type="date" class="dm-input" name="fecha_entrega" value="${obj ? obj.fecha_entrega || '' : ''}" required>
+                    <label class="dm-label">Fecha de entrega</label>
+                    <input
+                        type="date"
+                        class="dm-input"
+                        name="fecha_entrega"
+                        value="${obj ? (obj.fecha_entrega || '') : ''}"
+                        required
+                    >
                 </div>
             </div>
 
             <div class="dm-form-row">
                 <div class="dm-form-group">
                     <label class="dm-label">Total ($)</label>
-                    <input type="number" step="0.01" class="dm-input" name="total" value="${obj ? obj.total || '' : ''}" required>
+                    <input
+                        type="number"
+                        step="0.01"
+                        class="dm-input"
+                        name="total"
+                        value="${obj ? (obj.total || '') : ''}"
+                        required
+                    >
                 </div>
 
                 <div class="dm-form-group">
-                    <label class="dm-label">Anticipo</label>
-                    <input type="number" step="0.01" class="dm-input" name="anticipo" value="${obj ? obj.anticipo || '0' : '0'}" required>
+                    <label class="dm-label">Anticipo ($)</label>
+                    <input
+                        type="number"
+                        step="0.01"
+                        class="dm-input"
+                        name="anticipo"
+                        value="${obj ? (obj.anticipo || '0') : '0'}"
+                        required
+                    >
                 </div>
             </div>
 
-            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Guardar Pedido</button>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
+                ${obj ? 'Guardar Cambios' : 'Crear Pedido'}
+            </button>
         </form>
     `;
 
-    App.ui.openSheet(obj ? 'Editar Pedido' : 'Nuevo Pedido', formHTML, (d) => {
-        if (obj) App.logic.actualizarRegistroGenerico('pedidos', id, d, 'pedidos');
-        else App.logic.guardarNuevoPedido(d);
+    App.ui.openSheet(obj ? 'Editar Pedido' : 'Nuevo Pedido', formHTML, (data) => {
+        if (obj) App.logic.actualizarRegistroGenerico('pedidos', id, data, 'pedidos');
+        else App.logic.guardarNuevoPedido(data);
     });
 
     setTimeout(() => {
-        if (!obj) window.calcularTotalPedido();
+        window.calcularTotalPedido();
     }, 150);
 };
 
 App.views.modalAbonos = function(pedidoId) {
-    const p = (App.state.pedidos || []).find(x => x.id === pedidoId);
-    if (!p) return;
+    const pedido = (App.state.pedidos || []).find(x => x.id === pedidoId);
+    if (!pedido) return;
 
-    const abs = (App.state.abonos || []).filter(a => a.pedido_id === pedidoId);
-    const totalAbonos = abs.reduce((s, a) => s + parseFloat(a.monto || 0), 0);
-    const saldo = parseFloat(p.total || 0) - parseFloat(p.anticipo || 0) - totalAbonos;
+    const abonos = (App.state.abonos || []).filter(a => a.pedido_id === pedidoId);
+    const totalAbonos = abonos.reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+    const saldo = parseFloat(pedido.total || 0) - parseFloat(pedido.anticipo || 0) - totalAbonos;
 
-    let html = `<div class="dm-alert dm-alert-info dm-mb-4">Saldo: $${saldo.toFixed(2)}</div>`;
+    let html = `
+        <div class="dm-alert dm-alert-info dm-mb-4">
+            Saldo pendiente: $${saldo.toFixed(2)}
+        </div>
+    `;
 
-    if (abs.length > 0) {
+    if (abonos.length > 0) {
         html += `<div class="dm-list dm-mb-4">`;
-        abs.forEach(a => {
+        abonos.forEach(a => {
+            const fecha = a.fecha ? String(a.fecha).split('T')[0] : '';
             html += `
                 <div class="dm-list-card" style="padding:10px;">
-                    <div class="dm-row-between">
-                        <div>
+                    <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
+                        <div style="flex:1;">
                             <strong>$${parseFloat(a.monto || 0).toFixed(2)}</strong>
                             <div class="dm-text-sm dm-muted">${a.metodo_pago ? App.ui.safe(a.metodo_pago) : ''}</div>
+                            ${fecha ? `<div class="dm-text-sm dm-muted">${fecha}</div>` : ''}
                         </div>
-                        <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.eliminarRegistroGenerico('abonos_clientes','${a.id}','pedidos')">X</button>
+
+                        <button
+                            class="dm-btn dm-btn-danger dm-btn-sm"
+                            onclick="App.logic.eliminarRegistroGenerico('abonos_clientes','${a.id}','pedidos')"
+                        >
+                            X
+                        </button>
                     </div>
                 </div>
             `;
@@ -204,7 +266,14 @@ App.views.modalAbonos = function(pedidoId) {
                 <div class="dm-form-row">
                     <div class="dm-form-group">
                         <label class="dm-label">Abonar ($)</label>
-                        <input type="number" step="0.01" class="dm-input" name="monto" max="${saldo}" required>
+                        <input
+                            type="number"
+                            step="0.01"
+                            class="dm-input"
+                            name="monto"
+                            max="${saldo}"
+                            required
+                        >
                     </div>
 
                     <div class="dm-form-group">
@@ -219,30 +288,40 @@ App.views.modalAbonos = function(pedidoId) {
 
                 <input type="hidden" name="fecha" value="${new Date().toISOString()}">
 
-                <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Abonar</button>
+                <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
+                    Registrar Abono
+                </button>
             </form>
         `;
     }
 
-    App.ui.openSheet('Abonos', html, (d) => {
-        if (saldo > 0) App.logic.guardarNuevoGenerico('abonos_clientes', d, 'ABO', 'pedidos');
+    App.ui.openSheet('Abonos del Pedido', html, (data) => {
+        if (saldo > 0) {
+            App.logic.guardarNuevoGenerico('abonos_clientes', data, 'ABO', 'pedidos');
+        }
     });
 };
 
+// ==========================================
+// COTIZACIONES
+// ==========================================
 App.views.cotizaciones = function() {
     const title = document.getElementById('app-header-title');
     const subtitle = document.getElementById('app-header-subtitle');
+    const bottomNav = document.getElementById('bottom-nav');
+
     if (title) title.innerText = 'Cotizaciones';
     if (subtitle) subtitle.innerText = 'Presupuestos';
+    if (bottomNav) bottomNav.style.display = 'flex';
 
-    let html = `<div class="dm-section"><div class="dm-list">`;
-    let cots = App.state.cotizaciones || [];
+    let html = `<div class="dm-section" style="padding-bottom:90px;"><div class="dm-list">`;
+    const cotizaciones = App.state.cotizaciones || [];
 
-    if (cots.length === 0) {
+    if (cotizaciones.length === 0) {
         html += `<div class="dm-alert dm-alert-info">No hay cotizaciones.</div>`;
     }
 
-    cots.forEach(c => {
+    cotizaciones.forEach(c => {
         html += `
             <div class="dm-list-card">
                 <div class="dm-list-card-title">${App.ui.safe(c.cliente_nombre || 'Cliente')}</div>
@@ -260,26 +339,41 @@ App.views.cotizaciones = function() {
 App.views.formCotizacion = function(id = null) {
     const obj = id ? (App.state.cotizaciones || []).find(c => c.id === id) : null;
 
-    let formHTML = `
+    const formHTML = `
         <form id="dynamic-form">
             <div class="dm-form-group">
                 <label class="dm-label">Nombre del Cliente</label>
-                <input type="text" class="dm-input" name="cliente_nombre" value="${obj ? App.ui.escapeHTML(obj.cliente_nombre) : ''}" required>
+                <input
+                    type="text"
+                    class="dm-input"
+                    name="cliente_nombre"
+                    value="${obj ? App.ui.escapeHTML(obj.cliente_nombre) : ''}"
+                    required
+                >
             </div>
 
             <div class="dm-form-group">
-                <label class="dm-label">Detalles (Productos y Precios)</label>
+                <label class="dm-label">Detalles</label>
                 <textarea class="dm-textarea" name="detalles" required>${obj ? App.ui.escapeHTML(obj.detalles) : ''}</textarea>
             </div>
 
             <div class="dm-form-group">
                 <label class="dm-label">Total Presupuestado ($)</label>
-                <input type="number" step="0.01" class="dm-input" name="total" value="${obj ? obj.total : ''}" required>
+                <input
+                    type="number"
+                    step="0.01"
+                    class="dm-input"
+                    name="total"
+                    value="${obj ? obj.total : ''}"
+                    required
+                >
             </div>
 
             <input type="hidden" name="fecha" value="${obj ? obj.fecha : new Date().toISOString()}">
 
-            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Guardar Cotización</button>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
+                ${obj ? 'Guardar Cambios' : 'Guardar Cotización'}
+            </button>
         </form>
     `;
 
@@ -289,6 +383,9 @@ App.views.formCotizacion = function(id = null) {
     });
 };
 
+// ==========================================
+// DETALLE DE PEDIDO
+// ==========================================
 App.views.modalDetallesPedido = function(pedidoId) {
     const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
 
@@ -297,22 +394,24 @@ App.views.modalDetallesPedido = function(pedidoId) {
         return;
     }
 
-    let html = '<div class="dm-list">';
+    let html = `<div class="dm-list">`;
+
     detalles.forEach(d => {
         const prod = (App.state.productos || []).find(p => p.id === d.producto_id);
         const nombreProducto = prod ? prod.nombre : 'Producto sin nombre';
 
         html += `
-            <div class="dm-list-card" style="padding:10px; margin-bottom:10px;">
+            <div class="dm-list-card" style="padding:10px;">
                 <div class="dm-fw-bold" style="font-size:16px;">${App.ui.safe(nombreProducto)}</div>
                 <div class="dm-text-sm dm-muted dm-mt-2">
                     Cantidad comprada: <strong>${App.ui.safe(d.cantidad)}</strong><br>
-                    Precio Unitario: $${parseFloat(d.precio_unitario || 0).toFixed(2)}
+                    Precio unitario: $${parseFloat(d.precio_unitario || 0).toFixed(2)}
                 </div>
             </div>
         `;
     });
-    html += '</div>';
+
+    html += `</div>`;
 
     App.ui.openSheet(`Detalles del Pedido: ${pedidoId}`, html, () => {
         App.ui.closeSheet();
