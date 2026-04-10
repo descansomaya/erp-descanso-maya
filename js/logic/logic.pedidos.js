@@ -502,173 +502,173 @@ Object.assign(App.logic, {
     },
 
     imprimirNota(pedidoId) {
-        try {
-            const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
-            if (!pedido) {
-                App.ui.toast("Pedido no encontrado", "danger");
-                return;
-            }
+    try {
+        const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId)
+            || (App.state.reparaciones || []).find(r => r.id === pedidoId);
 
-            const cliente = (App.state.clientes || []).find(c => c.id === pedido.cliente_id);
+        if (!pedido) {
+            App.ui.toast("No encontrado", "danger");
+            return;
+        }
+
+        const cliente = (App.state.clientes || []).find(c => c.id === pedido.cliente_id);
+
+        const esReparacion = pedido.id.startsWith("REP-");
+
+        let detallesHTML = "";
+        let total = 0;
+
+        if (!esReparacion) {
             const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
 
-            let totalAbonos = (App.state.abonos || [])
-                .filter(a => a.pedido_id === pedidoId)
-                .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
-
-            const saldo = parseFloat(pedido.total || 0) - parseFloat(pedido.anticipo || 0) - totalAbonos;
-
-            const filas = detalles.map(det => {
-                const prod = (App.state.productos || []).find(p => p.id === det.producto_id);
+            detallesHTML = detalles.map(d => {
+                const prod = (App.state.productos || []).find(p => p.id === d.producto_id);
                 const nombre = prod ? prod.nombre : "Producto";
-                const cantidad = parseFloat(det.cantidad || 0);
-                const precio = parseFloat(det.precio_unitario || 0);
+
+                const cantidad = parseFloat(d.cantidad || 0);
+                const precio = parseFloat(d.precio_unitario || 0);
                 const subtotal = cantidad * precio;
 
+                total += subtotal;
+
                 return `
-                    <tr>
-                        <td style="padding:8px; border-bottom:1px solid #ddd;">${App.ui.escapeHTML(nombre)}</td>
-                        <td style="padding:8px; border-bottom:1px solid #ddd; text-align:center;">${cantidad}</td>
-                        <td style="padding:8px; border-bottom:1px solid #ddd; text-align:right;">$${precio.toFixed(2)}</td>
-                        <td style="padding:8px; border-bottom:1px solid #ddd; text-align:right;">$${subtotal.toFixed(2)}</td>
-                    </tr>
+                    <div class="item">
+                        <div>${nombre}</div>
+                        <div>${cantidad} x $${precio.toFixed(2)}</div>
+                        <div>$${subtotal.toFixed(2)}</div>
+                    </div>
                 `;
             }).join("");
+        } else {
+            total = parseFloat(pedido.precio || 0);
 
-            const html = `
-                <html>
-                <head>
-                    <title>Nota ${pedido.id}</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; padding: 24px; color: #222; }
-                        h1, h2, h3 { margin: 0 0 10px 0; }
-                        .muted { color: #666; font-size: 12px; }
-                        .box { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 16px; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-                        th { text-align: left; background: #f5f5f5; padding: 8px; border-bottom: 1px solid #ddd; }
-                        td { font-size: 14px; }
-                        .right { text-align: right; }
-                    </style>
-                </head>
-                <body>
-                    <h2>Descanso Maya</h2>
-                    <div class="muted">Nota / Resumen de pedido</div>
-                    <hr>
-
-                    <div class="box">
-                        <strong>Folio:</strong> ${App.ui.escapeHTML(pedido.id)}<br>
-                        <strong>Cliente:</strong> ${App.ui.escapeHTML(cliente ? cliente.nombre : "STOCK BODEGA")}<br>
-                        <strong>Fecha:</strong> ${App.ui.escapeHTML(String(pedido.fecha_creacion || "").split("T")[0])}<br>
-                        <strong>Entrega:</strong> ${App.ui.escapeHTML(pedido.fecha_entrega || "-")}<br>
-                        <strong>Estado:</strong> ${App.ui.escapeHTML(pedido.estado || "-")}
-                    </div>
-
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Producto</th>
-                                <th style="text-align:center;">Cant.</th>
-                                <th class="right">P. Unit.</th>
-                                <th class="right">Subtotal</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${filas || `<tr><td colspan="4" style="padding:8px;">Sin detalles</td></tr>`}
-                        </tbody>
-                    </table>
-
-                    <div class="box" style="margin-top:16px;">
-                        <div><strong>Total:</strong> $${parseFloat(pedido.total || 0).toFixed(2)}</div>
-                        <div><strong>Anticipo:</strong> $${parseFloat(pedido.anticipo || 0).toFixed(2)}</div>
-                        <div><strong>Abonos:</strong> $${totalAbonos.toFixed(2)}</div>
-                        <div><strong>Saldo:</strong> $${saldo.toFixed(2)}</div>
-                    </div>
-
-                    ${pedido.notas ? `<div class="box"><strong>Notas:</strong><br>${App.ui.escapeHTML(pedido.notas)}</div>` : ""}
-
-                    <script>
-                        window.onload = function() {
-                            window.print();
-                        };
-                    </script>
-                </body>
-                </html>
+            detallesHTML = `
+                <div class="item">
+                    <div>Servicio</div>
+                    <div>${pedido.descripcion || ''}</div>
+                    <div>$${total.toFixed(2)}</div>
+                </div>
             `;
-
-            const w = window.open("", "_blank", "width=900,height=700");
-            if (!w) {
-                App.ui.toast("El navegador bloqueó la ventana de impresión", "warning");
-                return;
-            }
-
-            w.document.open();
-            w.document.write(html);
-            w.document.close();
-        } catch (error) {
-            console.error("Error en imprimirNota:", error);
-            App.ui.toast(error.message || "Error al imprimir nota", "danger");
         }
-    },
 
-    imprimirCotizacion(cotId) {
-        App.ui.toast("Cotizaciones impresas sigue pendiente de activación.", "warning");
-    },
+        const anticipo = parseFloat(pedido.anticipo || 0);
 
-    enviarWhatsApp(pedidoId, tipoMensaje) {
-        try {
-            const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId)
-                || (App.state.reparaciones || []).find(r => r.id === pedidoId);
+        const abonos = esReparacion ? 0 :
+            (App.state.abonos || [])
+                .filter(a => a.pedido_id === pedido.id)
+                .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
 
-            if (!pedido) {
-                App.ui.toast("Registro no encontrado", "danger");
-                return;
-            }
+        const saldo = total - anticipo - abonos;
 
-            const cliente = (App.state.clientes || []).find(c => c.id === pedido.cliente_id);
-            if (!cliente || !cliente.telefono) {
-                App.ui.toast("El cliente no tiene teléfono registrado", "warning");
-                return;
-            }
-
-            const telefono = String(cliente.telefono).replace(/\D/g, "");
-            if (!telefono) {
-                App.ui.toast("Teléfono inválido", "warning");
-                return;
-            }
-
-            const esReparacion = String(pedido.id || "").startsWith("REP-");
-            const total = parseFloat(esReparacion ? pedido.precio : pedido.total || 0);
-            const anticipo = parseFloat(pedido.anticipo || 0);
-
-            const abonosExtra = esReparacion
-                ? 0
-                : (App.state.abonos || [])
-                    .filter(a => a.pedido_id === pedido.id)
-                    .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
-
-            const saldo = total - anticipo - abonosExtra;
-
-            let mensaje = "";
-
-            if (tipoMensaje === "listo") {
-                mensaje = `Hola ${cliente.nombre || ""}, tu ${esReparacion ? "reparación" : "pedido"} ${pedido.id} ya está listo para entregar.`;
-                if (saldo > 0) {
-                    mensaje += ` Tu saldo pendiente es de $${saldo.toFixed(2)} MXN.`;
+        const html = `
+        <html>
+        <head>
+            <title>Nota</title>
+            <style>
+                body {
+                    font-family: Arial;
+                    background:#fff;
+                    padding:20px;
+                    max-width:350px;
+                    margin:auto;
                 }
-                mensaje += ` Quedamos atentos. Descanso Maya.`;
-            } else {
-                mensaje = `Hola ${cliente.nombre || ""}, te contactamos de Descanso Maya sobre tu ${esReparacion ? "reparación" : "pedido"} ${pedido.id}.`;
-                if (saldo > 0) {
-                    mensaje += ` Tienes un saldo pendiente de $${saldo.toFixed(2)} MXN.`;
-                }
-                mensaje += ` Quedamos atentos para apoyarte.`;
-            }
 
-            const waUrl = `https://wa.me/52${telefono}?text=${encodeURIComponent(mensaje)}`;
-            window.open(waUrl, "_blank");
-        } catch (error) {
-            console.error("Error en enviarWhatsApp:", error);
-            App.ui.toast(error.message || "Error al abrir WhatsApp", "danger");
-        }
+                .title {
+                    text-align:center;
+                    font-weight:bold;
+                    font-size:18px;
+                    margin-bottom:5px;
+                }
+
+                .sub {
+                    text-align:center;
+                    font-size:12px;
+                    color:#666;
+                    margin-bottom:15px;
+                }
+
+                .line {
+                    border-top:1px dashed #999;
+                    margin:10px 0;
+                }
+
+                .item {
+                    display:flex;
+                    justify-content:space-between;
+                    font-size:12px;
+                    margin-bottom:6px;
+                }
+
+                .totales {
+                    font-size:13px;
+                }
+
+                .totales div {
+                    display:flex;
+                    justify-content:space-between;
+                    margin:4px 0;
+                }
+
+                .saldo {
+                    font-weight:bold;
+                    font-size:15px;
+                }
+
+                .footer {
+                    text-align:center;
+                    font-size:11px;
+                    margin-top:20px;
+                    color:#666;
+                }
+            </style>
+        </head>
+
+        <body>
+
+            <div class="title">Descanso Maya</div>
+            <div class="sub">@descansomaya.mx</div>
+
+            <div class="line"></div>
+
+            <div>Folio: ${pedido.id}</div>
+            <div>Cliente: ${cliente ? cliente.nombre : 'General'}</div>
+            <div>Fecha: ${(pedido.fecha_creacion || '').split('T')[0]}</div>
+
+            <div class="line"></div>
+
+            ${detallesHTML}
+
+            <div class="line"></div>
+
+            <div class="totales">
+                <div><span>Total:</span><span>$${total.toFixed(2)}</span></div>
+                <div><span>Anticipo:</span><span>$${anticipo.toFixed(2)}</span></div>
+                ${abonos > 0 ? `<div><span>Abonos:</span><span>$${abonos.toFixed(2)}</span></div>` : ''}
+                <div class="saldo"><span>Saldo:</span><span>$${saldo.toFixed(2)}</span></div>
+            </div>
+
+            <div class="line"></div>
+
+            <div class="footer">
+                Gracias por su preferencia<br>
+                Descanso Maya
+            </div>
+
+            <script>
+                window.onload = () => window.print();
+            </script>
+
+        </body>
+        </html>
+        `;
+
+        const w = window.open("", "_blank");
+        w.document.write(html);
+        w.document.close();
+
+    } catch (e) {
+        console.error(e);
+        App.ui.toast("Error al imprimir", "danger");
     }
+}
 });
