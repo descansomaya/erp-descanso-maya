@@ -68,7 +68,11 @@ Object.assign(App.ui, {
             </div>
         `;
 
-        bg.classList.remove("hidden");
+       bg.classList.remove("hidden");
+
+if (App.compat && typeof App.compat.apply === "function") {
+    App.compat.apply(sheet);
+}
 
         // cerrar al tocar fondo
         bg.onclick = (e) => {
