@@ -295,8 +295,16 @@ App.views.productos = function() {
         <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4">
                 <h3 class="dm-card-title">Catálogo de Productos</h3>
-                <input type="text" id="bus-prod" class="dm-input dm-mt-3" onkeyup="window.filtrarLista('bus-prod', 'tarj-prod')" placeholder="🔍 Buscar producto...">
+                <p class="dm-muted dm-mb-3" style="margin-top:6px;">Productos de fabricación y reventa.</p>
+                <input
+                    type="text"
+                    id="bus-prod"
+                    class="dm-input"
+                    onkeyup="window.filtrarLista('bus-prod', 'tarj-prod')"
+                    placeholder="🔍 Buscar producto..."
+                >
             </div>
+
             <div class="dm-list">
     `;
 
@@ -308,20 +316,22 @@ App.views.productos = function() {
                 <div class="dm-list-card tarj-prod">
                     <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
                         <div style="flex:1; min-width:0;">
-                            <strong style="word-break:break-word;">${App.ui.escapeHTML(p.nombre)}</strong><br>
-                            <small class="dm-muted">
+                            <div class="dm-fw-bold" style="word-break:break-word;">${App.ui.escapeHTML(p.nombre)}</div>
+                            <div class="dm-text-sm dm-muted dm-mt-2">
                                 Cat: ${App.ui.escapeHTML(p.categoria || 'General')} |
                                 Clasif: ${App.ui.escapeHTML(p.clasificacion || 'Normal')}<br>
                                 Tamaño: ${App.ui.escapeHTML(p.tamano || '-')} |
                                 Color: ${App.ui.escapeHTML(p.color || '-')}
-                            </small>
+                            </div>
                         </div>
 
                         <div style="text-align:right; flex:0 0 auto;">
-                            <span style="color:var(--primary); font-weight:bold; display:block; margin-bottom:5px;">
-                                $${p.precio_venta}<br>
-                                <small class="dm-muted">Mayoreo: $${p.precio_mayoreo || 'N/A'}</small>
-                            </span>
+                            <div style="color:var(--primary); font-weight:bold; margin-bottom:6px;">
+                                $${p.precio_venta}
+                            </div>
+                            <div class="dm-text-sm dm-muted dm-mb-2">
+                                Mayoreo: $${p.precio_mayoreo || 'N/A'}
+                            </div>
                             <div class="dm-list-card-actions" style="justify-content:flex-end;">
                                 <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formProducto('${p.id}')">✏️</button>
                                 <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.eliminarRegistroGenerico('productos', '${p.id}', 'productos')">🗑️</button>
@@ -336,6 +346,7 @@ App.views.productos = function() {
     html += `
             </div>
         </div>
+
         <button class="dm-fab" onclick="App.views.formProducto()">+</button>
     `;
 
@@ -351,24 +362,39 @@ App.views.formProducto = function(id = null, callback = null) {
             .join('');
 
         return `
-            <div class="grid-3 fila-dinamica" style="margin-bottom:5px;">
-                <div class="form-group" style="margin:0;">
-                    <select name="mat_id[]" required>
+            <div class="fila-dinamica dm-card dm-mb-2" style="padding:10px; background:var(--dm-surface-2);">
+                <div class="dm-form-group dm-mb-2">
+                    <label class="dm-label">Insumo</label>
+                    <select class="dm-select" name="mat_id[]" required>
                         <option value="">-- Insumo --</option>
                         ${opcMat}
                     </select>
                 </div>
-                <div class="form-group" style="margin:0;">
-                    <input type="number" step="0.1" name="cant[]" value="${cant || ''}" placeholder="Cant" required>
+
+                <div class="dm-form-row">
+                    <div class="dm-form-group">
+                        <label class="dm-label">Cantidad</label>
+                        <input type="number" step="0.1" class="dm-input" name="cant[]" value="${cant || ''}" placeholder="Cant" required>
+                    </div>
+
+                    <div class="dm-form-group">
+                        <label class="dm-label">Uso</label>
+                        <select class="dm-select" name="uso[]" required>
+                            <option value="Cuerpo" ${uso === 'Cuerpo' ? 'selected' : ''}>Cuerpo</option>
+                            <option value="Brazos" ${uso === 'Brazos' ? 'selected' : ''}>Brazos</option>
+                            <option value="Adicional" ${uso === 'Adicional' ? 'selected' : ''}>Otro</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="form-group" style="margin:0; display:flex; gap:5px;">
-                    <select name="uso[]" required>
-                        <option value="Cuerpo" ${uso === 'Cuerpo' ? 'selected' : ''}>Cuerpo</option>
-                        <option value="Brazos" ${uso === 'Brazos' ? 'selected' : ''}>Brazos</option>
-                        <option value="Adicional" ${uso === 'Adicional' ? 'selected' : ''}>Otro</option>
-                    </select>
-                    <button type="button" onclick="this.parentElement.parentElement.remove()" style="background:var(--danger); color:white; border:none; border-radius:4px; padding:0 10px;">X</button>
-                </div>
+
+                <button
+                    type="button"
+                    class="dm-btn dm-btn-danger dm-btn-block"
+                    style="min-height:36px;"
+                    onclick="this.parentElement.remove()"
+                >
+                    Quitar insumo
+                </button>
             </div>
         `;
     };
@@ -389,23 +415,23 @@ App.views.formProducto = function(id = null, callback = null) {
 
     const formHTML = `
         <form id="dynamic-form">
-            <div class="form-group">
-                <label>Nombre del Producto a Vender</label>
-                <input type="text" name="nombre" value="${obj ? App.ui.escapeHTML(obj.nombre) : ''}" required>
+            <div class="dm-form-group">
+                <label class="dm-label">Nombre del Producto</label>
+                <input type="text" class="dm-input" name="nombre" value="${obj ? App.ui.escapeHTML(obj.nombre) : ''}" required>
             </div>
 
-            <div class="grid-2">
-                <div class="form-group">
-                    <label>Categoría</label>
-                    <select name="categoria">
+            <div class="dm-form-row">
+                <div class="dm-form-group">
+                    <label class="dm-label">Categoría</label>
+                    <select class="dm-select" name="categoria">
                         <option value="fabricacion" ${obj && obj.categoria === 'fabricacion' ? 'selected' : ''}>Fabricación</option>
                         <option value="reventa" ${obj && obj.categoria === 'reventa' ? 'selected' : ''}>Reventa</option>
                     </select>
                 </div>
 
-                <div class="form-group">
-                    <label>Clasificación</label>
-                    <select name="clasificacion">
+                <div class="dm-form-group">
+                    <label class="dm-label">Clasificación</label>
+                    <select class="dm-select" name="clasificacion">
                         <option value="Unicolor" ${clasif === 'Unicolor' ? 'selected' : ''}>Unicolor</option>
                         <option value="Combinada" ${clasif === 'Combinada' ? 'selected' : ''}>Combinada</option>
                         <option value="Especial" ${clasif === 'Especial' ? 'selected' : ''}>Especial</option>
@@ -415,37 +441,47 @@ App.views.formProducto = function(id = null, callback = null) {
                 </div>
             </div>
 
-            <div class="grid-2">
-                <div class="form-group">
-                    <label>Tamaño</label>
-                    <input type="text" name="tamano" value="${obj ? App.ui.escapeHTML(obj.tamano || '') : ''}" placeholder="Ej. Matrimonial">
+            <div class="dm-form-row">
+                <div class="dm-form-group">
+                    <label class="dm-label">Tamaño</label>
+                    <input type="text" class="dm-input" name="tamano" value="${obj ? App.ui.escapeHTML(obj.tamano || '') : ''}" placeholder="Ej. Matrimonial">
                 </div>
 
-                <div class="form-group">
-                    <label>Color</label>
-                    <input type="text" name="color" value="${obj ? App.ui.escapeHTML(obj.color || '') : ''}" placeholder="Ej. Rojo/Blanco">
-                </div>
-            </div>
-
-            <div class="grid-2">
-                <div class="form-group">
-                    <label>Precio Venta ($)</label>
-                    <input type="number" name="precio_venta" value="${obj ? obj.precio_venta : ''}" required>
-                </div>
-
-                <div class="form-group">
-                    <label>Precio Mayoreo ($)</label>
-                    <input type="number" name="precio_mayoreo" value="${obj ? (obj.precio_mayoreo || '') : ''}">
+                <div class="dm-form-group">
+                    <label class="dm-label">Color</label>
+                    <input type="text" class="dm-input" name="color" value="${obj ? App.ui.escapeHTML(obj.color || '') : ''}" placeholder="Ej. Rojo/Blanco">
                 </div>
             </div>
 
-            <div style="background:#F7FAFC; padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid var(--border);">
-                <strong style="font-size:0.9rem; color:var(--primary);">📦 Receta de Inventario</strong>
-                <div id="cont-receta" style="margin-top:10px;">${recetaHTML}</div>
-                <button type="button" class="btn btn-secondary" style="width:100%; margin-top:10px; border:1px dashed var(--primary); color:var(--primary); background:transparent;" onclick="window.agregarFilaReceta()">+ Añadir Insumo a la Receta</button>
+            <div class="dm-form-row">
+                <div class="dm-form-group">
+                    <label class="dm-label">Precio Venta ($)</label>
+                    <input type="number" class="dm-input" name="precio_venta" value="${obj ? obj.precio_venta : ''}" required>
+                </div>
+
+                <div class="dm-form-group">
+                    <label class="dm-label">Precio Mayoreo ($)</label>
+                    <input type="number" class="dm-input" name="precio_mayoreo" value="${obj ? (obj.precio_mayoreo || '') : ''}">
+                </div>
             </div>
 
-            <button type="submit" class="btn btn-primary" style="width:100%;">${obj ? 'Guardar Cambios' : 'Crear Producto'}</button>
+            <div class="dm-card dm-mb-3" style="background:#F7FAFC; border:1px solid var(--border);">
+                <strong class="dm-label" style="color:var(--primary); display:block; margin-bottom:10px;">📦 Receta de Inventario</strong>
+                <div id="cont-receta">${recetaHTML}</div>
+
+                <button
+                    type="button"
+                    class="dm-btn dm-btn-secondary dm-btn-block"
+                    style="margin-top:10px; border:1px dashed var(--primary); color:var(--primary); background:transparent;"
+                    onclick="window.agregarFilaReceta()"
+                >
+                    + Añadir Insumo a la Receta
+                </button>
+            </div>
+
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
+                ${obj ? 'Guardar Cambios' : 'Crear Producto'}
+            </button>
         </form>
     `;
 
@@ -486,6 +522,7 @@ App.views.artesanos = function() {
         <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4">
                 <h3 class="dm-card-title">Artesanos y Tareas</h3>
+                <p class="dm-muted dm-mb-2" style="margin-top:6px;">Gestiona artesanos y sus tarifas de trabajo.</p>
             </div>
 
             <div class="dm-list">
@@ -504,7 +541,13 @@ App.views.artesanos = function() {
                         </div>
 
                         <div class="dm-list-card-actions" style="justify-content:flex-end;">
-                            <button class="dm-btn dm-btn-secondary dm-btn-sm" style="border:1px solid var(--primary); color:var(--primary); background:transparent;" onclick="App.views.verTarifasArtesano('${a.id}')">Tarifas 💲</button>
+                            <button
+                                class="dm-btn dm-btn-secondary dm-btn-sm"
+                                style="border:1px solid var(--primary); color:var(--primary); background:transparent;"
+                                onclick="App.views.verTarifasArtesano('${a.id}')"
+                            >
+                                Tarifas 💲
+                            </button>
                             <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formArtesano('${a.id}')">✏️</button>
                             <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.eliminarRegistroGenerico('artesanos', '${a.id}', 'artesanos')">🗑️</button>
                         </div>
@@ -529,15 +572,16 @@ App.views.formArtesano = function(id = null) {
 
     const formHTML = `
         <form id="dynamic-form">
-            <div class="form-group">
-                <label>Nombre del Artesano</label>
-                <input type="text" name="nombre" value="${obj ? App.ui.escapeHTML(obj.nombre) : ''}" required>
+            <div class="dm-form-group">
+                <label class="dm-label">Nombre del Artesano</label>
+                <input type="text" class="dm-input" name="nombre" value="${obj ? App.ui.escapeHTML(obj.nombre) : ''}" required>
             </div>
 
-            <div class="form-group">
-                <label>Teléfono (10 dígitos)</label>
+            <div class="dm-form-group">
+                <label class="dm-label">Teléfono (10 dígitos)</label>
                 <input
                     type="tel"
+                    class="dm-input"
                     name="telefono"
                     value="${obj ? App.ui.safe(obj.telefono) : ''}"
                     pattern="\\d{10}"
@@ -546,7 +590,9 @@ App.views.formArtesano = function(id = null) {
                 >
             </div>
 
-            <button type="submit" class="btn btn-primary" style="width:100%;">${obj ? 'Guardar Cambios' : 'Crear Artesano'}</button>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
+                ${obj ? 'Guardar Cambios' : 'Crear Artesano'}
+            </button>
         </form>
     `;
 
@@ -561,39 +607,41 @@ App.views.verTarifasArtesano = function(artesanoId) {
     const tarifas = (App.state.tarifas_artesano || []).filter(t => t.artesano_id === artesanoId);
 
     let html = `
-        <div style="margin-bottom:15px;">
+        <div class="dm-mb-3">
             Gestiona cuánto cobra <strong>${artesano ? App.ui.escapeHTML(artesano.nombre) : 'Artesano'}</strong> por cada tipo de tarea.
         </div>
 
-        <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin-bottom:15px;">
-            <tr style="border-bottom:2px solid var(--border);">
-                <th style="text-align:left; padding:8px;">Tipo de Trabajo</th>
-                <th style="padding:8px;">Monto</th>
-                <th></th>
-            </tr>
+        <div class="dm-list dm-mb-3">
     `;
 
     if (tarifas.length === 0) {
-        html += `<tr><td colspan="3" style="padding:10px; color:#aaa; text-align:center;">Sin tareas configuradas</td></tr>`;
+        html += `<div class="dm-alert dm-alert-info">Sin tareas configuradas.</div>`;
     } else {
         tarifas.forEach(t => {
             html += `
-                <tr style="border-bottom:1px solid var(--border);">
-                    <td style="padding:10px 5px;">${App.ui.escapeHTML(t.clasificacion) || 'Tarea'}</td>
-                    <td style="padding:10px 5px; text-align:center; font-weight:bold; color:var(--success)">$${t.monto || '0'}</td>
-                    <td style="text-align:right;">
-                        <button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; margin-right:4px;" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formTarifa('${artesanoId}', '${t.id}'), 400);">✏️</button>
-                        <button class="btn btn-secondary" style="padding:4px 8px; font-size:0.8rem; color:red; border-color:red;" onclick="App.logic.eliminarRegistroGenerico('tarifas_artesano', '${t.id}', 'tarifas_artesano'); App.ui.closeSheet();">🗑️</button>
-                    </td>
-                </tr>
+                <div class="dm-list-card">
+                    <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
+                        <div style="flex:1;">
+                            <strong>${App.ui.escapeHTML(t.clasificacion) || 'Tarea'}</strong>
+                        </div>
+
+                        <div style="text-align:right;">
+                            <div style="font-weight:bold; color:var(--success); margin-bottom:6px;">$${t.monto || '0'}</div>
+                            <div class="dm-list-card-actions" style="justify-content:flex-end;">
+                                <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formTarifa('${artesanoId}', '${t.id}'), 400);">✏️</button>
+                                <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.eliminarRegistroGenerico('tarifas_artesano', '${t.id}', 'tarifas_artesano'); App.ui.closeSheet();">🗑️</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             `;
         });
     }
 
     html += `
-        </table>
+        </div>
 
-        <button class="btn btn-primary" style="width:100%;" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formTarifa('${artesanoId}'), 400);">
+        <button class="dm-btn dm-btn-primary dm-btn-block" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formTarifa('${artesanoId}'), 400);">
             + Agregar Tarea
         </button>
     `;
@@ -609,17 +657,24 @@ App.views.formTarifa = function(artesanoId, tarifaId = null) {
         <form id="dynamic-form">
             <input type="hidden" name="artesano_id" value="${artesanoId}">
 
-            <div class="form-group">
-                <label>Tarea a Realizar</label>
-                <input type="text" name="clasificacion" value="${obj ? App.ui.escapeHTML(obj.clasificacion) : ''}" required placeholder="Nombre de la tarea">
+            <div class="dm-form-group">
+                <label class="dm-label">Tarea a Realizar</label>
+                <input
+                    type="text"
+                    class="dm-input"
+                    name="clasificacion"
+                    value="${obj ? App.ui.escapeHTML(obj.clasificacion) : ''}"
+                    required
+                    placeholder="Nombre de la tarea"
+                >
             </div>
 
-            <div class="form-group">
-                <label>Monto a Pagar ($)</label>
-                <input type="number" step="0.01" name="monto" value="${obj ? obj.monto : ''}" required>
+            <div class="dm-form-group">
+                <label class="dm-label">Monto a Pagar ($)</label>
+                <input type="number" step="0.01" class="dm-input" name="monto" value="${obj ? obj.monto : ''}" required>
             </div>
 
-            <button type="submit" class="btn btn-primary" style="width:100%; margin-top:10px;">
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
                 ${obj ? 'Guardar Cambios' : 'Guardar Tarea'}
             </button>
         </form>
