@@ -15,11 +15,45 @@ async cargarDatosIniciales() {
         App.ui.showLoader("Sincronizando Base de Datos..."); 
         try { 
             if (!App.state.sessionToken) { App.ui.hideLoader(); return; }
-            const hojas = ["materiales", "clientes", "productos", "pedidos", "pedido_detalle", "ordenes_produccion", "artesanos", "abonos_clientes", "gastos", "compras", "proveedores", "reparaciones", "tarifas_artesano", "pago_artesanos", "movimientos_inventario", "abonos_proveedores"]; 
+            const hojas = [
+  "materiales",
+  "clientes",
+  "productos",
+  "pedidos",
+  "pedido_detalle",
+  "ordenes_produccion",
+  "artesanos",
+  "abonos_clientes",
+  "gastos",
+  "compras",
+  "proveedores",
+  "reparaciones",
+  "tarifas_artesano",
+  "pago_artesanos",
+  "movimientos_inventario",
+  "abonos_proveedores",
+  "cotizaciones"
+];
             const res = await App.api.fetch("leer_todo", { hojas: hojas }); 
             if (res.status === "error") throw new Error(res.message); 
             const bd = res.data;
-            App.state.inventario = bd["materiales"] || []; App.state.clientes = bd["clientes"] || []; App.state.productos = bd["productos"] || []; App.state.pedidos = bd["pedidos"] || []; App.state.pedido_detalle = bd["pedido_detalle"] || []; App.state.ordenes_produccion = bd["ordenes_produccion"] || []; App.state.artesanos = bd["artesanos"] || []; App.state.abonos = bd["abonos_clientes"] || []; App.state.gastos = bd["gastos"] || []; App.state.compras = bd["compras"] || []; App.state.proveedores = bd["proveedores"] || []; App.state.reparaciones = bd["reparaciones"] || []; App.state.tarifas_artesano = bd["tarifas_artesano"] || []; App.state.pago_artesanos = bd["pago_artesanos"] || []; App.state.movimientos_inventario = bd["movimientos_inventario"] || []; App.state.abonos_proveedores = bd["abonos_proveedores"] || []; 
+            App.state.inventario = bd["materiales"] || [];
+App.state.clientes = bd["clientes"] || [];
+App.state.productos = bd["productos"] || [];
+App.state.pedidos = bd["pedidos"] || [];
+App.state.pedido_detalle = bd["pedido_detalle"] || [];
+App.state.ordenes_produccion = bd["ordenes_produccion"] || [];
+App.state.artesanos = bd["artesanos"] || [];
+App.state.abonos = bd["abonos_clientes"] || [];
+App.state.gastos = bd["gastos"] || [];
+App.state.compras = bd["compras"] || [];
+App.state.proveedores = bd["proveedores"] || [];
+App.state.reparaciones = bd["reparaciones"] || [];
+App.state.tarifas_artesano = bd["tarifas_artesano"] || [];
+App.state.pago_artesanos = bd["pago_artesanos"] || [];
+App.state.movimientos_inventario = bd["movimientos_inventario"] || [];
+App.state.abonos_proveedores = bd["abonos_proveedores"] || [];
+App.state.cotizaciones = bd["cotizaciones"] || [];
             App.ui.hideLoader(); App.router.init(); 
             this.revisarAlertasStock(true); 
         } catch (error) { 
@@ -40,7 +74,28 @@ async cargarDatosIniciales() {
     },
     async eliminarRegistroGenerico(hoja, id, estado) { if(!confirm("⚠️ ¿Eliminar permanentemente?")) return; App.ui.showLoader("Eliminando..."); const res = await App.api.fetch("eliminar_fila", { nombreHoja: hoja, idFila: id }); App.ui.hideLoader(); if(res.status === "success") { App.state[estado] = App.state[estado].filter(item => item.id !== id); App.ui.toast("Eliminado"); App.router.handleRoute(); } else { App.ui.toast("Error"); } },
     async actualizarRegistroGenerico(hoja, id, datos, estado, callback = null) { App.ui.showLoader("Guardando..."); const res = await App.api.fetch("actualizar_fila", { nombreHoja: hoja, idFila: id, datosNuevos: datos }); App.ui.hideLoader(); if (res.status === "success") { const index = App.state[estado].findIndex(item => item.id === id); if (index !== -1) App.state[estado][index] = { ...App.state[estado][index], ...datos }; App.ui.toast("Actualizado"); if (callback) callback(); else App.router.handleRoute(); } else { App.ui.toast("Error"); } },
-    async guardarNuevoGenerico(hoja, datos, prefijo, estado, callback = null) { App.ui.showLoader("Registrando..."); datos.id = prefijo + "-" + Date.now(); if(!datos.fecha_creacion) datos.fecha_creacion = new Date().toISOString(); const res = await App.api.fetch("guardar_fila", { nombreHoja: hoja, datos: datos }); App.ui.hideLoader(); if (res.status === "success") { App.state[estado].push(datos); App.ui.toast("Guardado exitosamente"); if (callback) callback(); else App.router.handleRoute(); } else { App.ui.toast("Error al guardar"); } },
+async guardarNuevoGenerico(hoja, datos, prefijo, estado, callback = null) {
+  App.ui.showLoader("Registrando...");
+  datos.id = prefijo + "-" + Date.now();
+  if (!datos.fecha_creacion) datos.fecha_creacion = new Date().toISOString();
+
+  const res = await App.api.fetch("guardar_fila", { nombreHoja: hoja, datos: datos });
+  App.ui.hideLoader();
+
+  if (res.status === "success") {
+    if (!Array.isArray(App.state[estado])) {
+      App.state[estado] = [];
+    }
+
+    App.state[estado].push(datos);
+    App.ui.toast("Guardado exitosamente");
+
+    if (callback) callback();
+    else App.router.handleRoute();
+  } else {
+    App.ui.toast(res.message || "Error al guardar");
+  }
+}
     
     // 🤖 AUTOMATIZACIÓN: Vigilante de Inventario Mínimo
     revisarAlertasStock(esArranque = false) {
