@@ -169,14 +169,12 @@ Object.assign(App.logic, {
 
             const operaciones = [];
 
-            // Reversa de inventario para cada detalle
             detalles.forEach(detalle => {
                 const producto = (App.state.productos || []).find(p => p.id === detalle.producto_id);
                 const cantidadDetalle = parseInt(detalle.cantidad) || 1;
 
                 if (!producto) return;
 
-                // Si fue reventa y estaba reservado
                 if (producto.categoria === "reventa") {
                     for (let i = 1; i <= 20; i++) {
                         const matId = producto[`mat_${i}`];
@@ -210,14 +208,12 @@ Object.assign(App.logic, {
                 }
             });
 
-            // Eliminar pedido y detalles
             operaciones.push({ action: "eliminar_fila", nombreHoja: "pedidos", idFila: id });
 
             detalles.forEach(det => {
                 operaciones.push({ action: "eliminar_fila", nombreHoja: "pedido_detalle", idFila: det.id });
             });
 
-            // Eliminar órdenes y pagos relacionados
             ordenes.forEach(orden => {
                 operaciones.push({ action: "eliminar_fila", nombreHoja: "ordenes_produccion", idFila: orden.id });
 
@@ -228,7 +224,6 @@ Object.assign(App.logic, {
                     });
             });
 
-            // Eliminar abonos
             (App.state.abonos || [])
                 .filter(a => a.pedido_id === id)
                 .forEach(ab => {
@@ -471,6 +466,311 @@ Object.assign(App.logic, {
         }
     },
 
+    imprimirNota(registroId) {
+        try {
+            const pedido = (App.state.pedidos || []).find(p => p.id === registroId);
+            const reparacion = (App.state.reparaciones || []).find(r => r.id === registroId);
+
+            if (!pedido && !reparacion) {
+                App.ui.toast("Registro no encontrado", "danger");
+                return;
+            }
+
+            const esReparacion = !!reparacion;
+            const registro = esReparacion ? reparacion : pedido;
+            const cliente = (App.state.clientes || []).find(c => c.id === registro.cliente_id);
+
+            const nombreCliente = cliente ? cliente.nombre : "Cliente general";
+            const fecha = String(registro.fecha_creacion || registro.fecha || "").split("T")[0];
+            const estado = registro.estado || "-";
+
+            let total = 0;
+            let anticipo = parseFloat(registro.anticipo || 0);
+            let abonos = 0;
+            let saldo = 0;
+            let detallesHTML = "";
+
+            if (!esReparacion) {
+                const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === registroId);
+
+                detallesHTML = detalles.map(d => {
+                    const prod = (App.state.productos || []).find(p => p.id === d.producto_id);
+                    const nombre = prod ? prod.nombre : "Producto";
+                    const cantidad = parseFloat(d.cantidad || 0);
+                    const precio = parseFloat(d.precio_unitario || 0);
+                    const subtotal = cantidad * precio;
+                    total += subtotal;
+
+                    return `
+                        <div class="item">
+                            <div class="item-main">
+                                <div class="item-name">${App.ui.escapeHTML(nombre)}</div>
+                                <div class="item-meta">${cantidad} x $${precio.toFixed(2)}</div>
+                            </div>
+                            <div class="item-total">$${subtotal.toFixed(2)}</div>
+                        </div>
+                    `;
+                }).join("");
+
+                abonos = (App.state.abonos || [])
+                    .filter(a => a.pedido_id === registro.id)
+                    .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+
+                if (total <= 0) total = parseFloat(registro.total || 0);
+                saldo = total - anticipo - abonos;
+            } else {
+                total = parseFloat(registro.precio || 0);
+                saldo = total - anticipo;
+
+                detallesHTML = `
+                    <div class="item">
+                        <div class="item-main">
+                            <div class="item-name">Servicio de reparación</div>
+                            <div class="item-meta">${App.ui.escapeHTML(registro.descripcion || "Sin descripción")}</div>
+                        </div>
+                        <div class="item-total">$${total.toFixed(2)}</div>
+                    </div>
+                `;
+            }
+
+            const tipoLabel = esReparacion ? "Nota de reparación" : "Nota de pedido";
+
+            const html = `
+                <html>
+                <head>
+                    <title>${tipoLabel}</title>
+                    <meta charset="utf-8">
+                    <style>
+                        body {
+                            font-family: Arial, sans-serif;
+                            background: #fff;
+                            padding: 20px;
+                            max-width: 380px;
+                            margin: auto;
+                            color: #222;
+                        }
+                        .ticket {
+                            border: 1px solid #e5e7eb;
+                            border-radius: 14px;
+                            padding: 18px;
+                        }
+                        .brand {
+                            text-align: center;
+                            margin-bottom: 12px;
+                        }
+                        .brand h1 {
+                            margin: 0;
+                            font-size: 22px;
+                            color: #6D28D9;
+                        }
+                        .brand p {
+                            margin: 4px 0 0 0;
+                            color: #666;
+                            font-size: 12px;
+                        }
+                        .line {
+                            border-top: 1px dashed #999;
+                            margin: 12px 0;
+                        }
+                        .meta {
+                            font-size: 13px;
+                            line-height: 1.6;
+                        }
+                        .meta strong {
+                            color: #111;
+                        }
+                        .section-title {
+                            font-size: 13px;
+                            font-weight: bold;
+                            color: #6D28D9;
+                            margin-bottom: 8px;
+                            text-transform: uppercase;
+                        }
+                        .item {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: flex-start;
+                            gap: 10px;
+                            font-size: 13px;
+                            margin-bottom: 10px;
+                        }
+                        .item-main {
+                            flex: 1;
+                            min-width: 0;
+                        }
+                        .item-name {
+                            font-weight: bold;
+                            margin-bottom: 3px;
+                        }
+                        .item-meta {
+                            color: #666;
+                            font-size: 12px;
+                            line-height: 1.4;
+                            word-break: break-word;
+                        }
+                        .item-total {
+                            font-weight: bold;
+                            white-space: nowrap;
+                        }
+                        .totales {
+                            font-size: 13px;
+                        }
+                        .totales-row {
+                            display: flex;
+                            justify-content: space-between;
+                            margin: 6px 0;
+                        }
+                        .saldo {
+                            font-weight: bold;
+                            font-size: 16px;
+                            color: ${saldo > 0 ? "#DC2626" : "#16A34A"};
+                        }
+                        .footer {
+                            text-align: center;
+                            font-size: 11px;
+                            margin-top: 18px;
+                            color: #666;
+                            line-height: 1.5;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="ticket">
+                        <div class="brand">
+                            <h1>Descanso Maya</h1>
+                            <p>@descansomaya.mx</p>
+                        </div>
+
+                        <div class="line"></div>
+
+                        <div class="meta">
+                            <div><strong>${tipoLabel}:</strong> ${App.ui.escapeHTML(registro.id)}</div>
+                            <div><strong>Cliente:</strong> ${App.ui.escapeHTML(nombreCliente)}</div>
+                            <div><strong>Fecha:</strong> ${App.ui.escapeHTML(fecha || "-")}</div>
+                            <div><strong>Estado:</strong> ${App.ui.escapeHTML(estado)}</div>
+                            ${registro.fecha_entrega ? `<div><strong>Entrega:</strong> ${App.ui.escapeHTML(registro.fecha_entrega)}</div>` : ""}
+                        </div>
+
+                        <div class="line"></div>
+
+                        <div class="section-title">${esReparacion ? "Servicio" : "Detalle"}</div>
+                        ${detallesHTML || `<div class="item"><div class="item-main"><div class="item-meta">Sin detalles</div></div></div>`}
+
+                        <div class="line"></div>
+
+                        <div class="totales">
+                            <div class="totales-row"><span>Total:</span><strong>$${total.toFixed(2)}</strong></div>
+                            <div class="totales-row"><span>Anticipo:</span><strong>$${anticipo.toFixed(2)}</strong></div>
+                            ${!esReparacion && abonos > 0 ? `<div class="totales-row"><span>Abonos:</span><strong>$${abonos.toFixed(2)}</strong></div>` : ""}
+                            <div class="totales-row saldo"><span>Saldo:</span><span>$${saldo.toFixed(2)}</span></div>
+                        </div>
+
+                        ${registro.notas ? `
+                            <div class="line"></div>
+                            <div class="section-title">Notas</div>
+                            <div class="meta">${App.ui.escapeHTML(registro.notas)}</div>
+                        ` : ""}
+
+                        ${esReparacion && registro.descripcion ? `
+                            <div class="line"></div>
+                            <div class="section-title">Descripción</div>
+                            <div class="meta">${App.ui.escapeHTML(registro.descripcion)}</div>
+                        ` : ""}
+
+                        <div class="line"></div>
+
+                        <div class="footer">
+                            Gracias por su preferencia<br>
+                            Descanso Maya
+                        </div>
+                    </div>
+
+                    <script>
+                        window.onload = function () {
+                            window.print();
+                        };
+                    </script>
+                </body>
+                </html>
+            `;
+
+            const w = window.open("", "_blank", "width=900,height=700");
+            if (!w) {
+                App.ui.toast("El navegador bloqueó la ventana de impresión", "warning");
+                return;
+            }
+
+            w.document.open();
+            w.document.write(html);
+            w.document.close();
+        } catch (error) {
+            console.error("Error en imprimirNota:", error);
+            App.ui.toast(error.message || "Error al imprimir nota", "danger");
+        }
+    },
+
+    imprimirCotizacion(cotId) {
+        App.ui.toast("Cotizaciones impresas sigue pendiente de activación.", "warning");
+    },
+
+    enviarWhatsApp(pedidoId, tipoMensaje) {
+        try {
+            const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId)
+                || (App.state.reparaciones || []).find(r => r.id === pedidoId);
+
+            if (!pedido) {
+                App.ui.toast("Registro no encontrado", "danger");
+                return;
+            }
+
+            const cliente = (App.state.clientes || []).find(c => c.id === pedido.cliente_id);
+            if (!cliente || !cliente.telefono) {
+                App.ui.toast("El cliente no tiene teléfono registrado", "warning");
+                return;
+            }
+
+            const telefono = String(cliente.telefono).replace(/\D/g, "");
+            if (!telefono) {
+                App.ui.toast("Teléfono inválido", "warning");
+                return;
+            }
+
+            const esReparacion = String(pedido.id || "").startsWith("REP-");
+            const total = parseFloat(esReparacion ? pedido.precio : pedido.total || 0);
+            const anticipo = parseFloat(pedido.anticipo || 0);
+
+            const abonosExtra = esReparacion
+                ? 0
+                : (App.state.abonos || [])
+                    .filter(a => a.pedido_id === pedido.id)
+                    .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+
+            const saldo = total - anticipo - abonosExtra;
+
+            let mensaje = "";
+
+            if (tipoMensaje === "listo") {
+                mensaje = `Hola ${cliente.nombre || ""}, tu ${esReparacion ? "reparación" : "pedido"} ${pedido.id} ya está listo para entregar.`;
+                if (saldo > 0) {
+                    mensaje += ` Tu saldo pendiente es de $${saldo.toFixed(2)} MXN.`;
+                }
+                mensaje += ` Quedamos atentos. Descanso Maya.`;
+            } else {
+                mensaje = `Hola ${cliente.nombre || ""}, te contactamos de Descanso Maya sobre tu ${esReparacion ? "reparación" : "pedido"} ${pedido.id}.`;
+                if (saldo > 0) {
+                    mensaje += ` Tienes un saldo pendiente de $${saldo.toFixed(2)} MXN.`;
+                }
+                mensaje += ` Quedamos atentos para apoyarte.`;
+            }
+
+            const waUrl = `https://wa.me/52${telefono}?text=${encodeURIComponent(mensaje)}`;
+            window.open(waUrl, "_blank");
+        } catch (error) {
+            console.error("Error en enviarWhatsApp:", error);
+            App.ui.toast(error.message || "Error al abrir WhatsApp", "danger");
+        }
+    },
+
     // ==========================================
     // LEGACY: COTIZACIONES EN LOCALSTORAGE
     // ==========================================
@@ -499,176 +799,5 @@ Object.assign(App.logic, {
         localStorage.setItem("erp_cotizaciones", JSON.stringify(App.state.cotizaciones));
         App.ui.toast("Eliminada");
         App.router.handleRoute();
-    },
-
-    imprimirNota(pedidoId) {
-    try {
-        const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId)
-            || (App.state.reparaciones || []).find(r => r.id === pedidoId);
-
-        if (!pedido) {
-            App.ui.toast("No encontrado", "danger");
-            return;
-        }
-
-        const cliente = (App.state.clientes || []).find(c => c.id === pedido.cliente_id);
-
-        const esReparacion = pedido.id.startsWith("REP-");
-
-        let detallesHTML = "";
-        let total = 0;
-
-        if (!esReparacion) {
-            const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
-
-            detallesHTML = detalles.map(d => {
-                const prod = (App.state.productos || []).find(p => p.id === d.producto_id);
-                const nombre = prod ? prod.nombre : "Producto";
-
-                const cantidad = parseFloat(d.cantidad || 0);
-                const precio = parseFloat(d.precio_unitario || 0);
-                const subtotal = cantidad * precio;
-
-                total += subtotal;
-
-                return `
-                    <div class="item">
-                        <div>${nombre}</div>
-                        <div>${cantidad} x $${precio.toFixed(2)}</div>
-                        <div>$${subtotal.toFixed(2)}</div>
-                    </div>
-                `;
-            }).join("");
-        } else {
-            total = parseFloat(pedido.precio || 0);
-
-            detallesHTML = `
-                <div class="item">
-                    <div>Servicio</div>
-                    <div>${pedido.descripcion || ''}</div>
-                    <div>$${total.toFixed(2)}</div>
-                </div>
-            `;
-        }
-
-        const anticipo = parseFloat(pedido.anticipo || 0);
-
-        const abonos = esReparacion ? 0 :
-            (App.state.abonos || [])
-                .filter(a => a.pedido_id === pedido.id)
-                .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
-
-        const saldo = total - anticipo - abonos;
-
-        const html = `
-        <html>
-        <head>
-            <title>Nota</title>
-            <style>
-                body {
-                    font-family: Arial;
-                    background:#fff;
-                    padding:20px;
-                    max-width:350px;
-                    margin:auto;
-                }
-
-                .title {
-                    text-align:center;
-                    font-weight:bold;
-                    font-size:18px;
-                    margin-bottom:5px;
-                }
-
-                .sub {
-                    text-align:center;
-                    font-size:12px;
-                    color:#666;
-                    margin-bottom:15px;
-                }
-
-                .line {
-                    border-top:1px dashed #999;
-                    margin:10px 0;
-                }
-
-                .item {
-                    display:flex;
-                    justify-content:space-between;
-                    font-size:12px;
-                    margin-bottom:6px;
-                }
-
-                .totales {
-                    font-size:13px;
-                }
-
-                .totales div {
-                    display:flex;
-                    justify-content:space-between;
-                    margin:4px 0;
-                }
-
-                .saldo {
-                    font-weight:bold;
-                    font-size:15px;
-                }
-
-                .footer {
-                    text-align:center;
-                    font-size:11px;
-                    margin-top:20px;
-                    color:#666;
-                }
-            </style>
-        </head>
-
-        <body>
-
-            <div class="title">Descanso Maya</div>
-            <div class="sub">@descansomaya.mx</div>
-
-            <div class="line"></div>
-
-            <div>Folio: ${pedido.id}</div>
-            <div>Cliente: ${cliente ? cliente.nombre : 'General'}</div>
-            <div>Fecha: ${(pedido.fecha_creacion || '').split('T')[0]}</div>
-
-            <div class="line"></div>
-
-            ${detallesHTML}
-
-            <div class="line"></div>
-
-            <div class="totales">
-                <div><span>Total:</span><span>$${total.toFixed(2)}</span></div>
-                <div><span>Anticipo:</span><span>$${anticipo.toFixed(2)}</span></div>
-                ${abonos > 0 ? `<div><span>Abonos:</span><span>$${abonos.toFixed(2)}</span></div>` : ''}
-                <div class="saldo"><span>Saldo:</span><span>$${saldo.toFixed(2)}</span></div>
-            </div>
-
-            <div class="line"></div>
-
-            <div class="footer">
-                Gracias por su preferencia<br>
-                Descanso Maya
-            </div>
-
-            <script>
-                window.onload = () => window.print();
-            </script>
-
-        </body>
-        </html>
-        `;
-
-        const w = window.open("", "_blank");
-        w.document.write(html);
-        w.document.close();
-
-    } catch (e) {
-        console.error(e);
-        App.ui.toast("Error al imprimir", "danger");
     }
-}
 });
