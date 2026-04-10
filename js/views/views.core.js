@@ -26,21 +26,36 @@ App.views.inicio = function() {
     if (elSubtitle) elSubtitle.innerText = 'Resumen Operativo';
 
     const pedidosCount = App.state.pedidos ? App.state.pedidos.length : 0;
-    const prodCount = App.state.ordenes_produccion ? App.state.ordenes_produccion.filter(o => o.estado !== 'listo').length : 0;
+    const prodCount = App.state.ordenes_produccion
+        ? App.state.ordenes_produccion.filter(o => o.estado !== 'listo').length
+        : 0;
 
     let alertasHTML = '';
+
     const stockBajo = (App.state.inventario || []).filter(i => {
-        const libre = parseFloat(i.stock_real || 0) - parseFloat(i.stock_reservado || 0) - parseFloat(i.stock_comprometido || 0);
+        const libre =
+            parseFloat(i.stock_real || 0) -
+            parseFloat(i.stock_reservado || 0) -
+            parseFloat(i.stock_comprometido || 0);
+
         return parseFloat(i.stock_minimo || 0) > 0 && libre <= parseFloat(i.stock_minimo || 0);
     });
 
     if (stockBajo.length > 0) {
-        alertasHTML += `<div class="dm-alert dm-alert-danger dm-mb-4"><strong>⚠️ Alerta de Insumos Críticos</strong><ul style="margin:8px 0 0 20px; font-size:var(--dm-fs-sm);">`;
-        stockBajo.forEach(i => {
-            const libre = parseFloat(i.stock_real || 0) - parseFloat(i.stock_reservado || 0) - parseFloat(i.stock_comprometido || 0);
-            alertasHTML += `<li>${App.ui.escapeHTML(i.nombre)}: Quedan ${libre} libres</li>`;
-        });
-        alertasHTML += `</ul></div>`;
+        alertasHTML += `
+            <div class="dm-alert dm-alert-danger dm-mb-4">
+                <strong>⚠️ Alerta de Insumos Críticos</strong>
+                <ul style="margin:8px 0 0 20px; font-size:var(--dm-fs-sm);">
+                    ${stockBajo.map(i => {
+                        const libre =
+                            parseFloat(i.stock_real || 0) -
+                            parseFloat(i.stock_reservado || 0) -
+                            parseFloat(i.stock_comprometido || 0);
+                        return `<li>${App.ui.escapeHTML(i.nombre)}: Quedan ${libre} libres</li>`;
+                    }).join('')}
+                </ul>
+            </div>
+        `;
     }
 
     let pedAtrasados = 0;
@@ -58,15 +73,21 @@ App.views.inicio = function() {
     });
 
     if (pedAtrasados > 0 || pedUrgentes > 0) {
-        alertasHTML += `<div class="dm-alert dm-alert-warning dm-mb-4"><strong>🚨 Entregas Pendientes</strong><ul style="margin:8px 0 0 20px; font-size:var(--dm-fs-sm);">`;
-        if (pedAtrasados > 0) alertasHTML += `<li>¡Tienes <strong>${pedAtrasados} pedido(s) atrasado(s)</strong>!</li>`;
-        if (pedUrgentes > 0) alertasHTML += `<li>Hay ${pedUrgentes} pedido(s) a entregar pronto.</li>`;
-        alertasHTML += `</ul></div>`;
+        alertasHTML += `
+            <div class="dm-alert dm-alert-warning dm-mb-4">
+                <strong>🚨 Entregas Pendientes</strong>
+                <ul style="margin:8px 0 0 20px; font-size:var(--dm-fs-sm);">
+                    ${pedAtrasados > 0 ? `<li>¡Tienes <strong>${pedAtrasados} pedido(s) atrasado(s)</strong>!</li>` : ''}
+                    ${pedUrgentes > 0 ? `<li>Hay ${pedUrgentes} pedido(s) a entregar pronto.</li>` : ''}
+                </ul>
+            </div>
+        `;
     }
 
     return `
         <div class="dm-section">
             ${alertasHTML}
+
             <div class="dm-section-header">
                 <h2 class="dm-section-title">Métricas Principales</h2>
             </div>
@@ -84,10 +105,10 @@ App.views.inicio = function() {
                     <div class="dm-kpi-meta"><span class="dm-badge dm-badge-warning">🔨 Producción</span></div>
                 </div>
 
-                <div class="dm-kpi" onclick="App.views.moduloNoDisponible('Nómina')" style="cursor:pointer;">
-                    <div class="dm-kpi-label">Nómina</div>
-                    <div class="dm-kpi-value" style="color:var(--dm-danger);">Pago</div>
-                    <div class="dm-kpi-meta"><span class="dm-badge dm-badge-danger">🧑‍🎨 Artesanos</span></div>
+                <div class="dm-kpi" onclick="App.router.navigate('reparaciones')" style="cursor:pointer;">
+                    <div class="dm-kpi-label">Reparaciones</div>
+                    <div class="dm-kpi-value">${(App.state.reparaciones || []).length}</div>
+                    <div class="dm-kpi-meta"><span class="dm-badge dm-badge-info">🪡 Servicio</span></div>
                 </div>
 
                 <div class="dm-kpi" onclick="App.router.navigate('finanzas')" style="cursor:pointer;">
@@ -114,6 +135,7 @@ App.views.mas = function() {
         <div class="dm-section" style="padding-bottom:90px;">
             <h4 class="dm-label dm-mb-3">Módulos disponibles</h4>
             <div class="dm-list dm-mb-5">
+
                 <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('inventario')">
                     <div class="dm-row">
                         <div class="dm-badge dm-badge-primary" style="font-size:1.2rem; padding:10px;">🧶</div>
@@ -121,31 +143,10 @@ App.views.mas = function() {
                     </div>
                 </div>
 
-                <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('finanzas')">
-                    <div class="dm-row">
-                        <div class="dm-badge dm-badge-success" style="font-size:1.2rem; padding:10px;">📊</div>
-                        <strong class="dm-text-lg" style="color:var(--dm-success);">Finanzas</strong>
-                    </div>
-                </div>
-
                 <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('compras')">
                     <div class="dm-row">
                         <div class="dm-badge dm-badge-success" style="font-size:1.2rem; padding:10px;">🛒</div>
-                        <strong class="dm-text-lg" style="color:var(--dm-success);">Compras</strong>
-                    </div>
-                </div>
-
-                <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('cotizaciones')">
-                    <div class="dm-row">
-                        <div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">📝</div>
-                        <strong class="dm-text-lg">Cotizaciones</strong>
-                    </div>
-                </div>
-
-                <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('reportes')">
-                    <div class="dm-row">
-                        <div class="dm-badge dm-badge-primary" style="font-size:1.2rem; padding:10px;">📈</div>
-                        <strong class="dm-text-lg" style="color:var(--dm-primary);">Reportes</strong>
+                        <strong class="dm-text-lg">Compras</strong>
                     </div>
                 </div>
 
@@ -153,6 +154,20 @@ App.views.mas = function() {
                     <div class="dm-row">
                         <div class="dm-badge dm-badge-warning" style="font-size:1.2rem; padding:10px;">💰</div>
                         <strong class="dm-text-lg">Cobranza</strong>
+                    </div>
+                </div>
+
+                <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('finanzas')">
+                    <div class="dm-row">
+                        <div class="dm-badge dm-badge-success" style="font-size:1.2rem; padding:10px;">📊</div>
+                        <strong class="dm-text-lg">Finanzas</strong>
+                    </div>
+                </div>
+
+                <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('reportes')">
+                    <div class="dm-row">
+                        <div class="dm-badge dm-badge-primary" style="font-size:1.2rem; padding:10px;">📈</div>
+                        <strong class="dm-text-lg">Reportes</strong>
                     </div>
                 </div>
 
@@ -183,15 +198,23 @@ App.views.mas = function() {
                         <strong class="dm-text-lg">Productos</strong>
                     </div>
                 </div>
+
+                <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('reparaciones')">
+                    <div class="dm-row">
+                        <div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🪡</div>
+                        <strong class="dm-text-lg">Reparaciones</strong>
+                    </div>
+                </div>
             </div>
 
-            <h4 class="dm-label dm-mb-3">Próximamente</h4>
+            <h4 class="dm-label dm-mb-3">Pendiente de activación</h4>
             <div class="dm-list dm-mb-5">
-                <div class="dm-list-card" style="padding:15px; opacity:.75; cursor:pointer;" onclick="App.views.moduloNoDisponible('Reparaciones')">
+
+                <div class="dm-list-card" style="padding:15px; opacity:.75; cursor:pointer;" onclick="App.views.moduloNoDisponible('Cotizaciones')">
                     <div class="dm-row-between">
                         <div class="dm-row">
-                            <div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🪡</div>
-                            <strong class="dm-text-lg">Reparaciones</strong>
+                            <div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">📝</div>
+                            <strong class="dm-text-lg">Cotizaciones</strong>
                         </div>
                         <span class="dm-badge dm-badge-warning">Próx.</span>
                     </div>
@@ -217,13 +240,8 @@ App.views.mas = function() {
                     </div>
                 </div>
             </div>
-        </div>;
-        <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('reparaciones')">
-    <div class="dm-row">
-        <div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">🪡</div>
-        <strong class="dm-text-lg">Reparaciones</strong>
-    </div>
-</div>
+        </div>
+    `;
 };
 
 App.views.configuracion = function() {
@@ -245,7 +263,7 @@ App.views.configuracion = function() {
 };
 
 App.views.modalBuscadorGlobal = function() {
-    let html = `
+    const html = `
         <div class="dm-mb-4" style="position: sticky; top: 0; background: var(--dm-surface); padding-bottom: 10px; z-index: 10;">
             <input type="text" id="input-busqueda-global" class="dm-input" placeholder="Buscar folio, cliente o producto..." onkeyup="App.logic.ejecutarBusquedaGlobal(this.value)" autocomplete="off">
         </div>
@@ -254,5 +272,5 @@ App.views.modalBuscadorGlobal = function() {
         </div>
     `;
     App.ui.openSheet('🔍 Buscador', html);
-    setTimeout(() => document.getElementById('input-busqueda-global').focus(), 400);
+    setTimeout(() => document.getElementById('input-busqueda-global')?.focus(), 400);
 };
