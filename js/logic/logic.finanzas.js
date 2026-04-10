@@ -157,10 +157,10 @@ Object.assign(App.logic, {
 
             const labels = {
                 todo: "Todo el historial",
-                mes_actual: "Este Mes",
-                mes_pasado: "Mes Pasado",
-                trimestre_actual: "Este Trimestre",
-                anio_actual: "Este Año"
+                mes_actual: "Este mes",
+                mes_pasado: "Mes pasado",
+                trimestre_actual: "Este trimestre",
+                anio_actual: "Este año"
             };
 
             return labels[filtro] || filtro;
@@ -189,10 +189,7 @@ Object.assign(App.logic, {
             return "Otros Gastos";
         };
 
-        // =========================
-        // Ventas y reparaciones
-        // =========================
-        (App.state.pedidos || []).forEach(p => {
+        (App.state.pedidos || []).forEach((p) => {
             const clase = clasificarFecha(p.fecha_creacion);
             if (clase === "fuera") return;
 
@@ -218,7 +215,7 @@ Object.assign(App.logic, {
             }
         });
 
-        (App.state.reparaciones || []).forEach(r => {
+        (App.state.reparaciones || []).forEach((r) => {
             const clase = clasificarFecha(r.fecha_creacion);
             if (clase === "fuera") return;
 
@@ -230,17 +227,14 @@ Object.assign(App.logic, {
             }
         });
 
-        (App.state.abonos || []).forEach(a => {
+        (App.state.abonos || []).forEach((a) => {
             const clase = clasificarFecha(a.fecha);
             if (clase !== "fuera") {
                 metrics[clase].ingresos += parseFloat(a.monto || 0);
             }
         });
 
-        // =========================
-        // Gastos
-        // =========================
-        (App.state.gastos || []).forEach(g => {
+        (App.state.gastos || []).forEach((g) => {
             const clase = clasificarFecha(g.fecha);
             if (clase === "fuera") return;
 
@@ -304,13 +298,10 @@ Object.assign(App.logic, {
         metrics.actual.neto = metrics.actual.ingresos - metrics.actual.gastos;
         metrics.previo.neto = metrics.previo.ingresos - metrics.previo.gastos;
 
-        // =========================
-        // CxC / CxP globales
-        // =========================
         let xCobrarGlobal = 0;
         let xPagarGlobal = 0;
 
-        (App.state.pedidos || []).forEach(p => {
+        (App.state.pedidos || []).forEach((p) => {
             const abs = (App.state.abonos || [])
                 .filter(a => a.pedido_id === p.id)
                 .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
@@ -319,16 +310,16 @@ Object.assign(App.logic, {
             if (sal > 0) xCobrarGlobal += sal;
         });
 
-        (App.state.reparaciones || []).forEach(r => {
+        (App.state.reparaciones || []).forEach((r) => {
             const sal = parseFloat(r.precio || 0) - parseFloat(r.anticipo || 0);
             if (sal > 0) xCobrarGlobal += sal;
         });
 
-        (App.state.pago_artesanos || []).forEach(pa => {
+        (App.state.pago_artesanos || []).forEach((pa) => {
             if (pa.estado === "pendiente") xPagarGlobal += parseFloat(pa.total || 0);
         });
 
-        (App.state.compras || []).forEach(c => {
+        (App.state.compras || []).forEach((c) => {
             const pagado = c.monto_pagado !== undefined && c.monto_pagado !== ""
                 ? parseFloat(c.monto_pagado)
                 : parseFloat(c.total || 0);
@@ -341,100 +332,128 @@ Object.assign(App.logic, {
             if (filtro === "todo" || filtro === "custom") return "";
 
             if (prev === 0 && act === 0) {
-                return `<span style="font-size:0.7rem; color:#718096; margin-left:5px;">Igual</span>`;
+                return `<span class="dm-text-sm dm-muted">Sin cambio</span>`;
             }
 
             if (prev === 0 && act > 0) {
-                return `<span style="font-size:0.7rem; color:${inverso ? "#E53E3E" : "#38A169"}; margin-left:5px;">⬆️ 100%</span>`;
+                return `<span class="dm-text-sm" style="color:${inverso ? "#E53E3E" : "#38A169"}; font-weight:700;">⬆ 100%</span>`;
             }
 
             const varPorc = ((act - prev) / prev) * 100;
-            const dir = varPorc >= 0 ? "⬆️" : "⬇️";
+            const dir = varPorc >= 0 ? "⬆" : "⬇";
             let color = "#718096";
 
             if (varPorc > 0) color = inverso ? "#E53E3E" : "#38A169";
             else if (varPorc < 0) color = inverso ? "#38A169" : "#E53E3E";
 
-            return `<span style="font-size:0.7rem; color:${color}; margin-left:5px; font-weight:bold;">${dir} ${Math.abs(varPorc).toFixed(1)}% vs ant.</span>`;
+            return `<span class="dm-text-sm" style="color:${color}; font-weight:700;">${dir} ${Math.abs(varPorc).toFixed(1)}%</span>`;
         };
 
         const act = metrics.actual;
         const prev = metrics.previo;
         const etiquetaFiltro = obtenerEtiquetaFiltro();
 
+        const colorNeto = act.neto >= 0 ? "var(--dm-success)" : "var(--dm-danger)";
+        const colorNetoSoft = act.neto >= 0 ? "var(--dm-success-soft)" : "var(--dm-danger-soft)";
+
         let html = `
-            <p style="color:var(--text-muted); font-size:0.85rem; margin-top:-10px; margin-bottom:15px; text-transform:uppercase; font-weight:bold;">
-                Periodo: <strong style="color:var(--primary);">${etiquetaFiltro}</strong>
-            </p>
-        `;
-
-        html += `
-            <h4 style="margin-bottom:10px; color:#2D3748; font-size:0.9rem;">1. Rendimiento del Periodo</h4>
-            <div class="grid-2">
-                <div class="card stat-card" style="background:#EBF8FF; cursor:pointer; padding:15px;" onclick="App.views.detalleFinanzas('ventas', '${filtro}')">
-                    <div class="label" style="margin-bottom:2px;">Ventas Totales (Comercial)</div>
-                    <div class="value" style="color:#3182CE; font-size:1.3rem;">$${act.ventas.toFixed(2)}</div>
-                    ${getTendencia(act.ventas, prev.ventas)}
-                </div>
-                <div class="card stat-card" style="background:#C6F6D5; cursor:pointer; padding:15px;" onclick="App.views.detalleFinanzas('ingresos', '${filtro}')">
-                    <div class="label" style="margin-bottom:2px; color:#276749;">Ingresos Reales (Caja)</div>
-                    <div class="value" style="color:#2F855A; font-size:1.3rem;">$${act.ingresos.toFixed(2)}</div>
-                    ${getTendencia(act.ingresos, prev.ingresos)}
-                </div>
-                <div class="card stat-card" style="background:#EDF2F7; cursor:pointer; padding:15px; grid-column: span 2;" onclick="App.views.detalleFinanzas('gastos', '${filtro}')">
-                    <div class="label" style="margin-bottom:2px;">Gastos Operativos (Pagados)</div>
-                    <div class="value" style="color:#4A5568; font-size:1.3rem;">$${act.gastos.toFixed(2)}</div>
-                    ${getTendencia(act.gastos, prev.gastos, true)}
+            <div class="dm-card dm-mb-4" style="background:linear-gradient(135deg, #ffffff 0%, #faf7ff 100%);">
+                <div class="dm-row-between dm-wrap" style="align-items:flex-start; gap:12px;">
+                    <div>
+                        <div class="dm-text-sm dm-muted">Periodo analizado</div>
+                        <div class="dm-fw-bold dm-text-lg">${etiquetaFiltro}</div>
+                    </div>
+                    <div class="dm-badge dm-badge-primary">Actualizado con datos vivos</div>
                 </div>
             </div>
 
-            <div class="card stat-card" style="margin-top:10px; border:2px solid ${act.neto >= 0 ? '#38A169' : '#E53E3E'}; margin-bottom:25px; padding:15px;">
-                <div class="label" style="color:${act.neto >= 0 ? '#276749' : '#9B2C2C'};">Flujo Neto Efectivo (Caja)</div>
-                <div class="value" style="color:${act.neto >= 0 ? '#38A169' : '#E53E3E'}; font-size:1.5rem;">$${act.neto.toFixed(2)}</div>
-                ${getTendencia(act.neto, prev.neto)}
-            </div>
-        `;
-
-        html += `
-            <h4 style="margin-bottom:10px; color:#2D3748; font-size:0.9rem;">2. Salud Financiera Actual (Global)</h4>
-            <div class="grid-2" style="margin-bottom:20px;">
-                <div class="card stat-card" style="background:#FEFCBF; cursor:pointer; padding:15px;" onclick="App.views.detalleFinanzas('por_cobrar', 'todo')">
-                    <div class="label" style="color:#B7791F;">Cuentas por Cobrar (CxC)</div>
-                    <div class="value" style="color:#D69E2E; font-size:1.2rem;">$${xCobrarGlobal.toFixed(2)}</div>
-                    <div style="font-size:0.7rem; color:#B7791F; margin-top:5px;">Dinero en la calle</div>
+            <div class="dm-grid dm-grid-kpi dm-mb-4">
+                <div class="dm-kpi" onclick="App.views.detalleFinanzas('ventas', '${filtro}')" style="cursor:pointer;">
+                    <div class="dm-kpi-label">Ventas totales</div>
+                    <div class="dm-kpi-value" style="color:#3182CE;">$${act.ventas.toFixed(2)}</div>
+                    <div class="dm-kpi-meta">${getTendencia(act.ventas, prev.ventas)}</div>
                 </div>
-                <div class="card stat-card" style="background:#FFF5F5; cursor:pointer; padding:15px;" onclick="App.views.detalleFinanzas('por_pagar', 'todo')">
-                    <div class="label" style="color:#C53030;">Cuentas por Pagar (CxP)</div>
-                    <div class="value" style="color:#E53E3E; font-size:1.2rem;">$${xPagarGlobal.toFixed(2)}</div>
-                    <div style="font-size:0.7rem; color:#C53030; margin-top:5px;">Deuda proveedores/taller</div>
+
+                <div class="dm-kpi" onclick="App.views.detalleFinanzas('ingresos', '${filtro}')" style="cursor:pointer;">
+                    <div class="dm-kpi-label">Ingresos reales</div>
+                    <div class="dm-kpi-value" style="color:#2F855A;">$${act.ingresos.toFixed(2)}</div>
+                    <div class="dm-kpi-meta">${getTendencia(act.ingresos, prev.ingresos)}</div>
+                </div>
+
+                <div class="dm-kpi" onclick="App.views.detalleFinanzas('gastos', '${filtro}')" style="cursor:pointer;">
+                    <div class="dm-kpi-label">Gastos pagados</div>
+                    <div class="dm-kpi-value" style="color:#4A5568;">$${act.gastos.toFixed(2)}</div>
+                    <div class="dm-kpi-meta">${getTendencia(act.gastos, prev.gastos, true)}</div>
+                </div>
+
+                <div class="dm-kpi" style="background:${colorNetoSoft}; border-color:transparent;">
+                    <div class="dm-kpi-label">Flujo neto</div>
+                    <div class="dm-kpi-value" style="color:${colorNeto};">$${act.neto.toFixed(2)}</div>
+                    <div class="dm-kpi-meta">${getTendencia(act.neto, prev.neto)}</div>
                 </div>
             </div>
-        `;
 
-        html += `
-            <div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px;">
+            <div class="dm-grid dm-grid-2 dm-mb-4">
+                <div class="dm-card" onclick="App.views.detalleFinanzas('por_cobrar', 'todo')" style="cursor:pointer; background:#FFFBEB;">
+                    <div class="dm-kpi-label" style="color:#B7791F;">Cuentas por cobrar</div>
+                    <div class="dm-kpi-value" style="color:#D69E2E; font-size:1.4rem;">$${xCobrarGlobal.toFixed(2)}</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Dinero pendiente con clientes</div>
+                </div>
+
+                <div class="dm-card" onclick="App.views.detalleFinanzas('por_pagar', 'todo')" style="cursor:pointer; background:#FFF5F5;">
+                    <div class="dm-kpi-label" style="color:#C53030;">Cuentas por pagar</div>
+                    <div class="dm-kpi-value" style="color:#E53E3E; font-size:1.4rem;">$${xPagarGlobal.toFixed(2)}</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Deuda con proveedores y taller</div>
+                </div>
+            </div>
+
+            <div class="dm-card dm-mb-4">
+                <div class="dm-card-header">
+                    <div>
+                        <div class="dm-card-title">Comparativo de caja</div>
+                        <div class="dm-card-subtitle">Ingresos vs salidas del periodo</div>
+                    </div>
+                </div>
                 <canvas id="graficaFinanzas"></canvas>
             </div>
 
-            <div style="display:flex; flex-direction:column; gap:15px; margin-top:15px;">
-                <div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px; display:flex; flex-direction:column; align-items:center;">
-                    <h4 style="text-align:center; margin-bottom:15px; color:var(--text-muted); font-size:0.9rem;">Categorías de Venta 📈</h4>
-                    <div style="position:relative; width:100%; max-width:280px; aspect-ratio:1;">
+            <div class="dm-grid dm-grid-2 dm-mb-4">
+                <div class="dm-card">
+                    <div class="dm-card-header">
+                        <div>
+                            <div class="dm-card-title">Categorías de venta</div>
+                            <div class="dm-card-subtitle">Distribución comercial</div>
+                        </div>
+                    </div>
+                    <div style="position:relative; width:100%; min-height:280px;">
                         <canvas id="graficaVentasCanvas"></canvas>
                     </div>
                 </div>
 
-                <div style="background:white; border:1px solid #e2e8f0; border-radius:8px; padding:15px; display:flex; flex-direction:column; align-items:center;">
-                    <h4 style="text-align:center; margin-bottom:15px; color:var(--text-muted); font-size:0.9rem;">Destino de los Gastos 📉</h4>
-                    <div style="position:relative; width:100%; max-width:280px; aspect-ratio:1;">
+                <div class="dm-card">
+                    <div class="dm-card-header">
+                        <div>
+                            <div class="dm-card-title">Destino de gastos</div>
+                            <div class="dm-card-subtitle">Distribución del gasto pagado</div>
+                        </div>
+                    </div>
+                    <div style="position:relative; width:100%; min-height:280px;">
                         <canvas id="graficaGastosCanvas"></canvas>
                     </div>
                 </div>
             </div>
 
-            <button class="btn btn-secondary" style="width:100%; margin-top:15px; border-color:#38A169; color:#38A169; font-weight:bold; background:transparent;" onclick="window.exportarAExcel(App.state.gastos, 'Gastos_${etiquetaFiltro.replace(/ /g, "_")}')">
-                📥 Exportar Gastos a Excel
-            </button>
+            <div class="dm-card">
+                <div class="dm-row-between dm-wrap" style="gap:12px;">
+                    <div>
+                        <div class="dm-card-title">Exportación rápida</div>
+                        <div class="dm-card-subtitle">Descarga la base de gastos del periodo actual</div>
+                    </div>
+                    <button class="dm-btn dm-btn-secondary" style="border-color:#38A169; color:#38A169; background:transparent;" onclick="window.exportarAExcel(App.state.gastos, 'Gastos_${etiquetaFiltro.replace(/ /g, "_")}')">
+                        📥 Exportar gastos
+                    </button>
+                </div>
+            </div>
         `;
 
         cont.innerHTML = html;
@@ -442,7 +461,7 @@ Object.assign(App.logic, {
         setTimeout(() => {
             if (!window.Chart) return;
 
-            const colores = ["#4C51BF", "#ED8936", "#38B2AC", "#E53E3E", "#ECC94B", "#805AD5", "#3182CE"];
+            const colores = ["#4C51BF", "#ED8936", "#38B2AC", "#E53E3E", "#ECC94B", "#805AD5", "#3182CE", "#2F855A"];
 
             const totalVentasCat = Object.values(act.desglVentas).reduce((a, b) => a + b, 0);
             const labelsVentas = Object.keys(act.desglVentas).map(k =>
@@ -463,7 +482,7 @@ Object.assign(App.logic, {
                     ctx.fillStyle = "white";
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
-                    ctx.shadowColor = "rgba(0,0,0,0.6)";
+                    ctx.shadowColor = "rgba(0,0,0,0.55)";
                     ctx.shadowBlur = 4;
 
                     const meta = chart.getDatasetMeta(0);
@@ -490,12 +509,12 @@ Object.assign(App.logic, {
                 window.graficaActual = new Chart(ctx1, {
                     type: "bar",
                     data: {
-                        labels: ["Ingresos Caja", "Salidas Caja"],
+                        labels: ["Ingresos caja", "Salidas caja"],
                         datasets: [{
                             label: "Monto ($)",
                             data: [act.ingresos, act.gastos],
                             backgroundColor: ["#38A169", "#E53E3E"],
-                            borderRadius: 4
+                            borderRadius: 8
                         }]
                     },
                     options: {
