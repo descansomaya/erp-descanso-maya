@@ -47,6 +47,7 @@ Object.assign(App.logic, {
                 "tarifas_artesano",
                 "pago_artesanos",
                 "movimientos_inventario",
+                "ordenes_produccion_artesanos",
                 "abonos_proveedores"
             ];
 
