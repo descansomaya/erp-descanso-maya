@@ -389,7 +389,8 @@ App.router = {
         }
 
         const hash = window.location.hash.substring(1) || "inicio";
-
+        nomina: { title: "Nómina", subtitle: "Pagos a artesanos" },
+        
         document.querySelectorAll(".dm-bottom-nav a").forEach(el => el.classList.remove("active"));
         document.querySelectorAll(".dm-sidebar-link").forEach(el => el.classList.remove("active"));
 
