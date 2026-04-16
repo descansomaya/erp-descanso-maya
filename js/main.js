@@ -81,7 +81,6 @@ window.calcTotalTrabajo = function () {
     }
 };
 
-
 window.filtrarLista = function (inputId, claseItem) {
     const input = document.getElementById(inputId);
     if (!input) return;
