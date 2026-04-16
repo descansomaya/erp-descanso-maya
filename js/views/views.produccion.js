@@ -243,7 +243,7 @@ App.views.verDetallesProduccion = function (ordenId) {
     `;
 
     App.ui.openSheet("Detalle de Producción", html, (data) => {
-        App.logic.actualizarRegistroGenerico("ordenes_produccion", o.id, data, "ordenes_produccion");
+        App.logic.guardarAsignacionProduccion(o.id, data);
         App.ui.toast("Asignación guardada con éxito");
         App.ui.closeSheet();
     });
