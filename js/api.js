@@ -6,6 +6,9 @@ App.api.getBaseUrl = function () {
 };
 
 App.api.fetch = async function (action, payload = {}) {
+    let timeoutId = null;
+    let controller = null;
+
     try {
         const baseUrl = App.api.getBaseUrl();
 
@@ -17,11 +20,11 @@ App.api.fetch = async function (action, payload = {}) {
                 gasUrl: window.App?.config?.api?.gasUrl || null
             };
 
-            cconsole.error('DEBUG App config:', debugInfo);
-throw new Error('No hay URL configurada para Apps Script');
+            console.error('DEBUG App config:', debugInfo);
+            throw new Error('No hay URL configurada para Apps Script');
         }
 
-        let requestBody = {
+        const requestBody = {
             action: action,
             payload: payload
         };
@@ -32,8 +35,12 @@ throw new Error('No hay URL configurada para Apps Script');
             requestBody.sessionToken = App.state?.sessionToken || null;
         }
 
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), (App.config?.api?.timeoutMs || 30000));
+        controller = new AbortController();
+        const timeoutMs = App.config?.api?.timeoutMs || 30000;
+
+        timeoutId = setTimeout(() => {
+            controller.abort();
+        }, timeoutMs);
 
         const response = await fetch(baseUrl, {
             method: 'POST',
@@ -45,9 +52,14 @@ throw new Error('No hay URL configurada para Apps Script');
             signal: controller.signal
         });
 
-        clearTimeout(timeout);
+        clearTimeout(timeoutId);
+        timeoutId = null;
 
         const text = await response.text();
+
+        if (!text || !text.trim()) {
+            throw new Error('El servidor no devolvió información');
+        }
 
         let data;
         try {
@@ -59,22 +71,48 @@ throw new Error('No hay URL configurada para Apps Script');
 
         if (
             data.status === 'error' &&
-            (data.code === 'AUTH_REQUIRED' ||
-             data.code === 'SESSION_EXPIRED' ||
-             data.code === 'SESSION_INVALID')
+            (
+                data.code === 'AUTH_REQUIRED' ||
+                data.code === 'SESSION_EXPIRED' ||
+                data.code === 'SESSION_INVALID'
+            )
         ) {
             localStorage.removeItem('erp_session_token');
-            if (App.state) App.state.sessionToken = null;
-            if (App.router?.handleRoute) App.router.handleRoute();
+
+            if (App.state) {
+                App.state.sessionToken = null;
+            }
+
+            if (App.router?.handleRoute) {
+                App.router.handleRoute();
+            }
         }
 
         return data;
 
     } catch (error) {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+
         console.error('Detalle del error de red:', error);
+
+        let message = 'Fallo de conexión con Google.';
+
+        if (error?.name === 'AbortError') {
+            message = 'La solicitud tardó demasiado y fue cancelada por tiempo de espera.';
+        } else if (
+            error?.message === 'Failed to fetch' ||
+            error?.message === 'NetworkError when attempting to fetch resource.'
+        ) {
+            message = 'No se pudo conectar con Apps Script. Revisa internet, permisos o la URL del Web App.';
+        } else if (error?.message) {
+            message = error.message;
+        }
+
         return {
             status: 'error',
-            message: error.message || 'Fallo de conexión con Google.'
+            message: message
         };
     }
 };
