@@ -61,9 +61,11 @@ window.generarListaPedidos = function(tipo) {
 
     pedidos.forEach(p => {
         const cliente = (App.state.clientes || []).find(x => x.id === p.cliente_id) || {};
-        const abonos = (App.state.abonos || [])
-            .filter(a => a.pedido_id === p.id)
-            .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+        const abonosLista = (App.state.abonos || []).filter(a => a.pedido_id === p.id);
+        const abonos = abonosLista.reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+        const ultimoAbono = abonosLista.length
+            ? [...abonosLista].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))[0]
+            : null;
 
         const saldo = parseFloat(p.total || 0) - parseFloat(p.anticipo || 0) - abonos;
         const estado = String(p.estado || '').toLowerCase();
@@ -113,6 +115,8 @@ window.generarListaPedidos = function(tipo) {
                     <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formPedido('${p.id}')">✏️ Editar</button>
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💳 Abonos</button>
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirNota('${p.id}')">🖨️ Nota</button>
+                    ${ultimoAbono ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboAbono('${ultimoAbono.id}')">🧾 Últ. abono</button>` : ''}
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboLiquidacion('${p.id}')">✅ Liquidación</button>
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.enviarWhatsApp('${p.id}', '${p.estado === 'listo para entregar' ? 'listo' : 'cobro'}')">💬 WhatsApp</button>
                 </div>
             </div>
@@ -247,12 +251,20 @@ App.views.modalAbonos = function(pedidoId) {
                             ${fecha ? `<div class="dm-text-sm dm-muted">${fecha}</div>` : ''}
                         </div>
 
-                        <button
-                            class="dm-btn dm-btn-danger dm-btn-sm"
-                            onclick="App.logic.eliminarRegistroGenerico('abonos_clientes','${a.id}','abonos')"
-                        >
-                            X
-                        </button>
+                        <div class="dm-list-card-actions" style="margin-top:0; justify-content:flex-end;">
+                            <button
+                                class="dm-btn dm-btn-secondary dm-btn-sm"
+                                onclick="App.logic.imprimirReciboAbono('${a.id}')"
+                            >
+                                🧾
+                            </button>
+                            <button
+                                class="dm-btn dm-btn-danger dm-btn-sm"
+                                onclick="App.logic.eliminarRegistroGenerico('abonos_clientes','${a.id}','abonos')"
+                            >
+                                X
+                            </button>
+                        </div>
                     </div>
                 </div>
             `;
@@ -370,9 +382,14 @@ App.views.formCotizacion = function(id = null) {
 // DETALLE DE PEDIDO
 // ==========================================
 App.views.modalDetallesPedido = function(pedidoId) {
+    const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
     const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
+    const abonosLista = (App.state.abonos || []).filter(a => a.pedido_id === pedidoId);
+    const ultimoAbono = abonosLista.length
+        ? [...abonosLista].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))[0]
+        : null;
 
-    if (detalles.length === 0) {
+    if (!pedido || detalles.length === 0) {
         App.ui.toast('No hay detalles guardados para este pedido.');
         return;
     }
@@ -396,8 +413,10 @@ App.views.modalDetallesPedido = function(pedidoId) {
 
     html += `
         </div>
-        <div class="dm-list-card-actions dm-mt-3">
+        <div class="dm-list-card-actions dm-mt-3" style="flex-wrap:wrap;">
             <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirNota('${pedidoId}')">🖨️ Imprimir Nota</button>
+            ${ultimoAbono ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboAbono('${ultimoAbono.id}')">🧾 Últ. abono</button>` : ''}
+            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboLiquidacion('${pedidoId}')">✅ Liquidación</button>
             <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.enviarWhatsApp('${pedidoId}', 'cobro')">💬 WhatsApp</button>
         </div>
     `;
