@@ -74,6 +74,7 @@ Object.assign(App.logic, {
             App.state.tarifas_artesano = bd["tarifas_artesano"] || [];
             App.state.pago_artesanos = bd["pago_artesanos"] || [];
             App.state.movimientos_inventario = bd["movimientos_inventario"] || [];
+            App.state.ordenes_produccion_artesanos = bd["ordenes_produccion_artesanos"] || [];
             App.state.abonos_proveedores = bd["abonos_proveedores"] || [];
 
             App.ui.hideLoader();
