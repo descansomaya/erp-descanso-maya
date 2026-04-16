@@ -227,11 +227,17 @@ App.views.verDetallesProduccion = function (ordenId) {
                             <strong>${App.ui.safe(nombreArtesano)}</strong>
                             <div class="dm-text-sm dm-muted dm-mt-2">
                                 Componente: ${App.ui.safe(a.componente || a.aplica_a || "Total")}<br>
-                                Esquema: ${App.ui.safe(a.esquema_pago || a.modo_calculo || "fijo")}
+                                Esquema: ${App.ui.safe(a.esquema_pago || a.modo_calculo || "fijo")}<br>
+                                Tarifa: $${(parseFloat(a.monto_tarifa_apl || 0) || 0).toFixed(2)} ·
+                                Factor: ${(parseFloat(a.factor_participac || 1) || 1).toFixed(2)}
                             </div>
                         </div>
                         <div style="text-align:right;">
                             <strong>$${(parseFloat(a.pago_estimado || 0) || 0).toFixed(2)}</strong>
+                            <div class="dm-list-card-actions" style="justify-content:flex-end; margin-top:8px;">
+                                <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formAsignacionMultiArtesano('${o.id}', '${a.id}'), 250);">✏️</button>
+                                <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.cancelarAsignacionMultiArtesano('${a.id}')">🗑️</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -282,17 +288,22 @@ window.verDetallesProduccion = function (ordenId) {
 // ==========================================
 // FORMULARIO MULTIARTESANO
 // ==========================================
-App.views.formAsignacionMultiArtesano = function (ordenId) {
+App.views.formAsignacionMultiArtesano = function (ordenId, asignacionId = null) {
     const orden = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
     if (!orden) return;
 
+    const asignacion = asignacionId
+        ? (App.state?.ordenes_produccion_artesanos || []).find(a => a.id === asignacionId)
+        : null;
+
     const artesanosOpts = (App.state?.artesanos || []).map(a =>
-        `<option value="${a.id}">${App.ui.safe(a.nombre)}</option>`
+        `<option value="${a.id}" ${asignacion?.artesano_id === a.id ? "selected" : ""}>${App.ui.safe(a.nombre)}</option>`
     ).join("");
 
     const formHTML = `
         <form id="dynamic-form">
             <input type="hidden" name="orden_id" value="${ordenId}">
+            ${asignacion ? `<input type="hidden" name="id" value="${asignacion.id}">` : ""}
 
             <div class="dm-form-group">
                 <label class="dm-label">Artesano</label>
@@ -314,10 +325,10 @@ App.views.formAsignacionMultiArtesano = function (ordenId) {
             <div class="dm-form-group">
                 <label class="dm-label">Componente</label>
                 <select class="dm-select" name="componente" id="componente-multi" onchange="window.calcTotalTrabajoMulti()">
-                    <option value="total">Total</option>
-                    <option value="Cuerpo">Cuerpo</option>
-                    <option value="Brazos">Brazos</option>
-                    <option value="Adicional">Adicional</option>
+                    <option value="total" ${(asignacion?.componente || "total") === "total" ? "selected" : ""}>Total</option>
+                    <option value="Cuerpo" ${asignacion?.componente === "Cuerpo" ? "selected" : ""}>Cuerpo</option>
+                    <option value="Brazos" ${asignacion?.componente === "Brazos" ? "selected" : ""}>Brazos</option>
+                    <option value="Adicional" ${asignacion?.componente === "Adicional" ? "selected" : ""}>Adicional</option>
                 </select>
             </div>
 
@@ -344,14 +355,31 @@ App.views.formAsignacionMultiArtesano = function (ordenId) {
             </div>
 
             <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
-                Guardar asignación
+                ${asignacion ? "Guardar cambios" : "Guardar asignación"}
             </button>
         </form>
     `;
 
-    App.ui.openSheet("Nueva asignación de artesano", formHTML, (data) => {
-        App.logic.guardarAsignacionMultiArtesano(data);
+    App.ui.openSheet(asignacion ? "Editar asignación" : "Nueva asignación de artesano", formHTML, (data) => {
+        if (asignacion) {
+            App.logic.editarAsignacionMultiArtesano(data);
+        } else {
+            App.logic.guardarAsignacionMultiArtesano(data);
+        }
     });
+
+    if (asignacion?.artesano_id) {
+        setTimeout(() => {
+            window.cargarTarifasMulti(asignacion.artesano_id);
+
+            const selectTarifas = document.getElementById("select-tarifas-multi");
+            if (selectTarifas && asignacion.tarifa_artesano_id) {
+                selectTarifas.value = asignacion.tarifa_artesano_id;
+            }
+
+            window.calcTotalTrabajoMulti();
+        }, 150);
+    }
 };
 
 // ==========================================
