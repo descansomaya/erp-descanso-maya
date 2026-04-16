@@ -115,7 +115,7 @@ App.views.activarFiltroFinanzas = function(btn, filtro, mostrarCustom) {
     }
 };
 
-App.views._filtrarPagosArtesanos = function(estado = 'pendiente', query = '') {
+App.views._filtrarPagosArtesanos = function(estado = 'pendiente', query = '', artesanoId = '') {
     const q = String(query || '').trim().toLowerCase();
 
     return (App.state.pago_artesanos || []).filter(pa => {
@@ -124,6 +124,8 @@ App.views._filtrarPagosArtesanos = function(estado = 'pendiente', query = '') {
             : String(pa.estado || '').toLowerCase() === estado.toLowerCase();
 
         if (!coincideEstado) return false;
+
+        if (artesanoId && pa.artesano_id !== artesanoId) return false;
 
         if (!q) return true;
 
@@ -142,8 +144,8 @@ App.views._filtrarPagosArtesanos = function(estado = 'pendiente', query = '') {
     });
 };
 
-App.views._renderListaPagosArtesanos = function(estado = 'pendiente', query = '') {
-    const pagos = App.views._filtrarPagosArtesanos(estado, query);
+App.views._renderListaPagosArtesanos = function(estado = 'pendiente', query = '', artesanoId = '') {
+    const pagos = App.views._filtrarPagosArtesanos(estado, query, artesanoId);
 
     if (!pagos.length) {
         return `<div class="dm-alert dm-alert-info">No hay pagos en esta vista.</div>`;
@@ -177,7 +179,7 @@ App.views._renderListaPagosArtesanos = function(estado = 'pendiente', query = ''
 
         if (producto) {
             return {
-                etiqueta: pedido ? String(pedido.id || "").replace("PED-", "PED-") : ordenId,
+                etiqueta: pedido ? String(pedido.id || "") : ordenId,
                 detalle: producto.nombre || pa.tipo_trabajo || "Producto"
             };
         }
@@ -190,7 +192,7 @@ App.views._renderListaPagosArtesanos = function(estado = 'pendiente', query = ''
 
         if (reparacion) {
             return {
-                etiqueta: String(reparacion.id || "").replace("REP-", "REP-"),
+                etiqueta: String(reparacion.id || ""),
                 detalle: reparacion.descripcion || pa.tipo_trabajo || "Reparación"
             };
         }
@@ -216,6 +218,13 @@ App.views._renderListaPagosArtesanos = function(estado = 'pendiente', query = ''
             <div class="dm-list-card">
                 <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
                     <div style="flex:1;">
+                        ${estadoPago !== 'pagado'
+                            ? `<label style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                                    <input type="checkbox" class="chk-pago-artesano" value="${pa.id}">
+                                    <span class="dm-text-sm dm-muted">Seleccionar</span>
+                               </label>`
+                            : ''
+                        }
                         <strong>${App.ui.safe(nombreArtesano)}</strong>
                         <div class="dm-text-sm dm-mt-2" style="color:var(--dm-primary); font-weight:600;">
                             ${App.ui.safe(origen.etiqueta)} · ${App.ui.safe(origen.detalle)}
@@ -234,16 +243,25 @@ App.views._renderListaPagosArtesanos = function(estado = 'pendiente', query = ''
                         <div class="dm-badge ${estadoPago === 'pagado' ? 'dm-badge-success' : 'dm-badge-warning'}">
                             ${App.ui.safe(estadoPago.toUpperCase())}
                         </div>
-                        <div class="dm-list-card-actions" style="justify-content:flex-end; margin-top:8px;">
+                        <div class="dm-list-card-actions" style="justify-content:flex-end; margin-top:8px; flex-wrap:wrap;">
                             ${estadoPago !== 'pagado'
                                 ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.logic.marcarPagoArtesanoPagado('${pa.id}')">✔ Pagado</button>`
-                                : ''}
+                                : ''
+                            }
                         </div>
                     </div>
                 </div>
             </div>
         `;
     }).join('');
+};
+
+App.views._opcionesArtesanosNomina = function() {
+    const artesanos = App.state.artesanos || [];
+    return `
+        <option value="">Todos los artesanos</option>
+        ${artesanos.map(a => `<option value="${a.id}">${App.ui.safe(a.nombre)}</option>`).join('')}
+    `;
 };
 
 App.views.pagoArtesanos = function() {
@@ -270,23 +288,51 @@ App.views.pagoArtesanos = function() {
             </div>
 
             <div class="dm-card dm-mb-3">
+                <div class="dm-form-row">
+                    <div class="dm-form-group">
+                        <label class="dm-label">Filtrar por artesano</label>
+                        <select id="filtro-artesano-nomina" class="dm-select" onchange="App.views.actualizarListaPagoArtesanos()">
+                            ${App.views._opcionesArtesanosNomina()}
+                        </select>
+                    </div>
+
+                    <div class="dm-form-group">
+                        <label class="dm-label">Buscar</label>
+                        <input
+                            type="text"
+                            id="bus-pagos-art"
+                            class="dm-input"
+                            placeholder="Orden, trabajo o componente..."
+                            onkeyup="App.views.actualizarListaPagoArtesanos()"
+                        >
+                    </div>
+                </div>
+
                 <div class="dm-tabs" style="display:flex; gap:8px; overflow-x:auto; white-space:nowrap;">
                     <button class="dm-tab active tab-pago-art" onclick="App.views.filtrarVistaPagoArtesanos(this, 'pendiente')">Pendientes</button>
                     <button class="dm-tab tab-pago-art" onclick="App.views.filtrarVistaPagoArtesanos(this, 'pagado')">Pagados</button>
                     <button class="dm-tab tab-pago-art" onclick="App.views.filtrarVistaPagoArtesanos(this, 'todos')">Todos</button>
                 </div>
+            </div>
 
-                <input
-                    type="text"
-                    id="bus-pagos-art"
-                    class="dm-input dm-mt-3"
-                    placeholder="🔍 Buscar por artesano, orden, trabajo o componente..."
-                    onkeyup="App.views.actualizarListaPagoArtesanos()"
-                >
+            <div class="dm-card dm-mb-3" style="background:var(--dm-surface-2);">
+                <div class="dm-row-between" style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
+                    <div>
+                        <div class="dm-card-title">Acciones masivas</div>
+                        <div class="dm-text-sm dm-muted">Puedes pagar e imprimir por artesano o por selección.</div>
+                    </div>
+
+                    <div class="dm-list-card-actions" style="margin-top:0; flex-wrap:wrap;">
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.pagarPendientesArtesanoSeleccionado()">💵 Pagar pendientes del artesano</button>
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirComprobanteArtesanoSeleccionado()">🖨️ Comprobante artesano</button>
+                        <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.logic.pagarSeleccionNomina()">✔ Pagar selección</button>
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirSeleccionNomina()">🧾 Imprimir selección</button>
+                    </div>
+                </div>
             </div>
 
             <div id="lista-pagos-artesanos" data-estado="pendiente">
-                ${App.views._renderListaPagosArtesanos('pendiente', '')}
+                ${App.views._renderListaPagosArtesanos('pendiente', '', '')}
             </div>
 
             <div class="dm-row-between dm-mt-4">
@@ -305,9 +351,10 @@ App.views.filtrarVistaPagoArtesanos = function(btn, estado) {
 
     const lista = document.getElementById('lista-pagos-artesanos');
     const busqueda = document.getElementById('bus-pagos-art')?.value || '';
+    const artesanoId = document.getElementById('filtro-artesano-nomina')?.value || '';
 
     if (lista) {
-        lista.innerHTML = App.views._renderListaPagosArtesanos(estado, busqueda);
+        lista.innerHTML = App.views._renderListaPagosArtesanos(estado, busqueda, artesanoId);
         lista.dataset.estado = estado;
     }
 };
@@ -318,8 +365,9 @@ App.views.actualizarListaPagoArtesanos = function() {
 
     const estado = lista.dataset.estado || 'pendiente';
     const busqueda = document.getElementById('bus-pagos-art')?.value || '';
+    const artesanoId = document.getElementById('filtro-artesano-nomina')?.value || '';
 
-    lista.innerHTML = App.views._renderListaPagosArtesanos(estado, busqueda);
+    lista.innerHTML = App.views._renderListaPagosArtesanos(estado, busqueda, artesanoId);
 };
 
 App.views.nomina = function() {
