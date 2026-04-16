@@ -486,7 +486,126 @@ async guardarAsignacionMultiArtesano(data) {
         App.ui.toast(error.message || "Error al guardar asignación", "danger");
     }
 },
-    
+    async editarAsignacionMultiArtesano(data) {
+    try {
+        App.ui.showLoader("Actualizando asignación...");
+
+        const asignacionId = data.id;
+        const asignacion = (App.state?.ordenes_produccion_artesanos || []).find(a => a.id === asignacionId);
+        if (!asignacion) {
+            App.ui.hideLoader();
+            App.ui.toast("Asignación no encontrada", "danger");
+            return;
+        }
+
+        const orden = (App.state?.ordenes_produccion || []).find(o => o.id === data.orden_id);
+        if (!orden) {
+            App.ui.hideLoader();
+            App.ui.toast("Orden no encontrada", "danger");
+            return;
+        }
+
+        const tarifa = (App.state?.tarifas_artesano || []).find(t => t.id === data.tarifa_artesano_id);
+        if (!tarifa) {
+            App.ui.hideLoader();
+            App.ui.toast("Tarifa no encontrada", "danger");
+            return;
+        }
+
+        const receta = (() => {
+            try {
+                const r = JSON.parse(orden.receta_personalizada || "[]");
+                return Array.isArray(r) ? r : [];
+            } catch (e) {
+                return [];
+            }
+        })();
+
+        const esquemaPago = tarifa.modo_calculo || "fijo";
+        const componente = data.componente || tarifa.aplica_a || "total";
+        const montoTarifa = parseFloat(tarifa.monto || 0) || 0;
+
+        let factorParticipac = 1;
+
+        if (esquemaPago === "por_unidad") {
+            if (String(componente).toLowerCase() === "total") {
+                factorParticipac = receta.reduce((acc, item) => acc + (parseFloat(item.cant || 0) || 0), 0);
+            } else {
+                factorParticipac = receta
+                    .filter(item => String(item.uso || "").toLowerCase() === String(componente).toLowerCase())
+                    .reduce((acc, item) => acc + (parseFloat(item.cant || 0) || 0), 0);
+            }
+        }
+
+        const datosActualizados = {
+            artesano_id: data.artesano_id || "",
+            tarifa_artesano_id: data.tarifa_artesano_id || "",
+            tarifa_nombre: tarifa.clasificacion || "Trabajo",
+            tipo_trabajo: tarifa.clasificacion || "Trabajo",
+            componente: componente,
+            esquema_pago: esquemaPago,
+            monto_tarifa_apl: montoTarifa,
+            factor_participac: factorParticipac,
+            pago_estimado: montoTarifa * factorParticipac
+        };
+
+        const res = await App.api.fetch("actualizar_fila", {
+            nombreHoja: "ordenes_produccion_artesanos",
+            idFila: asignacionId,
+            datosNuevos: datosActualizados
+        });
+
+        App.ui.hideLoader();
+
+        if (res.status === "success") {
+            Object.assign(asignacion, datosActualizados);
+            App.ui.toast("Asignación actualizada");
+            App.ui.closeSheet();
+            App.router.handleRoute();
+        } else {
+            App.ui.toast(res.message || "Error al actualizar asignación", "danger");
+        }
+    } catch (error) {
+        console.error("Error en editarAsignacionMultiArtesano:", error);
+        App.ui.hideLoader();
+        App.ui.toast(error.message || "Error al actualizar asignación", "danger");
+    }
+},
+
+async cancelarAsignacionMultiArtesano(asignacionId) {
+    try {
+        if (!confirm("¿Cancelar esta asignación?")) return;
+
+        App.ui.showLoader("Cancelando asignación...");
+
+        const asignacion = (App.state?.ordenes_produccion_artesanos || []).find(a => a.id === asignacionId);
+        if (!asignacion) {
+            App.ui.hideLoader();
+            App.ui.toast("Asignación no encontrada", "danger");
+            return;
+        }
+
+        const res = await App.api.fetch("actualizar_fila", {
+            nombreHoja: "ordenes_produccion_artesanos",
+            idFila: asignacionId,
+            datosNuevos: { estado: "cancelado" }
+        });
+
+        App.ui.hideLoader();
+
+        if (res.status === "success") {
+            asignacion.estado = "cancelado";
+            App.ui.toast("Asignación cancelada");
+            App.router.handleRoute();
+        } else {
+            App.ui.toast(res.message || "Error al cancelar asignación", "danger");
+        }
+    } catch (error) {
+        console.error("Error en cancelarAsignacionMultiArtesano:", error);
+        App.ui.hideLoader();
+        App.ui.toast(error.message || "Error al cancelar asignación", "danger");
+    }
+},
     // ==========================================
     // 4. GENERAR ÓRDENES DESDE PEDIDO
     // ==========================================
