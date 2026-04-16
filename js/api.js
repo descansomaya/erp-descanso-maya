@@ -55,6 +55,10 @@ App.api.fetch = async function (action, payload = {}) {
         clearTimeout(timeoutId);
         timeoutId = null;
 
+        if (!response.ok) {
+            throw new Error(`Error HTTP ${response.status}: ${response.statusText || 'Respuesta no válida del servidor'}`);
+        }
+
         const text = await response.text();
 
         if (!text || !text.trim()) {
