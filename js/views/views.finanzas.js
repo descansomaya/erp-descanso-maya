@@ -149,6 +149,58 @@ App.views._renderListaPagosArtesanos = function(estado = 'pendiente', query = ''
         return `<div class="dm-alert dm-alert-info">No hay pagos en esta vista.</div>`;
     }
 
+    const obtenerOrigenPago = (pa) => {
+        const ordenId = pa.orden_id || "";
+        if (!ordenId) {
+            return {
+                etiqueta: "Sin orden vinculada",
+                detalle: pa.tipo_trabajo || "Trabajo"
+            };
+        }
+
+        const orden = (App.state.ordenes_produccion || []).find(o => o.id === ordenId);
+        if (!orden) {
+            return {
+                etiqueta: ordenId,
+                detalle: pa.tipo_trabajo || "Trabajo"
+            };
+        }
+
+        const pedidoDetalle = (App.state.pedido_detalle || []).find(d => d.id === orden.pedido_detalle_id);
+        const pedido = pedidoDetalle
+            ? (App.state.pedidos || []).find(p => p.id === pedidoDetalle.pedido_id)
+            : null;
+
+        const producto = pedidoDetalle
+            ? (App.state.productos || []).find(p => p.id === pedidoDetalle.producto_id)
+            : null;
+
+        if (producto) {
+            return {
+                etiqueta: pedido ? String(pedido.id || "").replace("PED-", "PED-") : ordenId,
+                detalle: producto.nombre || pa.tipo_trabajo || "Producto"
+            };
+        }
+
+        const reparacion = (App.state.reparaciones || []).find(r =>
+            r.id === ordenId ||
+            r.orden_produccion_id === ordenId ||
+            r.pedido_detalle_id === orden.pedido_detalle_id
+        );
+
+        if (reparacion) {
+            return {
+                etiqueta: String(reparacion.id || "").replace("REP-", "REP-"),
+                detalle: reparacion.descripcion || pa.tipo_trabajo || "Reparación"
+            };
+        }
+
+        return {
+            etiqueta: ordenId,
+            detalle: pa.tipo_trabajo || "Trabajo"
+        };
+    };
+
     return pagos.map(pa => {
         const artesano = (App.state.artesanos || []).find(a => a.id === pa.artesano_id);
         const nombreArtesano = artesano ? artesano.nombre : 'Artesano';
@@ -158,14 +210,17 @@ App.views._renderListaPagosArtesanos = function(estado = 'pendiente', query = ''
         const fecha = pa.fecha ? String(pa.fecha).split('T')[0] : '';
         const estadoPago = String(pa.estado || 'pendiente').toLowerCase();
 
+        const origen = obtenerOrigenPago(pa);
+
         return `
             <div class="dm-list-card">
                 <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
                     <div style="flex:1;">
                         <strong>${App.ui.safe(nombreArtesano)}</strong>
+                        <div class="dm-text-sm dm-mt-2" style="color:var(--dm-primary); font-weight:600;">
+                            ${App.ui.safe(origen.etiqueta)} · ${App.ui.safe(origen.detalle)}
+                        </div>
                         <div class="dm-text-sm dm-muted dm-mt-2">
-                            Orden: ${App.ui.safe(pa.orden_id || '')}<br>
-                            Trabajo: ${App.ui.safe(pa.tipo_trabajo || 'Trabajo')}<br>
                             Componente: ${App.ui.safe(pa.componente || 'Total')}<br>
                             Cálculo: $${montoUnit.toFixed(2)} × ${base.toFixed(2)}<br>
                             Fecha: ${App.ui.safe(fecha)}
