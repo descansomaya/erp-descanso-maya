@@ -3,6 +3,7 @@ App.actions = App.actions || {};
 App.forms = App.forms || {};
 App.debug = App.debug || {};
 App.logic = App.logic || {};
+App.router = App.router || {};
 
 // ==========================================
 // MANEJO GLOBAL DE ERRORES
@@ -33,11 +34,12 @@ window.calcTotalTrabajo = function () {
     const tot = document.getElementById("total-trabajo");
     const tareaNombre = document.getElementById("tarea_nombre");
 
-    if (sel && cant && tot && sel.value) {
-        tot.value = (parseFloat(sel.value) * parseFloat(cant || 1)).toFixed(2);
-        if (tareaNombre) {
-            tareaNombre.value = sel.options[sel.selectedIndex]?.text?.split(" ($")[0] || "";
-        }
+    if (!sel || !tot || !sel.value) return;
+
+    tot.value = ((parseFloat(sel.value) || 0) * (parseFloat(cant || 1) || 1)).toFixed(2);
+
+    if (tareaNombre) {
+        tareaNombre.value = sel.options[sel.selectedIndex]?.text?.split(" ($")[0] || "";
     }
 };
 
@@ -94,7 +96,9 @@ App.forms.calcularTotalPedido = function () {
     }
 };
 
-window.calcularTotalPedido = () => App.forms.calcularTotalPedido();
+window.calcularTotalPedido = function () {
+    App.forms.calcularTotalPedido();
+};
 
 App.forms.agregarFilaReceta = function () {
     const cont = document.getElementById("cont-receta");
@@ -128,7 +132,9 @@ App.forms.agregarFilaReceta = function () {
     cont.appendChild(div);
 };
 
-window.agregarFilaReceta = () => App.forms.agregarFilaReceta();
+window.agregarFilaReceta = function () {
+    App.forms.agregarFilaReceta();
+};
 
 window.calcTotalCompra = function () {
     const cants = document.querySelectorAll('input[name="cant[]"]');
@@ -177,7 +183,9 @@ App.forms.agregarFilaCompra = function () {
     cont.appendChild(div);
 };
 
-window.agregarFilaCompra = () => App.forms.agregarFilaCompra();
+window.agregarFilaCompra = function () {
+    App.forms.agregarFilaCompra();
+};
 
 App.forms.agregarFilaGasto = function () {
     const cont = document.getElementById("cont-gastos");
@@ -193,7 +201,9 @@ App.forms.agregarFilaGasto = function () {
     cont.appendChild(div);
 };
 
-window.agregarFilaGasto = () => App.forms.agregarFilaGasto();
+window.agregarFilaGasto = function () {
+    App.forms.agregarFilaGasto();
+};
 
 window.generarFilaRecetaProd = function (matId, cant, uso) {
     const opcMat = (App.state?.inventario || [])
@@ -253,8 +263,13 @@ window.exportarAExcel = function (datos, nombreArchivo) {
 };
 
 window.switchTabProd = function (tabId, btn) {
-    document.querySelectorAll(".tab-content-prod").forEach(el => el.style.display = "none");
-    document.querySelectorAll(".tab-btn-prod").forEach(el => el.classList.remove("active"));
+    document.querySelectorAll(".tab-content-prod").forEach(el => {
+        el.style.display = "none";
+    });
+
+    document.querySelectorAll(".tab-btn-prod").forEach(el => {
+        el.classList.remove("active");
+    });
 
     const tab = document.getElementById("tab-" + tabId);
     if (tab) tab.style.display = "block";
@@ -262,8 +277,13 @@ window.switchTabProd = function (tabId, btn) {
 };
 
 window.switchTabPed = function (tabId, btn) {
-    document.querySelectorAll(".tab-content-ped").forEach(el => el.style.display = "none");
-    document.querySelectorAll(".tab-btn-ped").forEach(el => el.classList.remove("active"));
+    document.querySelectorAll(".tab-content-ped").forEach(el => {
+        el.style.display = "none";
+    });
+
+    document.querySelectorAll(".tab-btn-ped").forEach(el => {
+        el.classList.remove("active");
+    });
 
     const tab = document.getElementById("tab-" + tabId);
     if (tab) tab.style.display = "block";
@@ -275,7 +295,10 @@ window.switchTabPed = function (tabId, btn) {
 // ==========================================
 App.router = {
     init() {
-        window.removeEventListener("hashchange", this._boundHandleRoute);
+        if (this._boundHandleRoute) {
+            window.removeEventListener("hashchange", this._boundHandleRoute);
+        }
+
         this._boundHandleRoute = () => this.handleRoute();
         window.addEventListener("hashchange", this._boundHandleRoute);
         this.handleRoute();
@@ -343,10 +366,8 @@ App.router = {
             const titleConfig = this.getTitleConfig(hash);
             if (headerTitle) headerTitle.textContent = titleConfig.title;
             if (headerSubtitle) headerSubtitle.textContent = titleConfig.subtitle;
-        } else {
-            if (contentDiv) {
-                contentDiv.innerHTML = `<div class="dm-card"><p class="dm-center dm-muted">Módulo no encontrado.</p></div>`;
-            }
+        } else if (contentDiv) {
+            contentDiv.innerHTML = `<div class="dm-card"><p class="dm-center dm-muted">Módulo no encontrado.</p></div>`;
         }
     }
 };
@@ -387,10 +408,8 @@ App.start = function () {
 document.addEventListener("DOMContentLoaded", () => App.start());
 
 // ==========================================
-// PARCHES ACTUALES
+// PRODUCCIÓN - PARCHE TEMPORAL CONTROLADO
 // ==========================================
-
-
 window.verDetallesProduccion = function (ordenId) {
     const o = (App.state?.ordenes_produccion || []).find(x => x.id === ordenId);
     if (!o) return;
@@ -464,7 +483,7 @@ window.verDetallesProduccion = function (ordenId) {
     </div>`;
 
     App.ui.openSheet("Detalle de Producción", html, (data) => {
-        App.logic.actualizarRegistroGenerico("ordenes_produccion", o.id, data, "produccion");
+        App.logic.actualizarRegistroGenerico("ordenes_produccion", o.id, data, "ordenes_produccion");
         App.ui.toast("Asignación guardada con éxito");
         App.ui.closeSheet();
     });
@@ -472,6 +491,7 @@ window.verDetallesProduccion = function (ordenId) {
     if (o.artesano_id) {
         setTimeout(() => {
             window.cargarTarifas(o.artesano_id);
+
             if (o.pago_estimado) {
                 const selectTarifas = document.getElementById("select-tarifas");
                 if (selectTarifas) {
