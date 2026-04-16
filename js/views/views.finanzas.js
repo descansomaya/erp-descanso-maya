@@ -274,6 +274,7 @@ App.views.actualizarListaPagoArtesanos = function() {
 
     lista.innerHTML = App.views._renderListaPagosArtesanos(estado, busqueda);
 };
+App.views.nomina = App.views.pagoArtesanos;
 
 App.views.detalleFinanzas = function(tipo, filtro) {
     const hoy = new Date();
