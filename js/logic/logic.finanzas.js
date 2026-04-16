@@ -60,6 +60,50 @@ Object.assign(App.logic, {
         }
     },
 
+    async marcarPagoArtesanoPagado(pagoId) {
+        try {
+            if (!confirm("¿Marcar este pago como pagado?")) return;
+
+            App.ui.showLoader("Actualizando pago...");
+
+            const pago = (App.state?.pago_artesanos || []).find(p => p.id === pagoId);
+            if (!pago) {
+                App.ui.hideLoader();
+                App.ui.toast("Pago no encontrado", "danger");
+                return;
+            }
+
+            const datosActualizados = {
+                estado: "pagado",
+                fecha_pago: new Date().toISOString()
+            };
+
+            const res = await App.api.fetch("actualizar_fila", {
+                nombreHoja: "pago_artesanos",
+                idFila: pagoId,
+                datosNuevos: datosActualizados
+            });
+
+            App.ui.hideLoader();
+
+            if (res.status === "success") {
+                Object.assign(pago, datosActualizados);
+                App.ui.toast("Pago marcado como pagado");
+                if (typeof App.views?.pagoArtesanos === "function") {
+                    App.views.pagoArtesanos();
+                } else {
+                    App.router.handleRoute();
+                }
+            } else {
+                App.ui.toast(res.message || "Error al actualizar pago", "danger");
+            }
+        } catch (error) {
+            console.error("Error en marcarPagoArtesanoPagado:", error);
+            App.ui.hideLoader();
+            App.ui.toast(error.message || "Error al actualizar pago", "danger");
+        }
+    },
+
     renderGraficasFinanzas(filtro) {
         const cont = document.getElementById("finanzas-contenedor");
         if (!cont) return;
