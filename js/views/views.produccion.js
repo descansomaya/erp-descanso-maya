@@ -4,6 +4,47 @@ App.views = App.views || {};
 // ==========================================
 // HELPERS INTERNOS DE PRODUCCIÓN
 // ==========================================
+App.views._getAsignacionesOrden = function (ordenId) {
+    return (App.state?.ordenes_produccion_artesanos || [])
+        .filter(a => a.orden_id === ordenId && String(a.estado || "activo").toLowerCase() !== "cancelado");
+};
+
+App.views._getRecetaOrden = function (orden) {
+    try {
+        const receta = JSON.parse(orden?.receta_personalizada || "[]");
+        return Array.isArray(receta) ? receta : [];
+    } catch (e) {
+        return [];
+    }
+};
+
+App.views._renderAsignacionesOrden = function (ordenId) {
+    const asignaciones = App.views._getAsignacionesOrden(ordenId);
+
+    if (!asignaciones.length) {
+        return `<div class="dm-text-sm dm-muted dm-mt-1"><i>Sin artesanos asignados</i></div>`;
+    }
+
+    let html = `<ul style="margin:5px 0 0 20px; padding:0; font-size:13px; color:var(--dm-muted);">`;
+
+    asignaciones.forEach(a => {
+        const artesano = (App.state?.artesanos || []).find(x => x.id === a.artesano_id);
+        const nombreArtesano = artesano ? artesano.nombre : "Artesano";
+        const componente = a.componente || a.aplica_a || "Total";
+        const pago = parseFloat(a.pago_estimado || 0) || 0;
+
+        html += `<li>${App.ui.safe(nombreArtesano)} · ${App.ui.safe(componente)} · $${pago.toFixed(2)}</li>`;
+    });
+
+    html += `</ul>`;
+    return html;
+};
+
+App.views._totalPagoArtesanosOrden = function (ordenId) {
+    const asignaciones = App.views._getAsignacionesOrden(ordenId);
+    return asignaciones.reduce((acc, a) => acc + (parseFloat(a.pago_estimado || 0) || 0), 0);
+};
+
 App.views._generarListaProd = function (estadoFiltro) {
     const ordenes = (App.state?.ordenes_produccion || [])
         .filter(o => o.estado === estadoFiltro)
@@ -16,9 +57,6 @@ App.views._generarListaProd = function (estadoFiltro) {
     let html = `<div class="dm-list">`;
 
     ordenes.forEach(o => {
-        const artesanoAsignado = (App.state?.artesanos || []).find(a => a.id === o.artesano_id);
-        const nombreArtesano = artesanoAsignado ? App.ui.safe(artesanoAsignado.nombre) : "⚠️ Sin asignar";
-
         const pDetalle = (App.state?.pedido_detalle || []).find(d => d.id === o.pedido_detalle_id) || {};
         const producto = (App.state?.productos || []).find(p => p.id === pDetalle.producto_id) || {};
 
@@ -31,13 +69,7 @@ App.views._generarListaProd = function (estadoFiltro) {
 
         let costoMateriales = 0;
         let listaHilosHTML = "";
-        let receta = [];
-
-        try {
-            receta = JSON.parse(o.receta_personalizada || "[]");
-        } catch (e) {
-            receta = [];
-        }
+        const receta = App.views._getRecetaOrden(o);
 
         if (receta.length > 0) {
             listaHilosHTML += `<ul style="margin:5px 0 0 20px; padding:0; font-size:13px; color:var(--dm-muted);">`;
@@ -63,7 +95,7 @@ App.views._generarListaProd = function (estadoFiltro) {
             (parseFloat(pDetalle.precio_unitario || 0) || 0) *
             (parseFloat(pDetalle.cantidad || 1) || 1);
 
-        const pagoArtesano = parseFloat(o.pago_estimado || 0) || 0;
+        const pagoArtesano = App.views._totalPagoArtesanosOrden(o.id);
         const utilidad = precioVenta - costoMateriales - pagoArtesano;
 
         const colorUtilidad =
@@ -73,22 +105,7 @@ App.views._generarListaProd = function (estadoFiltro) {
                     ? "var(--dm-warning)"
                     : "var(--dm-danger)";
 
-        let detallePagoHTML = "";
-        if (pagoArtesano > 0) {
-            const modoCalculo = App.ui.safe(o.modo_calculo_artesano || "fijo");
-            const aplicaA = App.ui.safe(o.aplica_a_artesano || "total");
-            const montoUnitario = parseFloat(o.monto_unitario_artesano || 0) || 0;
-            const baseCalculo = parseFloat(o.base_calculo_artesano || 1) || 1;
-
-            detallePagoHTML = `
-                <div>💰 <strong>Pago Asignado:</strong> $${pagoArtesano.toFixed(2)}</div>
-                <div class="dm-text-sm dm-muted">
-                    ${modoCalculo === "por_unidad"
-                        ? `Tarifa: $${montoUnitario.toFixed(2)} × ${baseCalculo.toFixed(2)} (${aplicaA})`
-                        : `Tarifa fija: $${montoUnitario.toFixed(2) || pagoArtesano.toFixed(2)}`}
-                </div>
-            `;
-        }
+        const asignacionesHTML = App.views._renderAsignacionesOrden(o.id);
 
         html += `
             <div class="dm-list-card">
@@ -103,8 +120,9 @@ App.views._generarListaProd = function (estadoFiltro) {
                 </div>
 
                 <div class="dm-list-card-meta dm-mt-3 dm-mb-3" style="background:var(--dm-surface-2); padding:10px; border-radius:var(--dm-radius-md);">
-                    <div class="dm-mb-2">🧑‍🎨 <strong>Artesano:</strong> ${nombreArtesano}</div>
-                    ${detallePagoHTML}
+                    <div class="dm-mt-2">🧑‍🎨 <strong>Asignaciones:</strong>
+                        ${asignacionesHTML}
+                    </div>
 
                     <div class="dm-mt-2">🧶 <strong>Hilos Asignados:</strong>
                         ${listaHilosHTML}
@@ -115,7 +133,8 @@ App.views._generarListaProd = function (estadoFiltro) {
                     <div class="dm-row-between" style="align-items:center;">
                         <div class="dm-text-sm dm-muted">
                             Venta: $${precioVenta.toFixed(2)}<br>
-                            Insumos: $${costoMateriales.toFixed(2)}
+                            Insumos: $${costoMateriales.toFixed(2)}<br>
+                            Artesanos: $${pagoArtesano.toFixed(2)}
                         </div>
                         <div style="text-align:right;">
                             <span class="dm-text-sm dm-muted">Utilidad Neta</span><br>
@@ -125,7 +144,7 @@ App.views._generarListaProd = function (estadoFiltro) {
                 </div>
 
                 <div class="dm-list-card-actions">
-                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verDetallesProduccion('${o.id}')">👁️ Detalles y Asignar</button>
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verDetallesProduccion('${o.id}')">👁️ Detalles</button>
                     ${o.estado === "pendiente" ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.logic.cambiarEstadoProduccion('${o.id}', 'proceso')">▶️ Iniciar</button>` : ""}
                     ${o.estado === "proceso" ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.logic.cambiarEstadoProduccion('${o.id}', 'listo')">✅ Terminar</button>` : ""}
                     <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.eliminarRegistroGenerico('ordenes_produccion', '${o.id}', 'ordenes_produccion')">🗑️</button>
@@ -161,7 +180,7 @@ App.views.produccion = function () {
                 id="bus-prod"
                 class="dm-input dm-mb-4"
                 onkeyup="window.filtrarLista('bus-prod', 'dm-list-card')"
-                placeholder="🔍 Buscar orden o artesano..."
+                placeholder="🔍 Buscar orden, producto o artesano..."
             >
 
             <div id="tab-pendientes" class="tab-content-prod" style="display:block;">
@@ -190,14 +209,35 @@ App.views.verDetallesProduccion = function (ordenId) {
     const p = (App.state?.pedidos || []).find(x => x.id === pedDet.pedido_id) || {};
     const cliente = (App.state?.clientes || []).find(x => x.id === p.cliente_id) || {};
     const prod = (App.state?.productos || []).find(x => x.id === pedDet.producto_id) || {};
-    const nomCliente = p.cliente_id === "STOCK_INTERNO"
-        ? "STOCK BODEGA"
-        : (cliente.nombre || "Desconocido");
+    const nomCliente = p.cliente_id === "STOCK_INTERNO" ? "STOCK BODEGA" : (cliente.nombre || "Desconocido");
 
-    let artesanosOpts = '<option value="">-- Sin Asignar --</option>';
-    (App.state?.artesanos || []).forEach(art => {
-        artesanosOpts += `<option value="${art.id}" ${o.artesano_id === art.id ? "selected" : ""}>${App.ui.safe(art.nombre)}</option>`;
-    });
+    const asignaciones = App.views._getAsignacionesOrden(o.id);
+
+    let asignacionesHtml = "";
+    if (!asignaciones.length) {
+        asignacionesHtml = `<div class="dm-alert dm-alert-info">Aún no hay asignaciones multiartesano registradas para esta orden.</div>`;
+    } else {
+        asignacionesHtml = `<div class="dm-list dm-mb-3">` + asignaciones.map(a => {
+            const artesano = (App.state?.artesanos || []).find(x => x.id === a.artesano_id);
+            const nombreArtesano = artesano ? artesano.nombre : "Artesano";
+            return `
+                <div class="dm-list-card">
+                    <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
+                        <div style="flex:1;">
+                            <strong>${App.ui.safe(nombreArtesano)}</strong>
+                            <div class="dm-text-sm dm-muted dm-mt-2">
+                                Componente: ${App.ui.safe(a.componente || a.aplica_a || "Total")}<br>
+                                Esquema: ${App.ui.safe(a.esquema_pago || a.modo_calculo || "fijo")}
+                            </div>
+                        </div>
+                        <div style="text-align:right;">
+                            <strong>$${(parseFloat(a.pago_estimado || 0) || 0).toFixed(2)}</strong>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join("") + `</div>`;
+    }
 
     const html = `
         <div class="dm-list-card dm-mb-4" style="background:var(--dm-surface-2); padding:15px; border:none;">
@@ -218,86 +258,178 @@ App.views.verDetallesProduccion = function (ordenId) {
             </div>
         </div>
 
+        <div class="dm-mb-3">
+            <h4 class="dm-label dm-mb-2">Asignaciones registradas</h4>
+            ${asignacionesHtml}
+        </div>
+
+        <div class="dm-row-between dm-mt-4">
+            <button class="dm-btn dm-btn-secondary" onclick="App.ui.closeSheet()">Cerrar</button>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="dm-btn dm-btn-primary" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formAsignacionMultiArtesano('${o.id}'), 250);">+ Asignar artesano</button>
+                ${o.estado !== "listo" ? `<button class="dm-btn dm-btn-ghost" style="border:1px solid var(--dm-border);" onclick="App.views.modalMateriaPrima('${o.id}')">🧶 Asignar Hilos</button>` : ""}
+            </div>
+        </div>
+    `;
+
+    App.ui.openSheet("Detalle de Producción", html);
+};
+
+window.verDetallesProduccion = function (ordenId) {
+    return App.views.verDetallesProduccion(ordenId);
+};
+
+// ==========================================
+// FORMULARIO MULTIARTESANO
+// ==========================================
+App.views.formAsignacionMultiArtesano = function (ordenId) {
+    const orden = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
+    if (!orden) return;
+
+    const artesanosOpts = (App.state?.artesanos || []).map(a =>
+        `<option value="${a.id}">${App.ui.safe(a.nombre)}</option>`
+    ).join("");
+
+    const formHTML = `
         <form id="dynamic-form">
-            <input type="hidden" name="id" value="${o.id}">
-            <h4 class="dm-label dm-mb-3">Asignación y Tabulador</h4>
+            <input type="hidden" name="orden_id" value="${ordenId}">
 
             <div class="dm-form-group">
-                <label class="dm-label">Seleccionar Artesano</label>
-                <select class="dm-select" name="artesano_id" id="select-artesano" onchange="window.cargarTarifas(this.value)" required>
+                <label class="dm-label">Artesano</label>
+                <select class="dm-select" name="artesano_id" id="select-artesano-multi" required
+                    onchange="window.cargarTarifasMulti(this.value)">
+                    <option value="">-- Seleccione artesano --</option>
                     ${artesanosOpts}
+                </select>
+            </div>
+
+            <div class="dm-form-group">
+                <label class="dm-label">Tarifa</label>
+                <select class="dm-select" name="tarifa_artesano_id" id="select-tarifas-multi" required
+                    onchange="window.calcTotalTrabajoMulti()">
+                    <option value="">-- Seleccione artesano primero --</option>
+                </select>
+            </div>
+
+            <div class="dm-form-group">
+                <label class="dm-label">Componente</label>
+                <select class="dm-select" name="componente" id="componente-multi" onchange="window.calcTotalTrabajoMulti()">
+                    <option value="total">Total</option>
+                    <option value="Cuerpo">Cuerpo</option>
+                    <option value="Brazos">Brazos</option>
+                    <option value="Adicional">Adicional</option>
                 </select>
             </div>
 
             <div class="dm-form-row">
                 <div class="dm-form-group">
-                    <label class="dm-label">Tipo de Trabajo (Tarifa)</label>
-                    <select class="dm-select" id="select-tarifas" name="tarifa_artesano_id" onchange="window.calcTotalTrabajo()" required>
-                        <option value="">-- Seleccione Artesano Primero --</option>
-                    </select>
+                    <label class="dm-label">Esquema</label>
+                    <input type="text" class="dm-input" name="esquema_pago" id="esquema-pago-multi" readonly>
                 </div>
-
-                <div class="dm-form-group hidden">
-                    <input type="number" id="cant-trabajo" value="1" oninput="window.calcTotalTrabajo()">
-                    <input type="hidden" id="tarea_nombre" name="tarifa_nombre">
-                </div>
-
                 <div class="dm-form-group">
-                    <label class="dm-label">Pago Estimado ($)</label>
-                    <input type="number" step="0.01" class="dm-input" id="total-trabajo" name="pago_estimado" value="${o.pago_estimado || ""}" readonly style="background:#f3f4f6;">
-                    <small class="dm-text-sm dm-muted">
-                        El cálculo depende del tipo de tarifa configurado para el artesano.
-                    </small>
+                    <label class="dm-label">Monto base</label>
+                    <input type="number" step="0.01" class="dm-input" name="monto_tarifa_apl" id="monto-base-multi" readonly>
                 </div>
             </div>
 
-            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block dm-mt-4">💾 Guardar Asignación</button>
-        </form>
+            <div class="dm-form-row">
+                <div class="dm-form-group">
+                    <label class="dm-label">Factor</label>
+                    <input type="number" step="0.01" class="dm-input" name="factor_participac" id="factor-multi" readonly>
+                </div>
+                <div class="dm-form-group">
+                    <label class="dm-label">Pago estimado</label>
+                    <input type="number" step="0.01" class="dm-input" name="pago_estimado" id="pago-estimado-multi" readonly>
+                </div>
+            </div>
 
-        <div class="dm-row-between dm-mt-4">
-            <button class="dm-btn dm-btn-secondary" onclick="App.ui.closeSheet()">Cerrar</button>
-            ${o.estado !== "listo"
-                ? `<button class="dm-btn dm-btn-ghost" style="border:1px solid var(--dm-border);" onclick="App.views.modalMateriaPrima('${o.id}')">🧶 Asignar Hilos</button>`
-                : ""}
-        </div>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
+                Guardar asignación
+            </button>
+        </form>
     `;
 
-    App.ui.openSheet("Detalle de Producción", html, (data) => {
-        App.logic.guardarAsignacionProduccion(o.id, data);
+    App.ui.openSheet("Nueva asignación de artesano", formHTML, (data) => {
+        App.logic.guardarAsignacionMultiArtesano(data);
     });
-
-    if (o.artesano_id) {
-        setTimeout(() => {
-            window.cargarTarifas(o.artesano_id);
-
-            const selectTarifas = document.getElementById("select-tarifas");
-            if (!selectTarifas) return;
-
-            if (o.tarifa_artesano_id) {
-                for (let i = 0; i < selectTarifas.options.length; i++) {
-                    const opt = selectTarifas.options[i];
-                    if (opt.dataset && opt.dataset.tarifaId === o.tarifa_artesano_id) {
-                        selectTarifas.selectedIndex = i;
-                        break;
-                    }
-                }
-            } else if (o.pago_estimado) {
-                for (let i = 0; i < selectTarifas.options.length; i++) {
-                    if (selectTarifas.options[i].value == o.pago_estimado) {
-                        selectTarifas.selectedIndex = i;
-                        break;
-                    }
-                }
-            }
-
-            window.calcTotalTrabajo();
-        }, 200);
-    }
 };
 
-// Compatibilidad temporal con llamadas antiguas
-window.verDetallesProduccion = function (ordenId) {
-    return App.views.verDetallesProduccion(ordenId);
+// ==========================================
+// HELPERS GLOBALES MULTIARTESANO
+// ==========================================
+window.cargarTarifasMulti = function (artesanoId) {
+    const tarifas = (App.state?.tarifas_artesano || []).filter(t => t.artesano_id === artesanoId);
+    const select = document.getElementById("select-tarifas-multi");
+    if (!select) return;
+
+    select.innerHTML =
+        '<option value="">-- Seleccione Trabajo --</option>' +
+        tarifas.map(t => `
+            <option
+                value="${t.id || ''}"
+                data-monto="${t.monto || 0}"
+                data-modo-calculo="${t.modo_calculo || 'fijo'}"
+                data-aplica-a="${t.aplica_a || 'total'}"
+                data-tarifa-nombre="${App.ui.escapeHTML(t.clasificacion || 'Tarea')}"
+            >
+                ${App.ui.escapeHTML(t.clasificacion || "Tarea")} ($${t.monto || 0})
+            </option>
+        `).join("");
+
+    window.calcTotalTrabajoMulti();
+};
+
+window.calcTotalTrabajoMulti = function () {
+    const sel = document.getElementById("select-tarifas-multi");
+    const componenteSel = document.getElementById("componente-multi");
+    const montoBase = document.getElementById("monto-base-multi");
+    const esquema = document.getElementById("esquema-pago-multi");
+    const factor = document.getElementById("factor-multi");
+    const pago = document.getElementById("pago-estimado-multi");
+    const ordenIdInput = document.querySelector('#dynamic-form input[name="orden_id"]');
+
+    if (!sel || !montoBase || !esquema || !factor || !pago || !ordenIdInput) return;
+
+    if (!sel.value) {
+        montoBase.value = "";
+        esquema.value = "";
+        factor.value = "";
+        pago.value = "";
+        return;
+    }
+
+    const selectedOption = sel.options[sel.selectedIndex];
+    const monto = parseFloat(selectedOption?.dataset?.monto || 0) || 0;
+    const modoCalculo = selectedOption?.dataset?.modoCalculo || "fijo";
+    const aplicaAOriginal = selectedOption?.dataset?.aplicaA || "total";
+    const componenteManual = componenteSel?.value || "total";
+    const aplicaA = modoCalculo === "por_unidad" ? (componenteManual || aplicaAOriginal) : aplicaAOriginal;
+
+    const orden = (App.state?.ordenes_produccion || []).find(o => o.id === ordenIdInput.value);
+
+    let receta = [];
+    try {
+        receta = JSON.parse(orden?.receta_personalizada || "[]");
+    } catch (e) {
+        receta = [];
+    }
+
+    let baseCalculo = 1;
+
+    if (modoCalculo === "por_unidad") {
+        if (aplicaA === "total") {
+            baseCalculo = receta.reduce((acc, item) => acc + (parseFloat(item.cant || 0) || 0), 0);
+        } else {
+            baseCalculo = receta
+                .filter(item => String(item.uso || "").toLowerCase() === String(aplicaA).toLowerCase())
+                .reduce((acc, item) => acc + (parseFloat(item.cant || 0) || 0), 0);
+        }
+    }
+
+    montoBase.value = monto.toFixed(2);
+    esquema.value = modoCalculo;
+    factor.value = baseCalculo.toFixed(2);
+    pago.value = (monto * baseCalculo).toFixed(2);
 };
 
 // ==========================================
