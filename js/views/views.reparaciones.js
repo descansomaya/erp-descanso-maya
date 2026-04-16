@@ -85,10 +85,11 @@ App.views.reparaciones = function () {
                         </div>
                     </div>
 
-                    <div class="dm-list-card-actions">
+                    <div class="dm-list-card-actions" style="flex-wrap:wrap;">
                         <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formReparacion('${r.id}')">✏️ Editar</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.cambiarEstadoReparacion('${r.id}')">🔄 Estado</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirNota('${r.id}')">🖨️ Nota</button>
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboLiquidacion('${r.id}')">✅ Liquidación</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.enviarWhatsApp('${r.id}', 'cobro')">💬 WhatsApp</button>
                         <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.eliminarReparacion('${r.id}')">🗑️</button>
                     </div>
