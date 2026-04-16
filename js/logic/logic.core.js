@@ -111,6 +111,7 @@ Object.assign(App.logic, {
             { nombre: "pedidos", state: "pedidos" },
             { nombre: "pedido_detalle", state: "pedido_detalle" },
             { nombre: "ordenes_produccion", state: "ordenes_produccion" },
+            { nombre: "ordenes_produccion_artesanos", state: "ordenes_produccion_artesanos" },
             { nombre: "artesanos", state: "artesanos" },
             { nombre: "abonos_clientes", state: "abonos" },
             { nombre: "gastos", state: "gastos" },
@@ -152,7 +153,11 @@ Object.assign(App.logic, {
 
     async actualizarRegistroGenerico(hoja, id, datos, estado, callback = null) {
         App.ui.showLoader("Guardando...");
-        const res = await App.api.fetch("actualizar_fila", { nombreHoja: hoja, idFila: id, datosNuevos: datos });
+        const res = await App.api.fetch("actualizar_fila", {
+            nombreHoja: hoja,
+            idFila: id,
+            datosNuevos: datos
+        });
         App.ui.hideLoader();
 
         if (res.status === "success") {
@@ -172,7 +177,10 @@ Object.assign(App.logic, {
         datos.id = prefijo + "-" + Date.now();
         if (!datos.fecha_creacion) datos.fecha_creacion = new Date().toISOString();
 
-        const res = await App.api.fetch("guardar_fila", { nombreHoja: hoja, datos: datos });
+        const res = await App.api.fetch("guardar_fila", {
+            nombreHoja: hoja,
+            datos: datos
+        });
         App.ui.hideLoader();
 
         if (res.status === "success") {
@@ -192,7 +200,11 @@ Object.assign(App.logic, {
 
     revisarAlertasStock(esArranque = false) {
         const bajos = (App.state.inventario || []).filter(i => {
-            const libre = parseFloat(i.stock_real || 0) - parseFloat(i.stock_reservado || 0) - parseFloat(i.stock_comprometido || 0);
+            const libre =
+                parseFloat(i.stock_real || 0) -
+                parseFloat(i.stock_reservado || 0) -
+                parseFloat(i.stock_comprometido || 0);
+
             return parseFloat(i.stock_minimo || 0) > 0 && libre <= parseFloat(i.stock_minimo || 0);
         });
 
@@ -217,7 +229,16 @@ Object.assign(App.logic, {
             const nombre = String(c.nombre || "").toLowerCase();
             const telefono = String(c.telefono || "").toLowerCase();
             if (nombre.includes(q) || telefono.includes(q)) {
-                resultados.push(`<div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display:flex; align-items:center; gap:10px;" onclick="App.ui.closeSheet(); App.router.navigate('clientes'); setTimeout(()=>App.views.modalEstadoCuenta('${c.id}'), 500);"><span style="font-size:1.5rem;">👤</span> <div><strong style="color:var(--text-main);">${App.ui.escapeHTML(c.nombre)}</strong><br><small style="color:var(--text-muted);">Cliente</small></div></div>`);
+                resultados.push(`
+                    <div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display:flex; align-items:center; gap:10px;"
+                        onclick="App.ui.closeSheet(); App.router.navigate('clientes'); setTimeout(()=>App.views.modalEstadoCuenta('${c.id}'), 500);">
+                        <span style="font-size:1.5rem;">👤</span>
+                        <div>
+                            <strong style="color:var(--text-main);">${App.ui.escapeHTML(c.nombre)}</strong><br>
+                            <small style="color:var(--text-muted);">Cliente</small>
+                        </div>
+                    </div>
+                `);
             }
         });
 
@@ -225,14 +246,32 @@ Object.assign(App.logic, {
             const idPed = String(p.id || "").toLowerCase();
             const notas = String(p.notas || "").toLowerCase();
             if (idPed.includes(q) || notas.includes(q)) {
-                resultados.push(`<div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display:flex; align-items:center; gap:10px;" onclick="App.ui.closeSheet(); App.router.navigate('pedidos');"><span style="font-size:1.5rem;">📦</span> <div><strong style="color:var(--primary);">${p.id}</strong><br><small style="color:var(--text-muted);">Pedido en estado: ${p.estado}</small></div></div>`);
+                resultados.push(`
+                    <div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display:flex; align-items:center; gap:10px;"
+                        onclick="App.ui.closeSheet(); App.router.navigate('pedidos');">
+                        <span style="font-size:1.5rem;">📦</span>
+                        <div>
+                            <strong style="color:var(--primary);">${p.id}</strong><br>
+                            <small style="color:var(--text-muted);">Pedido en estado: ${p.estado}</small>
+                        </div>
+                    </div>
+                `);
             }
         });
 
         (App.state.productos || []).forEach(p => {
             const nombreProd = String(p.nombre || "").toLowerCase();
             if (nombreProd.includes(q)) {
-                resultados.push(`<div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display:flex; align-items:center; gap:10px;" onclick="App.ui.closeSheet(); App.router.navigate('productos');"><span style="font-size:1.5rem;">🧶</span> <div><strong style="color:var(--success);">${App.ui.escapeHTML(p.nombre)}</strong><br><small style="color:var(--text-muted);">Producto del catálogo</small></div></div>`);
+                resultados.push(`
+                    <div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display:flex; align-items:center; gap:10px;"
+                        onclick="App.ui.closeSheet(); App.router.navigate('productos');">
+                        <span style="font-size:1.5rem;">🧶</span>
+                        <div>
+                            <strong style="color:var(--success);">${App.ui.escapeHTML(p.nombre)}</strong><br>
+                            <small style="color:var(--text-muted);">Producto del catálogo</small>
+                        </div>
+                    </div>
+                `);
             }
         });
 
@@ -240,7 +279,16 @@ Object.assign(App.logic, {
             const nombreArt = String(a.nombre || "").toLowerCase();
             const telArt = String(a.telefono || "").toLowerCase();
             if (nombreArt.includes(q) || telArt.includes(q)) {
-                resultados.push(`<div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display:flex; align-items:center; gap:10px;" onclick="App.ui.closeSheet(); App.router.navigate('artesanos');"><span style="font-size:1.5rem;">🧑‍🎨</span> <div><strong style="color:#D69E2E;">${App.ui.escapeHTML(a.nombre)}</strong><br><small style="color:var(--text-muted);">Artesano</small></div></div>`);
+                resultados.push(`
+                    <div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display:flex; align-items:center; gap:10px;"
+                        onclick="App.ui.closeSheet(); App.router.navigate('artesanos');">
+                        <span style="font-size:1.5rem;">🧑‍🎨</span>
+                        <div>
+                            <strong style="color:#D69E2E;">${App.ui.escapeHTML(a.nombre)}</strong><br>
+                            <small style="color:var(--text-muted);">Artesano</small>
+                        </div>
+                    </div>
+                `);
             }
         });
 
@@ -248,7 +296,16 @@ Object.assign(App.logic, {
             const nombreProv = String(prv.nombre || "").toLowerCase();
             const telProv = String(prv.telefono || "").toLowerCase();
             if (nombreProv.includes(q) || telProv.includes(q)) {
-                resultados.push(`<div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display:flex; align-items:center; gap:10px;" onclick="App.ui.closeSheet(); App.router.navigate('proveedores');"><span style="font-size:1.5rem;">🚚</span> <div><strong style="color:#805AD5;">${App.ui.escapeHTML(prv.nombre)}</strong><br><small style="color:var(--text-muted);">Proveedor</small></div></div>`);
+                resultados.push(`
+                    <div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display:flex; align-items:center; gap:10px;"
+                        onclick="App.ui.closeSheet(); App.router.navigate('proveedores');">
+                        <span style="font-size:1.5rem;">🚚</span>
+                        <div>
+                            <strong style="color:#805AD5;">${App.ui.escapeHTML(prv.nombre)}</strong><br>
+                            <small style="color:var(--text-muted);">Proveedor</small>
+                        </div>
+                    </div>
+                `);
             }
         });
 
