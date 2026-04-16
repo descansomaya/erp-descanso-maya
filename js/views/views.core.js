@@ -164,6 +164,13 @@ App.views.mas = function() {
                     </div>
                 </div>
 
+                <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('nomina')">
+                    <div class="dm-row">
+                        <div class="dm-badge dm-badge-danger" style="font-size:1.2rem; padding:10px;">💵</div>
+                        <strong class="dm-text-lg">Nómina</strong>
+                    </div>
+                </div>
+
                 <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('reportes')">
                     <div class="dm-row">
                         <div class="dm-badge dm-badge-primary" style="font-size:1.2rem; padding:10px;">📈</div>
@@ -215,16 +222,6 @@ App.views.mas = function() {
                         <div class="dm-row">
                             <div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">📝</div>
                             <strong class="dm-text-lg">Cotizaciones</strong>
-                        </div>
-                        <span class="dm-badge dm-badge-warning">Próx.</span>
-                    </div>
-                </div>
-
-                <div class="dm-list-card" style="padding:15px; opacity:.75; cursor:pointer;" onclick="App.views.moduloNoDisponible('Nómina')">
-                    <div class="dm-row-between">
-                        <div class="dm-row">
-                            <div class="dm-badge dm-badge-danger" style="font-size:1.2rem; padding:10px;">💵</div>
-                            <strong class="dm-text-lg">Nómina</strong>
                         </div>
                         <span class="dm-badge dm-badge-warning">Próx.</span>
                     </div>
