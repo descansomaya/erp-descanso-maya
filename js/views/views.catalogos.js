@@ -602,6 +602,9 @@ App.views.formArtesano = function(id = null) {
     });
 };
 
+// ==========================================
+// TARIFAS DE ARTESANO
+// ==========================================
 App.views.verTarifasArtesano = function(artesanoId) {
     const artesano = (App.state.artesanos || []).find(a => a.id === artesanoId);
     const tarifas = (App.state.tarifas_artesano || []).filter(t => t.artesano_id === artesanoId);
@@ -618,15 +621,22 @@ App.views.verTarifasArtesano = function(artesanoId) {
         html += `<div class="dm-alert dm-alert-info">Sin tareas configuradas.</div>`;
     } else {
         tarifas.forEach(t => {
+            const modoCalculo = t.modo_calculo || 'fijo';
+            const aplicaA = t.aplica_a || 'total';
+
             html += `
                 <div class="dm-list-card">
                     <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
                         <div style="flex:1;">
-                            <strong>${App.ui.escapeHTML(t.clasificacion) || 'Tarea'}</strong>
+                            <strong>${App.ui.escapeHTML(t.clasificacion || 'Tarea')}</strong>
+                            <div class="dm-text-sm dm-muted dm-mt-2">
+                                Modo: <strong>${App.ui.escapeHTML(modoCalculo)}</strong><br>
+                                Aplica a: <strong>${App.ui.escapeHTML(aplicaA)}</strong>
+                            </div>
                         </div>
 
                         <div style="text-align:right;">
-                            <div style="font-weight:bold; color:var(--success); margin-bottom:6px;">$${t.monto || '0'}</div>
+                            <div style="font-weight:bold; color:var(--success); margin-bottom:6px;">$${parseFloat(t.monto || 0).toFixed(2)}</div>
                             <div class="dm-list-card-actions" style="justify-content:flex-end;">
                                 <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formTarifa('${artesanoId}', '${t.id}'), 400);">✏️</button>
                                 <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.eliminarRegistroGenerico('tarifas_artesano', '${t.id}', 'tarifas_artesano'); App.ui.closeSheet();">🗑️</button>
@@ -651,7 +661,13 @@ App.views.verTarifasArtesano = function(artesanoId) {
 
 App.views.formTarifa = function(artesanoId, tarifaId = null) {
     if (typeof tarifaId !== 'string') tarifaId = null;
-    const obj = tarifaId ? (App.state.tarifas_artesano || []).find(t => t.id === tarifaId) : null;
+
+    const obj = tarifaId
+        ? (App.state.tarifas_artesano || []).find(t => t.id === tarifaId)
+        : null;
+
+    const modoCalculo = obj?.modo_calculo || 'fijo';
+    const aplicaA = obj?.aplica_a || 'total';
 
     const formHTML = `
         <form id="dynamic-form">
@@ -671,7 +687,45 @@ App.views.formTarifa = function(artesanoId, tarifaId = null) {
 
             <div class="dm-form-group">
                 <label class="dm-label">Monto a Pagar ($)</label>
-                <input type="number" step="0.01" class="dm-input" name="monto" value="${obj ? obj.monto : ''}" required>
+                <input
+                    type="number"
+                    step="0.01"
+                    class="dm-input"
+                    name="monto"
+                    value="${obj ? (parseFloat(obj.monto || 0) || '') : ''}"
+                    required
+                >
+            </div>
+
+            <div class="dm-form-group">
+                <label class="dm-label">Modo de Cálculo</label>
+                <select class="dm-select" name="modo_calculo" id="modo-calculo-tarifa">
+                    <option value="fijo" ${modoCalculo === 'fijo' ? 'selected' : ''}>Fijo</option>
+                    <option value="por_unidad" ${modoCalculo === 'por_unidad' ? 'selected' : ''}>Por unidad</option>
+                </select>
+                <small class="dm-text-sm dm-muted">
+                    Fijo = paga el monto tal cual. Por unidad = multiplica el monto por la base configurada.
+                </small>
+            </div>
+
+            <div class="dm-form-group">
+                <label class="dm-label">Aplica a</label>
+                <select class="dm-select" name="aplica_a" id="aplica-a-tarifa">
+                    <option value="total" ${aplicaA === 'total' ? 'selected' : ''}>Total de la receta</option>
+                    <option value="Cuerpo" ${aplicaA === 'Cuerpo' ? 'selected' : ''}>Cuerpo</option>
+                    <option value="Brazos" ${aplicaA === 'Brazos' ? 'selected' : ''}>Brazos</option>
+                    <option value="Adicional" ${aplicaA === 'Adicional' ? 'selected' : ''}>Adicional</option>
+                </select>
+                <small class="dm-text-sm dm-muted">
+                    Solo se usa cuando el modo es "por_unidad".
+                </small>
+            </div>
+
+            <div class="dm-alert dm-alert-info dm-mb-3">
+                <strong>Ejemplos:</strong><br>
+                • Fijo + total → paga siempre el mismo monto<br>
+                • Por unidad + Cuerpo → multiplica por la suma de receta marcada como Cuerpo<br>
+                • Por unidad + Brazos → multiplica por la suma marcada como Brazos
             </div>
 
             <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
@@ -681,6 +735,9 @@ App.views.formTarifa = function(artesanoId, tarifaId = null) {
     `;
 
     App.ui.openSheet(obj ? 'Editar Tarea' : 'Nueva Tarea para Artesano', formHTML, (data) => {
+        if (!data.modo_calculo) data.modo_calculo = 'fijo';
+        if (!data.aplica_a) data.aplica_a = 'total';
+
         if (obj) {
             App.logic.actualizarRegistroGenerico('tarifas_artesano', tarifaId, data, 'tarifas_artesano', () => {
                 setTimeout(() => App.views.verTarifasArtesano(artesanoId), 400);
