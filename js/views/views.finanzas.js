@@ -198,7 +198,7 @@ App.views.pagoArtesanos = function() {
     const totalPendiente = pendientes.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
     const totalPagado = pagados.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
 
-    const html = `
+    return `
         <div class="dm-section">
             <div class="dm-grid dm-grid-2 dm-mb-4">
                 <div class="dm-card" style="background:#FAF5FF;">
@@ -230,7 +230,7 @@ App.views.pagoArtesanos = function() {
                 >
             </div>
 
-            <div id="lista-pagos-artesanos">
+            <div id="lista-pagos-artesanos" data-estado="pendiente">
                 ${App.views._renderListaPagosArtesanos('pendiente', '')}
             </div>
 
@@ -242,14 +242,6 @@ App.views.pagoArtesanos = function() {
             </div>
         </div>
     `;
-
-    const contentDiv = document.getElementById("app-content");
-    const headerTitle = document.getElementById("app-header-title");
-    const headerSubtitle = document.getElementById("app-header-subtitle");
-
-    if (headerTitle) headerTitle.textContent = "Pago Artesanos";
-    if (headerSubtitle) headerSubtitle.textContent = "Control operativo de nómina artesanal";
-    if (contentDiv) contentDiv.innerHTML = html;
 };
 
 App.views.filtrarVistaPagoArtesanos = function(btn, estado) {
