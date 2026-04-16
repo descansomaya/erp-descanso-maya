@@ -351,7 +351,9 @@ App.router = {
         const map = {
             inicio: { title: "Inicio", subtitle: "Resumen general" },
             inventario: { title: "Inventario", subtitle: "Control de materiales" },
-            mas: { title: "Más", subtitle: "Accesos y configuración" }
+            mas: { title: "Más", subtitle: "Accesos y configuración" },
+            nomina: { title: "Nómina", subtitle: "Pagos a artesanos" },
+            finanzas: { title: "Finanzas", subtitle: "Dashboard ejecutivo y flujo de caja" }
         };
 
         return map[hash] || {
@@ -389,8 +391,7 @@ App.router = {
         }
 
         const hash = window.location.hash.substring(1) || "inicio";
-        nomina: { title: "Nómina", subtitle: "Pagos a artesanos" },
-        
+
         document.querySelectorAll(".dm-bottom-nav a").forEach(el => el.classList.remove("active"));
         document.querySelectorAll(".dm-sidebar-link").forEach(el => el.classList.remove("active"));
 
