@@ -73,6 +73,23 @@ App.views._generarListaProd = function (estadoFiltro) {
                     ? "var(--dm-warning)"
                     : "var(--dm-danger)";
 
+        let detallePagoHTML = "";
+        if (pagoArtesano > 0) {
+            const modoCalculo = App.ui.safe(o.modo_calculo_artesano || "fijo");
+            const aplicaA = App.ui.safe(o.aplica_a_artesano || "total");
+            const montoUnitario = parseFloat(o.monto_unitario_artesano || 0) || 0;
+            const baseCalculo = parseFloat(o.base_calculo_artesano || 1) || 1;
+
+            detallePagoHTML = `
+                <div>💰 <strong>Pago Asignado:</strong> $${pagoArtesano.toFixed(2)}</div>
+                <div class="dm-text-sm dm-muted">
+                    ${modoCalculo === "por_unidad"
+                        ? `Tarifa: $${montoUnitario.toFixed(2)} × ${baseCalculo.toFixed(2)} (${aplicaA})`
+                        : `Tarifa fija: $${montoUnitario.toFixed(2) || pagoArtesano.toFixed(2)}`}
+                </div>
+            `;
+        }
+
         html += `
             <div class="dm-list-card">
                 <div class="dm-list-card-top">
@@ -87,7 +104,7 @@ App.views._generarListaProd = function (estadoFiltro) {
 
                 <div class="dm-list-card-meta dm-mt-3 dm-mb-3" style="background:var(--dm-surface-2); padding:10px; border-radius:var(--dm-radius-md);">
                     <div class="dm-mb-2">🧑‍🎨 <strong>Artesano:</strong> ${nombreArtesano}</div>
-                    ${o.pago_estimado ? `<div>💰 <strong>Pago Asignado:</strong> $${pagoArtesano.toFixed(2)}</div>` : ""}
+                    ${detallePagoHTML}
 
                     <div class="dm-mt-2">🧶 <strong>Hilos Asignados:</strong>
                         ${listaHilosHTML}
@@ -228,6 +245,9 @@ App.views.verDetallesProduccion = function (ordenId) {
                 <div class="dm-form-group">
                     <label class="dm-label">Pago Estimado ($)</label>
                     <input type="number" step="0.01" class="dm-input" id="total-trabajo" name="pago_estimado" value="${o.pago_estimado || ""}" readonly style="background:#f3f4f6;">
+                    <small class="dm-text-sm dm-muted">
+                        El cálculo depende del tipo de tarifa configurado para el artesano.
+                    </small>
                 </div>
             </div>
 
@@ -244,18 +264,24 @@ App.views.verDetallesProduccion = function (ordenId) {
 
     App.ui.openSheet("Detalle de Producción", html, (data) => {
         App.logic.guardarAsignacionProduccion(o.id, data);
-        App.ui.toast("Asignación guardada con éxito");
-        App.ui.closeSheet();
     });
 
     if (o.artesano_id) {
         setTimeout(() => {
             window.cargarTarifas(o.artesano_id);
 
-            if (o.pago_estimado) {
-                const selectTarifas = document.getElementById("select-tarifas");
-                if (!selectTarifas) return;
+            const selectTarifas = document.getElementById("select-tarifas");
+            if (!selectTarifas) return;
 
+            if (o.tarifa_artesano_id) {
+                for (let i = 0; i < selectTarifas.options.length; i++) {
+                    const opt = selectTarifas.options[i];
+                    if (opt.dataset && opt.dataset.tarifaId === o.tarifa_artesano_id) {
+                        selectTarifas.selectedIndex = i;
+                        break;
+                    }
+                }
+            } else if (o.pago_estimado) {
                 for (let i = 0; i < selectTarifas.options.length; i++) {
                     if (selectTarifas.options[i].value == o.pago_estimado) {
                         selectTarifas.selectedIndex = i;
@@ -263,6 +289,8 @@ App.views.verDetallesProduccion = function (ordenId) {
                     }
                 }
             }
+
+            window.calcTotalTrabajo();
         }, 200);
     }
 };
