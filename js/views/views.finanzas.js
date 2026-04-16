@@ -34,7 +34,7 @@ App.views.finanzas = function() {
                     <div class="dm-list-card-actions" style="margin-top:0; display:flex; gap:8px; flex-wrap:wrap;">
                         <button
                             class="dm-btn dm-btn-secondary dm-btn-sm"
-                            onclick="App.views.pagoArtesanos()"
+                            onclick="App.router.navigate('nomina')"
                             style="border-color:#805AD5; color:#805AD5;"
                         >
                             Nómina artesanos
