@@ -81,13 +81,6 @@ window.calcTotalTrabajo = function () {
     }
 };
 
-    const total = monto * baseCalculo;
-    tot.value = total.toFixed(2);
-
-    if (tareaNombre) {
-        tareaNombre.value = selectedOption?.text?.split(" ($")[0] || "";
-    }
-};
 
 window.filtrarLista = function (inputId, claseItem) {
     const input = document.getElementById(inputId);
