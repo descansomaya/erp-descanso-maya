@@ -23,7 +23,7 @@ App.views.finanzas = function() {
     return `
         <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4" style="background:linear-gradient(135deg, #ffffff 0%, #faf7ff 100%);">
-                <div class="dm-row-between" style="align-items:flex-start; gap:16px;">
+                <div class="dm-row-between" style="align-items:flex-start; gap:16px; flex-wrap:wrap;">
                     <div>
                         <h3 class="dm-card-title">Dashboard Financiero</h3>
                         <p class="dm-muted dm-mt-2" style="max-width:680px;">
@@ -31,7 +31,15 @@ App.views.finanzas = function() {
                         </p>
                     </div>
 
-                    <div class="dm-list-card-actions" style="margin-top:0;">
+                    <div class="dm-list-card-actions" style="margin-top:0; display:flex; gap:8px; flex-wrap:wrap;">
+                        <button
+                            class="dm-btn dm-btn-secondary dm-btn-sm"
+                            onclick="App.views.pagoArtesanos()"
+                            style="border-color:#805AD5; color:#805AD5;"
+                        >
+                            Nómina artesanos
+                        </button>
+
                         <button
                             class="dm-btn dm-btn-secondary dm-btn-sm"
                             onclick="App.views.formGasto()"
@@ -105,6 +113,166 @@ App.views.activarFiltroFinanzas = function(btn, filtro, mostrarCustom) {
     if (!mostrarCustom && App.logic?.renderGraficasFinanzas) {
         App.logic.renderGraficasFinanzas(filtro);
     }
+};
+
+App.views._filtrarPagosArtesanos = function(estado = 'pendiente', query = '') {
+    const q = String(query || '').trim().toLowerCase();
+
+    return (App.state.pago_artesanos || []).filter(pa => {
+        const coincideEstado = estado === 'todos'
+            ? true
+            : String(pa.estado || '').toLowerCase() === estado.toLowerCase();
+
+        if (!coincideEstado) return false;
+
+        if (!q) return true;
+
+        const artesano = (App.state.artesanos || []).find(a => a.id === pa.artesano_id);
+        const nombreArtesano = String(artesano?.nombre || '').toLowerCase();
+        const orden = String(pa.orden_id || '').toLowerCase();
+        const trabajo = String(pa.tipo_trabajo || '').toLowerCase();
+        const componente = String(pa.componente || '').toLowerCase();
+
+        return (
+            nombreArtesano.includes(q) ||
+            orden.includes(q) ||
+            trabajo.includes(q) ||
+            componente.includes(q)
+        );
+    });
+};
+
+App.views._renderListaPagosArtesanos = function(estado = 'pendiente', query = '') {
+    const pagos = App.views._filtrarPagosArtesanos(estado, query);
+
+    if (!pagos.length) {
+        return `<div class="dm-alert dm-alert-info">No hay pagos en esta vista.</div>`;
+    }
+
+    return pagos.map(pa => {
+        const artesano = (App.state.artesanos || []).find(a => a.id === pa.artesano_id);
+        const nombreArtesano = artesano ? artesano.nombre : 'Artesano';
+        const total = parseFloat(pa.total || 0) || 0;
+        const montoUnit = parseFloat(pa.monto_unitario || 0) || 0;
+        const base = parseFloat(pa.base_calculo || 1) || 1;
+        const fecha = pa.fecha ? String(pa.fecha).split('T')[0] : '';
+        const estadoPago = String(pa.estado || 'pendiente').toLowerCase();
+
+        return `
+            <div class="dm-list-card">
+                <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
+                    <div style="flex:1;">
+                        <strong>${App.ui.safe(nombreArtesano)}</strong>
+                        <div class="dm-text-sm dm-muted dm-mt-2">
+                            Orden: ${App.ui.safe(pa.orden_id || '')}<br>
+                            Trabajo: ${App.ui.safe(pa.tipo_trabajo || 'Trabajo')}<br>
+                            Componente: ${App.ui.safe(pa.componente || 'Total')}<br>
+                            Cálculo: $${montoUnit.toFixed(2)} × ${base.toFixed(2)}<br>
+                            Fecha: ${App.ui.safe(fecha)}
+                        </div>
+                    </div>
+
+                    <div style="text-align:right;">
+                        <div style="font-weight:bold; color:${estadoPago === 'pagado' ? '#2F855A' : '#805AD5'}; margin-bottom:6px;">
+                            $${total.toFixed(2)}
+                        </div>
+                        <div class="dm-badge ${estadoPago === 'pagado' ? 'dm-badge-success' : 'dm-badge-warning'}">
+                            ${App.ui.safe(estadoPago.toUpperCase())}
+                        </div>
+                        <div class="dm-list-card-actions" style="justify-content:flex-end; margin-top:8px;">
+                            ${estadoPago !== 'pagado'
+                                ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.logic.marcarPagoArtesanoPagado('${pa.id}')">✔ Pagado</button>`
+                                : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+};
+
+App.views.pagoArtesanos = function() {
+    const pendientes = (App.state.pago_artesanos || []).filter(p => String(p.estado || '').toLowerCase() === 'pendiente');
+    const pagados = (App.state.pago_artesanos || []).filter(p => String(p.estado || '').toLowerCase() === 'pagado');
+
+    const totalPendiente = pendientes.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+    const totalPagado = pagados.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+
+    const html = `
+        <div class="dm-section">
+            <div class="dm-grid dm-grid-2 dm-mb-4">
+                <div class="dm-card" style="background:#FAF5FF;">
+                    <div class="dm-kpi-label" style="color:#6B46C1;">Pendiente por pagar</div>
+                    <div class="dm-kpi-value" style="color:#805AD5; font-size:1.4rem;">$${totalPendiente.toFixed(2)}</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">${pendientes.length} pago(s) pendiente(s)</div>
+                </div>
+
+                <div class="dm-card" style="background:#F0FFF4;">
+                    <div class="dm-kpi-label" style="color:#2F855A;">Pagado acumulado</div>
+                    <div class="dm-kpi-value" style="color:#38A169; font-size:1.4rem;">$${totalPagado.toFixed(2)}</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">${pagados.length} pago(s) pagado(s)</div>
+                </div>
+            </div>
+
+            <div class="dm-card dm-mb-3">
+                <div class="dm-tabs" style="display:flex; gap:8px; overflow-x:auto; white-space:nowrap;">
+                    <button class="dm-tab active tab-pago-art" onclick="App.views.filtrarVistaPagoArtesanos(this, 'pendiente')">Pendientes</button>
+                    <button class="dm-tab tab-pago-art" onclick="App.views.filtrarVistaPagoArtesanos(this, 'pagado')">Pagados</button>
+                    <button class="dm-tab tab-pago-art" onclick="App.views.filtrarVistaPagoArtesanos(this, 'todos')">Todos</button>
+                </div>
+
+                <input
+                    type="text"
+                    id="bus-pagos-art"
+                    class="dm-input dm-mt-3"
+                    placeholder="🔍 Buscar por artesano, orden, trabajo o componente..."
+                    onkeyup="App.views.actualizarListaPagoArtesanos()"
+                >
+            </div>
+
+            <div id="lista-pagos-artesanos">
+                ${App.views._renderListaPagosArtesanos('pendiente', '')}
+            </div>
+
+            <div class="dm-row-between dm-mt-4">
+                <button class="dm-btn dm-btn-secondary" onclick="App.router.navigate('finanzas')">← Volver a Finanzas</button>
+                <button class="dm-btn dm-btn-secondary" style="border-color:#38A169; color:#38A169; background:transparent;" onclick="window.exportarAExcel(App.state.pago_artesanos || [], 'Pago_Artesanos')">
+                    📥 Exportar
+                </button>
+            </div>
+        </div>
+    `;
+
+    const contentDiv = document.getElementById("app-content");
+    const headerTitle = document.getElementById("app-header-title");
+    const headerSubtitle = document.getElementById("app-header-subtitle");
+
+    if (headerTitle) headerTitle.textContent = "Pago Artesanos";
+    if (headerSubtitle) headerSubtitle.textContent = "Control operativo de nómina artesanal";
+    if (contentDiv) contentDiv.innerHTML = html;
+};
+
+App.views.filtrarVistaPagoArtesanos = function(btn, estado) {
+    document.querySelectorAll('.tab-pago-art').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    const lista = document.getElementById('lista-pagos-artesanos');
+    const busqueda = document.getElementById('bus-pagos-art')?.value || '';
+
+    if (lista) {
+        lista.innerHTML = App.views._renderListaPagosArtesanos(estado, busqueda);
+        lista.dataset.estado = estado;
+    }
+};
+
+App.views.actualizarListaPagoArtesanos = function() {
+    const lista = document.getElementById('lista-pagos-artesanos');
+    if (!lista) return;
+
+    const estado = lista.dataset.estado || 'pendiente';
+    const busqueda = document.getElementById('bus-pagos-art')?.value || '';
+
+    lista.innerHTML = App.views._renderListaPagosArtesanos(estado, busqueda);
 };
 
 App.views.detalleFinanzas = function(tipo, filtro) {
@@ -338,7 +506,7 @@ App.views.detalleFinanzas = function(tipo, filtro) {
         });
 
         (App.state.compras || []).forEach(c => {
-            const pagado = c.monto_pagado !== undefined && c.monto_pagado !== ''
+            const pagado = c.monto_pagado !== undefined && c.monto_pagado !== ""
                 ? parseFloat(c.monto_pagado)
                 : parseFloat(c.total || 0);
 
