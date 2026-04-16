@@ -16,6 +16,7 @@ window.onerror = function (message, source, lineno) {
 // ==========================================
 // HELPERS GLOBALES COMPATIBLES
 // ==========================================
+
 window.cargarTarifas = function (artesanoId) {
     const tarifas = (App.state?.tarifas_artesano || []).filter(t => t.artesano_id === artesanoId);
     const select = document.getElementById("select-tarifas");
@@ -23,25 +24,63 @@ window.cargarTarifas = function (artesanoId) {
 
     select.innerHTML =
         '<option value="">-- Seleccione Trabajo --</option>' +
-       tarifas.map(t =>
-    `<option value="${t.monto || 0}" data-tarifa-id="${t.id || ""}">
-        ${App.ui.escapeHTML(t.clasificacion || "Tarea")} ($${t.monto || 0})
-    </option>`
-).join("");
+        tarifas.map(t => `
+            <option
+                value="${t.monto || 0}"
+                data-tarifa-id="${t.id || ''}"
+                data-modo-calculo="${t.modo_calculo || 'fijo'}"
+                data-aplica-a="${t.aplica_a || 'total'}"
+            >
+                ${App.ui.escapeHTML(t.clasificacion || "Tarea")} ($${t.monto || 0})
+            </option>
+        `).join("");
 };
 
 window.calcTotalTrabajo = function () {
     const sel = document.getElementById("select-tarifas");
-    const cant = document.getElementById("cant-trabajo")?.value;
     const tot = document.getElementById("total-trabajo");
     const tareaNombre = document.getElementById("tarea_nombre");
+    const ordenIdInput =
+        document.querySelector('#dynamic-form input[name="id"]') ||
+        document.querySelector('#dynamic-form input[name="orden_id"]');
 
-    if (!sel || !tot || !sel.value) return;
+    if (!sel || !tot || !sel.value) {
+        if (tot) tot.value = "";
+        if (tareaNombre) tareaNombre.value = "";
+        return;
+    }
 
-    tot.value = ((parseFloat(sel.value) || 0) * (parseFloat(cant || 1) || 1)).toFixed(2);
+    const selectedOption = sel.options[sel.selectedIndex];
+    const monto = parseFloat(selectedOption?.value || 0) || 0;
+    const modoCalculo = selectedOption?.dataset?.modoCalculo || "fijo";
+    const aplicaA = selectedOption?.dataset?.aplicaA || "total";
+
+    let baseCalculo = 1;
+
+    if (ordenIdInput?.value && modoCalculo === "por_unidad") {
+        const orden = (App.state?.ordenes_produccion || []).find(o => o.id === ordenIdInput.value);
+
+        let receta = [];
+        try {
+            receta = JSON.parse(orden?.receta_personalizada || "[]");
+        } catch (e) {
+            receta = [];
+        }
+
+        if (aplicaA === "total") {
+            baseCalculo = receta.reduce((acc, item) => acc + (parseFloat(item.cant || 0) || 0), 0);
+        } else {
+            baseCalculo = receta
+                .filter(item => String(item.uso || "").toLowerCase() === String(aplicaA).toLowerCase())
+                .reduce((acc, item) => acc + (parseFloat(item.cant || 0) || 0), 0);
+        }
+    }
+
+    const total = monto * baseCalculo;
+    tot.value = total.toFixed(2);
 
     if (tareaNombre) {
-        tareaNombre.value = sel.options[sel.selectedIndex]?.text?.split(" ($")[0] || "";
+        tareaNombre.value = selectedOption?.text?.split(" ($")[0] || "";
     }
 };
 
