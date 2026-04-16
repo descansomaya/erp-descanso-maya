@@ -82,88 +82,117 @@ Object.assign(App.logic, {
     // 1. CAMBIAR ESTADO DE PRODUCCIÓN
     // ==========================================
     async cambiarEstadoProduccion(ordenId, nuevoEstado) {
-        try {
-            App.ui.showLoader("Actualizando estado...");
+    try {
+        App.ui.showLoader("Actualizando estado...");
 
-            const orden = this.obtenerOrdenProduccion(ordenId);
-            if (!orden) {
-                App.ui.hideLoader();
-                App.ui.toast("Orden no encontrada", "danger");
-                return;
-            }
+        const orden = this.obtenerOrdenProduccion
+            ? this.obtenerOrdenProduccion(ordenId)
+            : (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
 
-            const dataToUpdate = { estado: nuevoEstado };
-            const operaciones = [];
-            const nuevosPagos = [];
-
-            if (nuevoEstado === "proceso") {
-                dataToUpdate.fecha_inicio = new Date().toISOString();
-            }
-
-            if (nuevoEstado === "listo") {
-                dataToUpdate.fecha_fin = new Date().toISOString();
-
-                if (orden.artesano_id && parseFloat(orden.pago_estimado || 0) > 0) {
-                    const yaExistePago = (App.state?.pago_artesanos || []).some(p => p.orden_id === ordenId);
-
-                    if (!yaExistePago) {
-                        const idPago = "PAGO-" + Date.now() + "-" + String(orden.tarifa_nombre || "Trabajo").replace(/\s+/g, "");
-
-                        const nuevoPago = {
-                            id: idPago,
-                            artesano_id: orden.artesano_id,
-                            orden_id: ordenId,
-                            tipo_trabajo: orden.tarifa_nombre || "Trabajo",
-                            monto_unitario: parseFloat(orden.monto_unitario_artesano || orden.pago_estimado || 0) || 0,
-                            base_calculo: parseFloat(orden.base_calculo_artesano || 1) || 1,
-                            modo_calculo: orden.modo_calculo_artesano || "fijo",
-                            aplica_a: orden.aplica_a_artesano || "total",
-                            total: parseFloat(orden.pago_estimado || 0) || 0,
-                            estado: "pendiente",
-                            fecha: new Date().toISOString()
-                        };
-
-                        nuevosPagos.push(nuevoPago);
-
-                        operaciones.push({
-                            action: "guardar_fila",
-                            nombreHoja: "pago_artesanos",
-                            datos: nuevoPago
-                        });
-                    }
-                }
-            }
-
-            operaciones.push({
-                action: "actualizar_fila",
-                nombreHoja: "ordenes_produccion",
-                idFila: ordenId,
-                datosNuevos: dataToUpdate
-            });
-
-            const res = await App.api.fetch("ejecutar_lote", { operaciones });
+        if (!orden) {
             App.ui.hideLoader();
-
-            if (res.status === "success") {
-                Object.assign(orden, dataToUpdate);
-
-                if (!Array.isArray(App.state.pago_artesanos)) {
-                    App.state.pago_artesanos = [];
-                }
-
-                App.state.pago_artesanos.push(...nuevosPagos);
-
-                App.ui.toast("Estado actualizado");
-                App.router.handleRoute();
-            } else {
-                App.ui.toast(res.message || "Error al actualizar estado", "danger");
-            }
-        } catch (error) {
-            console.error("Error en cambiarEstadoProduccion:", error);
-            App.ui.hideLoader();
-            App.ui.toast(error.message || "Error al actualizar estado", "danger");
+            App.ui.toast("Orden no encontrada", "danger");
+            return;
         }
-    },
+
+        const dataToUpdate = { estado: nuevoEstado };
+        const operaciones = [];
+        const nuevosPagos = [];
+
+        if (nuevoEstado === "proceso") {
+            dataToUpdate.fecha_inicio = new Date().toISOString();
+        }
+
+        if (nuevoEstado === "listo") {
+            dataToUpdate.fecha_fin = new Date().toISOString();
+
+            const asignacionesActivas = (App.state?.ordenes_produccion_artesanos || [])
+                .filter(a =>
+                    a.orden_id === ordenId &&
+                    String(a.estado || "activo").toLowerCase() !== "cancelado"
+                );
+
+            asignacionesActivas.forEach((asig, idx) => {
+                const totalAsignacion = parseFloat(asig.pago_estimado || 0) || 0;
+                if (totalAsignacion <= 0 || !asig.artesano_id) return;
+
+                const yaExistePago = (App.state?.pago_artesanos || []).some(p =>
+                    p.orden_id === ordenId &&
+                    p.artesano_id === asig.artesano_id &&
+                    String(p.tipo_trabajo || "") === String(asig.tipo_trabajo || asig.tarifa_nombre || "") &&
+                    String(p.componente || "") === String(asig.componente || "")
+                );
+
+                if (yaExistePago) return;
+
+                const idPago =
+                    "PAGO-" +
+                    Date.now() +
+                    "-" +
+                    idx +
+                    "-" +
+                    String(asig.artesano_id || "").replace(/\s+/g, "");
+
+                const nuevoPago = {
+                    id: idPago,
+                    artesano_id: asig.artesano_id,
+                    orden_id: ordenId,
+                    tipo_trabajo: asig.tipo_trabajo || asig.tarifa_nombre || "Trabajo",
+                    componente: asig.componente || "Total",
+                    monto_unitario: parseFloat(asig.monto_tarifa_apl || 0) || 0,
+                    base_calculo: parseFloat(asig.factor_participac || 1) || 1,
+                    modo_calculo: asig.esquema_pago || "fijo",
+                    aplica_a: asig.componente || "Total",
+                    total: totalAsignacion,
+                    estado: "pendiente",
+                    fecha: new Date().toISOString()
+                };
+
+                nuevosPagos.push(nuevoPago);
+
+                operaciones.push({
+                    action: "guardar_fila",
+                    nombreHoja: "pago_artesanos",
+                    datos: nuevoPago
+                });
+            });
+        }
+
+        operaciones.push({
+            action: "actualizar_fila",
+            nombreHoja: "ordenes_produccion",
+            idFila: ordenId,
+            datosNuevos: dataToUpdate
+        });
+
+        const res = await App.api.fetch("ejecutar_lote", { operaciones });
+        App.ui.hideLoader();
+
+        if (res.status === "success") {
+            Object.assign(orden, dataToUpdate);
+
+            if (!Array.isArray(App.state.pago_artesanos)) {
+                App.state.pago_artesanos = [];
+            }
+
+            App.state.pago_artesanos.push(...nuevosPagos);
+
+            App.ui.toast(
+                nuevoEstado === "listo" && nuevosPagos.length > 0
+                    ? `Orden finalizada y ${nuevosPagos.length} pago(s) generado(s)`
+                    : "Estado actualizado"
+            );
+
+            App.router.handleRoute();
+        } else {
+            App.ui.toast(res.message || "Error al actualizar estado", "danger");
+        }
+    } catch (error) {
+        console.error("Error en cambiarEstadoProduccion:", error);
+        App.ui.hideLoader();
+        App.ui.toast(error.message || "Error al actualizar estado", "danger");
+    }
+},
 
     // ==========================================
     // 2. GUARDAR RECETA Y DESCONTAR INVENTARIO
