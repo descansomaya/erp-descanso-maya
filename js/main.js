@@ -26,8 +26,8 @@ window.cargarTarifas = function (artesanoId) {
         '<option value="">-- Seleccione Trabajo --</option>' +
         tarifas.map(t => `
             <option
-                value="${t.monto || 0}"
-                data-tarifa-id="${t.id || ''}"
+                value="${t.id || ''}"
+                data-monto="${t.monto || 0}"
                 data-modo-calculo="${t.modo_calculo || 'fijo'}"
                 data-aplica-a="${t.aplica_a || 'total'}"
             >
@@ -40,9 +40,7 @@ window.calcTotalTrabajo = function () {
     const sel = document.getElementById("select-tarifas");
     const tot = document.getElementById("total-trabajo");
     const tareaNombre = document.getElementById("tarea_nombre");
-    const ordenIdInput =
-        document.querySelector('#dynamic-form input[name="id"]') ||
-        document.querySelector('#dynamic-form input[name="orden_id"]');
+    const ordenIdInput = document.querySelector('#dynamic-form input[name="id"]');
 
     if (!sel || !tot || !sel.value) {
         if (tot) tot.value = "";
@@ -51,7 +49,7 @@ window.calcTotalTrabajo = function () {
     }
 
     const selectedOption = sel.options[sel.selectedIndex];
-    const monto = parseFloat(selectedOption?.value || 0) || 0;
+    const monto = parseFloat(selectedOption?.dataset?.monto || 0) || 0;
     const modoCalculo = selectedOption?.dataset?.modoCalculo || "fijo";
     const aplicaA = selectedOption?.dataset?.aplicaA || "total";
 
@@ -75,6 +73,13 @@ window.calcTotalTrabajo = function () {
                 .reduce((acc, item) => acc + (parseFloat(item.cant || 0) || 0), 0);
         }
     }
+
+    tot.value = (monto * baseCalculo).toFixed(2);
+
+    if (tareaNombre) {
+        tareaNombre.value = selectedOption?.text?.split(" ($")[0] || "";
+    }
+};
 
     const total = monto * baseCalculo;
     tot.value = total.toFixed(2);
