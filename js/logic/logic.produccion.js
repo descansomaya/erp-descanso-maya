@@ -370,6 +370,94 @@ Object.assign(App.logic, {
         }
     },
 
+async guardarAsignacionMultiArtesano(data) {
+    try {
+        App.ui.showLoader("Guardando asignación...");
+
+        const ordenId = data.orden_id;
+        const orden = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
+        if (!orden) {
+            App.ui.hideLoader();
+            App.ui.toast("Orden no encontrada", "danger");
+            return;
+        }
+
+        const tarifa = (App.state?.tarifas_artesano || []).find(t => t.id === data.tarifa_artesano_id);
+        if (!tarifa) {
+            App.ui.hideLoader();
+            App.ui.toast("Tarifa no encontrada", "danger");
+            return;
+        }
+
+        const receta = (() => {
+            try {
+                const r = JSON.parse(orden.receta_personalizada || "[]");
+                return Array.isArray(r) ? r : [];
+            } catch (e) {
+                return [];
+            }
+        })();
+
+        const esquemaPago = tarifa.modo_calculo || "fijo";
+        const componente = data.componente || tarifa.aplica_a || "total";
+        const montoTarifa = parseFloat(tarifa.monto || 0) || 0;
+
+        let factorParticipac = 1;
+
+        if (esquemaPago === "por_unidad") {
+            if (String(componente).toLowerCase() === "total") {
+                factorParticipac = receta.reduce((acc, item) => acc + (parseFloat(item.cant || 0) || 0), 0);
+            } else {
+                factorParticipac = receta
+                    .filter(item => String(item.uso || "").toLowerCase() === String(componente).toLowerCase())
+                    .reduce((acc, item) => acc + (parseFloat(item.cant || 0) || 0), 0);
+            }
+        }
+
+        const pagoEstimado = montoTarifa * factorParticipac;
+
+        const nuevaAsignacion = {
+            id: "OPA-" + Date.now(),
+            orden_id: ordenId,
+            artesano_id: data.artesano_id || "",
+            tarifa_artesano_id: data.tarifa_artesano_id || "",
+            tarifa_nombre: tarifa.clasificacion || "Trabajo",
+            tipo_trabajo: tarifa.clasificacion || "Trabajo",
+            componente: componente,
+            esquema_pago: esquemaPago,
+            monto_tarifa_apl: montoTarifa,
+            factor_participac: factorParticipac,
+            pago_estimado: pagoEstimado,
+            estado: "activo",
+            fecha_creacion: new Date().toISOString()
+        };
+
+        const res = await App.api.fetch("guardar_fila", {
+            nombreHoja: "ordenes_produccion_artesanos",
+            datos: nuevaAsignacion
+        });
+
+        App.ui.hideLoader();
+
+        if (res.status === "success") {
+            if (!Array.isArray(App.state.ordenes_produccion_artesanos)) {
+                App.state.ordenes_produccion_artesanos = [];
+            }
+
+            App.state.ordenes_produccion_artesanos.push(nuevaAsignacion);
+            App.ui.toast("Asignación guardada");
+            App.ui.closeSheet();
+            App.router.handleRoute();
+        } else {
+            App.ui.toast(res.message || "Error al guardar asignación", "danger");
+        }
+    } catch (error) {
+        console.error("Error en guardarAsignacionMultiArtesano:", error);
+        App.ui.hideLoader();
+        App.ui.toast(error.message || "Error al guardar asignación", "danger");
+    }
+},
+    
     // ==========================================
     // 4. GENERAR ÓRDENES DESDE PEDIDO
     // ==========================================
