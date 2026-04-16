@@ -23,9 +23,11 @@ window.cargarTarifas = function (artesanoId) {
 
     select.innerHTML =
         '<option value="">-- Seleccione Trabajo --</option>' +
-        tarifas.map(t =>
-            `<option value="${t.monto || 0}">${App.ui.escapeHTML(t.clasificacion || "Tarea")} ($${t.monto || 0})</option>`
-        ).join("");
+       tarifas.map(t =>
+    `<option value="${t.monto || 0}" data-tarifa-id="${t.id || ""}">
+        ${App.ui.escapeHTML(t.clasificacion || "Tarea")} ($${t.monto || 0})
+    </option>`
+).join("");
 };
 
 window.calcTotalTrabajo = function () {
