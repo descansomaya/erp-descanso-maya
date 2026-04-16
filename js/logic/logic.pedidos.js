@@ -466,246 +466,509 @@ Object.assign(App.logic, {
         }
     },
 
+    _getClientePorRegistro(registro) {
+        return (App.state.clientes || []).find(c => c.id === registro?.cliente_id) || null;
+    },
+
+    _getDetallesPedidoParaComprobante(pedidoId) {
+        return (App.state.pedido_detalle || [])
+            .filter(d => d.pedido_id === pedidoId)
+            .map(d => {
+                const prod = (App.state.productos || []).find(p => p.id === d.producto_id);
+                const nombre = prod ? prod.nombre : "Producto";
+                const cantidad = parseFloat(d.cantidad || 0) || 0;
+                const precio = parseFloat(d.precio_unitario || 0) || 0;
+                const subtotal = cantidad * precio;
+                return {
+                    nombre,
+                    cantidad,
+                    precio,
+                    subtotal
+                };
+            });
+    },
+
+    _getResumenFinancieroRegistro(registroId) {
+        const pedido = (App.state.pedidos || []).find(p => p.id === registroId);
+        const reparacion = (App.state.reparaciones || []).find(r => r.id === registroId);
+        const esReparacion = !!reparacion;
+        const registro = esReparacion ? reparacion : pedido;
+
+        if (!registro) return null;
+
+        let total = 0;
+        let anticipo = parseFloat(registro.anticipo || 0) || 0;
+        let abonos = 0;
+        let saldo = 0;
+        let detalles = [];
+
+        if (!esReparacion) {
+            detalles = this._getDetallesPedidoParaComprobante(registroId);
+            total = detalles.reduce((s, d) => s + d.subtotal, 0);
+            if (total <= 0) total = parseFloat(registro.total || 0) || 0;
+
+            abonos = (App.state.abonos || [])
+                .filter(a => a.pedido_id === registroId)
+                .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+
+            saldo = total - anticipo - abonos;
+        } else {
+            total = parseFloat(registro.precio || 0) || 0;
+            saldo = total - anticipo;
+        }
+
+        return {
+            esReparacion,
+            registro,
+            total,
+            anticipo,
+            abonos,
+            saldo,
+            detalles
+        };
+    },
+
+    _abrirVentanaComprobante(html, titulo = "Comprobante") {
+        const w = window.open("", "_blank", "width=1000,height=800");
+        if (!w) {
+            App.ui.toast("El navegador bloqueó la ventana de impresión", "warning");
+            return;
+        }
+        w.document.open();
+        w.document.write(html);
+        w.document.close();
+    },
+
+    _generarHTMLComprobanteComercial({
+        titulo,
+        subtitulo = "",
+        folio = "",
+        clienteNombre = "",
+        fecha = "",
+        estado = "",
+        fechaEntrega = "",
+        lineItems = [],
+        total = 0,
+        anticipo = 0,
+        abonos = 0,
+        saldo = 0,
+        notas = "",
+        descripcion = "",
+        etiquetaSaldo = "Saldo",
+        referencia = ""
+    }) {
+        const rows = lineItems.map((item, idx) => `
+            <tr>
+                <td>${idx + 1}</td>
+                <td>${App.ui.escapeHTML(item.nombre || "")}</td>
+                <td>${item.cantidad !== undefined ? App.ui.escapeHTML(String(item.cantidad)) : "-"}</td>
+                <td>$${(parseFloat(item.precio || 0) || 0).toFixed(2)}</td>
+                <td>$${(parseFloat(item.subtotal || 0) || 0).toFixed(2)}</td>
+            </tr>
+        `).join("");
+
+        return `
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>${App.ui.escapeHTML(titulo)}</title>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        color: #1f2937;
+                        background: #fff;
+                        margin: 0;
+                        padding: 24px;
+                    }
+                    .sheet {
+                        max-width: 920px;
+                        margin: auto;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 18px;
+                        overflow: hidden;
+                    }
+                    .header {
+                        background: linear-gradient(135deg, #ffffff 0%, #f5f3ff 100%);
+                        padding: 24px;
+                        border-bottom: 1px solid #e5e7eb;
+                        display: flex;
+                        justify-content: space-between;
+                        gap: 20px;
+                        align-items: center;
+                        flex-wrap: wrap;
+                    }
+                    .brand {
+                        display: flex;
+                        align-items: center;
+                        gap: 16px;
+                    }
+                    .brand img {
+                        width: 82px;
+                        height: 82px;
+                        object-fit: contain;
+                        border-radius: 14px;
+                        background: #fff;
+                    }
+                    .brand h1 {
+                        margin: 0;
+                        color: #6D28D9;
+                        font-size: 26px;
+                    }
+                    .brand p {
+                        margin: 4px 0 0 0;
+                        color: #6b7280;
+                        font-size: 13px;
+                    }
+                    .meta {
+                        text-align: right;
+                        font-size: 13px;
+                        line-height: 1.7;
+                    }
+                    .content {
+                        padding: 24px;
+                    }
+                    .title {
+                        font-size: 24px;
+                        font-weight: 700;
+                        color: #111827;
+                        margin-bottom: 4px;
+                    }
+                    .subtitle {
+                        color: #6b7280;
+                        margin-bottom: 18px;
+                        font-size: 14px;
+                    }
+                    .info-grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                        gap: 12px;
+                        margin-bottom: 20px;
+                    }
+                    .info-box {
+                        background: #faf5ff;
+                        border: 1px solid #e9d8fd;
+                        border-radius: 14px;
+                        padding: 14px;
+                        font-size: 13px;
+                        line-height: 1.6;
+                    }
+                    .info-box strong {
+                        color: #6D28D9;
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-top: 12px;
+                    }
+                    th, td {
+                        border-bottom: 1px solid #e5e7eb;
+                        padding: 10px 8px;
+                        text-align: left;
+                        font-size: 13px;
+                        vertical-align: top;
+                    }
+                    th {
+                        background: #f9fafb;
+                        color: #374151;
+                    }
+                    .desc-box {
+                        background: #fff;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 14px;
+                        padding: 14px;
+                        margin-top: 18px;
+                        font-size: 14px;
+                        line-height: 1.6;
+                    }
+                    .totales {
+                        margin-top: 22px;
+                        display: flex;
+                        justify-content: flex-end;
+                    }
+                    .totales-box {
+                        width: 320px;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 14px;
+                        padding: 16px;
+                        background: #fff;
+                    }
+                    .totales-row {
+                        display: flex;
+                        justify-content: space-between;
+                        margin: 8px 0;
+                        font-size: 14px;
+                    }
+                    .saldo {
+                        font-size: 18px;
+                        font-weight: 700;
+                        color: ${saldo > 0 ? "#DC2626" : "#16A34A"};
+                    }
+                    .footer {
+                        padding: 20px 24px 26px 24px;
+                        border-top: 1px solid #e5e7eb;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        gap: 20px;
+                        flex-wrap: wrap;
+                    }
+                    .footer-note {
+                        color: #6b7280;
+                        font-size: 12px;
+                        line-height: 1.6;
+                    }
+                    .qr-box {
+                        text-align: center;
+                    }
+                    .qr-box img {
+                        width: 92px;
+                        height: 92px;
+                        object-fit: contain;
+                    }
+                    .qr-box div {
+                        font-size: 11px;
+                        color: #6b7280;
+                        margin-top: 6px;
+                    }
+                    @media print {
+                        body { padding: 0; }
+                        .sheet { border: none; border-radius: 0; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="sheet">
+                    <div class="header">
+                        <div class="brand">
+                            <img src="https://i.ibb.co/5h0kNKrZ/DESCANSO-MAYA.png" alt="Descanso Maya">
+                            <div>
+                                <h1>Descanso Maya</h1>
+                                <p>Hamacas y Accesorios Artesanales</p>
+                            </div>
+                        </div>
+                        <div class="meta">
+                            <div><strong>${App.ui.escapeHTML(titulo)}</strong></div>
+                            <div>Fecha: ${App.ui.escapeHTML(fecha || "-")}</div>
+                            ${folio ? `<div>Folio: ${App.ui.escapeHTML(folio)}</div>` : ""}
+                            ${referencia ? `<div>Referencia: ${App.ui.escapeHTML(referencia)}</div>` : ""}
+                        </div>
+                    </div>
+
+                    <div class="content">
+                        <div class="title">${App.ui.escapeHTML(titulo)}</div>
+                        ${subtitulo ? `<div class="subtitle">${App.ui.escapeHTML(subtitulo)}</div>` : ""}
+
+                        <div class="info-grid">
+                            <div class="info-box">
+                                <strong>Cliente</strong><br>
+                                ${App.ui.escapeHTML(clienteNombre || "Cliente general")}
+                            </div>
+                            <div class="info-box">
+                                <strong>Estado</strong><br>
+                                ${App.ui.escapeHTML(estado || "-")}
+                            </div>
+                            ${fechaEntrega ? `
+                                <div class="info-box">
+                                    <strong>Fecha de entrega</strong><br>
+                                    ${App.ui.escapeHTML(fechaEntrega)}
+                                </div>
+                            ` : ""}
+                        </div>
+
+                        ${lineItems.length ? `
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Concepto</th>
+                                        <th>Cant.</th>
+                                        <th>Unitario</th>
+                                        <th>Importe</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${rows}
+                                </tbody>
+                            </table>
+                        ` : ""}
+
+                        ${descripcion ? `
+                            <div class="desc-box">
+                                <strong style="color:#6D28D9;">Descripción</strong><br>
+                                ${App.ui.escapeHTML(descripcion)}
+                            </div>
+                        ` : ""}
+
+                        ${notas ? `
+                            <div class="desc-box">
+                                <strong style="color:#6D28D9;">Notas</strong><br>
+                                ${App.ui.escapeHTML(notas)}
+                            </div>
+                        ` : ""}
+
+                        <div class="totales">
+                            <div class="totales-box">
+                                <div class="totales-row"><span>Total</span><strong>$${(parseFloat(total || 0) || 0).toFixed(2)}</strong></div>
+                                <div class="totales-row"><span>Anticipo</span><strong>$${(parseFloat(anticipo || 0) || 0).toFixed(2)}</strong></div>
+                                ${parseFloat(abonos || 0) > 0 ? `<div class="totales-row"><span>Abonos</span><strong>$${(parseFloat(abonos || 0) || 0).toFixed(2)}</strong></div>` : ""}
+                                <div class="totales-row saldo"><span>${App.ui.escapeHTML(etiquetaSaldo)}</span><span>$${(parseFloat(saldo || 0) || 0).toFixed(2)}</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="footer">
+                        <div class="footer-note">
+                            Gracias por su preferencia ❤️<br>
+                            Conserva este comprobante para cualquier aclaración.
+                        </div>
+                        <div class="qr-box">
+                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent("https://www.facebook.com/descansomaya.mx")}" alt="QR Facebook">
+                            <div>facebook.com/descansomaya.mx</div>
+                        </div>
+                    </div>
+                </div>
+
+                <script>
+                    window.onload = function () {
+                        window.print();
+                    };
+                </script>
+            </body>
+            </html>
+        `;
+    },
+
     imprimirNota(registroId) {
         try {
-            const pedido = (App.state.pedidos || []).find(p => p.id === registroId);
-            const reparacion = (App.state.reparaciones || []).find(r => r.id === registroId);
-
-            if (!pedido && !reparacion) {
+            const resumen = this._getResumenFinancieroRegistro(registroId);
+            if (!resumen) {
                 App.ui.toast("Registro no encontrado", "danger");
                 return;
             }
 
-            const esReparacion = !!reparacion;
-            const registro = esReparacion ? reparacion : pedido;
-            const cliente = (App.state.clientes || []).find(c => c.id === registro.cliente_id);
-
+            const { esReparacion, registro, total, anticipo, abonos, saldo, detalles } = resumen;
+            const cliente = this._getClientePorRegistro(registro);
             const nombreCliente = cliente ? cliente.nombre : "Cliente general";
             const fecha = String(registro.fecha_creacion || registro.fecha || "").split("T")[0];
             const estado = registro.estado || "-";
 
-            let total = 0;
-            let anticipo = parseFloat(registro.anticipo || 0);
-            let abonos = 0;
-            let saldo = 0;
-            let detallesHTML = "";
+            const html = this._generarHTMLComprobanteComercial({
+                titulo: esReparacion ? "Nota de reparación" : "Nota de pedido",
+                subtitulo: esReparacion ? "Comprobante de servicio" : "Comprobante de venta",
+                folio: registro.id || "",
+                clienteNombre: nombreCliente,
+                fecha,
+                estado,
+                fechaEntrega: registro.fecha_entrega || "",
+                lineItems: esReparacion ? [] : detalles,
+                total,
+                anticipo,
+                abonos,
+                saldo,
+                notas: registro.notas || "",
+                descripcion: esReparacion ? (registro.descripcion || "") : "",
+                etiquetaSaldo: "Saldo"
+            });
 
-            if (!esReparacion) {
-                const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === registroId);
-
-                detallesHTML = detalles.map(d => {
-                    const prod = (App.state.productos || []).find(p => p.id === d.producto_id);
-                    const nombre = prod ? prod.nombre : "Producto";
-                    const cantidad = parseFloat(d.cantidad || 0);
-                    const precio = parseFloat(d.precio_unitario || 0);
-                    const subtotal = cantidad * precio;
-                    total += subtotal;
-
-                    return `
-                        <div class="item">
-                            <div class="item-main">
-                                <div class="item-name">${App.ui.escapeHTML(nombre)}</div>
-                                <div class="item-meta">${cantidad} x $${precio.toFixed(2)}</div>
-                            </div>
-                            <div class="item-total">$${subtotal.toFixed(2)}</div>
-                        </div>
-                    `;
-                }).join("");
-
-                abonos = (App.state.abonos || [])
-                    .filter(a => a.pedido_id === registro.id)
-                    .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
-
-                if (total <= 0) total = parseFloat(registro.total || 0);
-                saldo = total - anticipo - abonos;
-            } else {
-                total = parseFloat(registro.precio || 0);
-                saldo = total - anticipo;
-
-                detallesHTML = `
-                    <div class="item">
-                        <div class="item-main">
-                            <div class="item-name">Servicio de reparación</div>
-                            <div class="item-meta">${App.ui.escapeHTML(registro.descripcion || "Sin descripción")}</div>
-                        </div>
-                        <div class="item-total">$${total.toFixed(2)}</div>
-                    </div>
-                `;
-            }
-
-            const tipoLabel = esReparacion ? "Nota de reparación" : "Nota de pedido";
-
-            const html = `
-                <html>
-                <head>
-                    <title>${tipoLabel}</title>
-                    <meta charset="utf-8">
-                    <style>
-                        body {
-                            font-family: Arial, sans-serif;
-                            background: #fff;
-                            padding: 20px;
-                            max-width: 380px;
-                            margin: auto;
-                            color: #222;
-                        }
-                        .ticket {
-                            border: 1px solid #e5e7eb;
-                            border-radius: 14px;
-                            padding: 18px;
-                        }
-                        .brand {
-                            text-align: center;
-                            margin-bottom: 12px;
-                        }
-                        .brand h1 {
-                            margin: 0;
-                            font-size: 22px;
-                            color: #6D28D9;
-                        }
-                        .brand p {
-                            margin: 4px 0 0 0;
-                            color: #666;
-                            font-size: 12px;
-                        }
-                        .line {
-                            border-top: 1px dashed #999;
-                            margin: 12px 0;
-                        }
-                        .meta {
-                            font-size: 13px;
-                            line-height: 1.6;
-                        }
-                        .meta strong {
-                            color: #111;
-                        }
-                        .section-title {
-                            font-size: 13px;
-                            font-weight: bold;
-                            color: #6D28D9;
-                            margin-bottom: 8px;
-                            text-transform: uppercase;
-                        }
-                        .item {
-                            display: flex;
-                            justify-content: space-between;
-                            align-items: flex-start;
-                            gap: 10px;
-                            font-size: 13px;
-                            margin-bottom: 10px;
-                        }
-                        .item-main {
-                            flex: 1;
-                            min-width: 0;
-                        }
-                        .item-name {
-                            font-weight: bold;
-                            margin-bottom: 3px;
-                        }
-                        .item-meta {
-                            color: #666;
-                            font-size: 12px;
-                            line-height: 1.4;
-                            word-break: break-word;
-                        }
-                        .item-total {
-                            font-weight: bold;
-                            white-space: nowrap;
-                        }
-                        .totales {
-                            font-size: 13px;
-                        }
-                        .totales-row {
-                            display: flex;
-                            justify-content: space-between;
-                            margin: 6px 0;
-                        }
-                        .saldo {
-                            font-weight: bold;
-                            font-size: 16px;
-                            color: ${saldo > 0 ? "#DC2626" : "#16A34A"};
-                        }
-                        .footer {
-                            text-align: center;
-                            font-size: 11px;
-                            margin-top: 18px;
-                            color: #666;
-                            line-height: 1.5;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="ticket">
-                        <div class="brand">
-                            <h1>Descanso Maya</h1>
-                            <p>@descansomaya.mx</p>
-                        </div>
-
-                        <div class="line"></div>
-
-                        <div class="meta">
-                            <div><strong>${tipoLabel}:</strong> ${App.ui.escapeHTML(registro.id)}</div>
-                            <div><strong>Cliente:</strong> ${App.ui.escapeHTML(nombreCliente)}</div>
-                            <div><strong>Fecha:</strong> ${App.ui.escapeHTML(fecha || "-")}</div>
-                            <div><strong>Estado:</strong> ${App.ui.escapeHTML(estado)}</div>
-                            ${registro.fecha_entrega ? `<div><strong>Entrega:</strong> ${App.ui.escapeHTML(registro.fecha_entrega)}</div>` : ""}
-                        </div>
-
-                        <div class="line"></div>
-
-                        <div class="section-title">${esReparacion ? "Servicio" : "Detalle"}</div>
-                        ${detallesHTML || `<div class="item"><div class="item-main"><div class="item-meta">Sin detalles</div></div></div>`}
-
-                        <div class="line"></div>
-
-                        <div class="totales">
-                            <div class="totales-row"><span>Total:</span><strong>$${total.toFixed(2)}</strong></div>
-                            <div class="totales-row"><span>Anticipo:</span><strong>$${anticipo.toFixed(2)}</strong></div>
-                            ${!esReparacion && abonos > 0 ? `<div class="totales-row"><span>Abonos:</span><strong>$${abonos.toFixed(2)}</strong></div>` : ""}
-                            <div class="totales-row saldo"><span>Saldo:</span><span>$${saldo.toFixed(2)}</span></div>
-                        </div>
-
-                        ${registro.notas ? `
-                            <div class="line"></div>
-                            <div class="section-title">Notas</div>
-                            <div class="meta">${App.ui.escapeHTML(registro.notas)}</div>
-                        ` : ""}
-
-                        ${esReparacion && registro.descripcion ? `
-                            <div class="line"></div>
-                            <div class="section-title">Descripción</div>
-                            <div class="meta">${App.ui.escapeHTML(registro.descripcion)}</div>
-                        ` : ""}
-
-                        <div class="line"></div>
-
-                        <div class="footer">
-                            Gracias por su preferencia<br>
-                            Descanso Maya
-                        </div>
-                    </div>
-
-                    <script>
-                        window.onload = function () {
-                            window.print();
-                        };
-                    </script>
-                </body>
-                </html>
-            `;
-
-            const w = window.open("", "_blank", "width=900,height=700");
-            if (!w) {
-                App.ui.toast("El navegador bloqueó la ventana de impresión", "warning");
-                return;
-            }
-
-            w.document.open();
-            w.document.write(html);
-            w.document.close();
+            this._abrirVentanaComprobante(html, esReparacion ? "Nota de reparación" : "Nota de pedido");
         } catch (error) {
             console.error("Error en imprimirNota:", error);
             App.ui.toast(error.message || "Error al imprimir nota", "danger");
+        }
+    },
+
+    imprimirReciboAbono(abonoId) {
+        try {
+            const abono = (App.state.abonos || []).find(a => a.id === abonoId);
+            if (!abono) {
+                App.ui.toast("Abono no encontrado", "danger");
+                return;
+            }
+
+            const resumen = this._getResumenFinancieroRegistro(abono.pedido_id);
+            if (!resumen) {
+                App.ui.toast("Registro relacionado no encontrado", "danger");
+                return;
+            }
+
+            const { esReparacion, registro, total, anticipo, abonos, saldo, detalles } = resumen;
+            const cliente = this._getClientePorRegistro(registro);
+            const nombreCliente = cliente ? cliente.nombre : "Cliente general";
+            const fecha = String(abono.fecha || "").split("T")[0];
+
+            const html = this._generarHTMLComprobanteComercial({
+                titulo: "Recibo de abono",
+                subtitulo: esReparacion ? "Pago recibido para reparación" : "Pago recibido para pedido",
+                folio: abono.id || "",
+                clienteNombre: nombreCliente,
+                fecha,
+                estado: registro.estado || "-",
+                fechaEntrega: registro.fecha_entrega || "",
+                lineItems: [{
+                    nombre: esReparacion ? (registro.descripcion || "Servicio de reparación") : `Abono aplicado a ${registro.id}`,
+                    cantidad: 1,
+                    precio: parseFloat(abono.monto || 0) || 0,
+                    subtotal: parseFloat(abono.monto || 0) || 0
+                }],
+                total,
+                anticipo,
+                abonos,
+                saldo,
+                notas: abono.nota || "",
+                descripcion: esReparacion ? (registro.descripcion || "") : "",
+                etiquetaSaldo: "Saldo restante",
+                referencia: abono.metodo_pago || ""
+            });
+
+            this._abrirVentanaComprobante(html, "Recibo de abono");
+        } catch (error) {
+            console.error("Error en imprimirReciboAbono:", error);
+            App.ui.toast(error.message || "Error al imprimir recibo de abono", "danger");
+        }
+    },
+
+    imprimirReciboLiquidacion(registroId) {
+        try {
+            const resumen = this._getResumenFinancieroRegistro(registroId);
+            if (!resumen) {
+                App.ui.toast("Registro no encontrado", "danger");
+                return;
+            }
+
+            const { esReparacion, registro, total, anticipo, abonos, saldo, detalles } = resumen;
+            const cliente = this._getClientePorRegistro(registro);
+            const nombreCliente = cliente ? cliente.nombre : "Cliente general";
+            const fecha = new Date().toISOString().split("T")[0];
+
+            const html = this._generarHTMLComprobanteComercial({
+                titulo: "Recibo de liquidación",
+                subtitulo: esReparacion ? "Cuenta liquidada de reparación" : "Cuenta liquidada de pedido",
+                folio: registro.id || "",
+                clienteNombre: nombreCliente,
+                fecha,
+                estado: "LIQUIDADO",
+                fechaEntrega: registro.fecha_entrega || "",
+                lineItems: esReparacion
+                    ? [{
+                        nombre: registro.descripcion || "Servicio de reparación",
+                        cantidad: 1,
+                        precio: total,
+                        subtotal: total
+                    }]
+                    : detalles,
+                total,
+                anticipo,
+                abonos,
+                saldo,
+                notas: registro.notas || "",
+                descripcion: esReparacion ? (registro.descripcion || "") : "",
+                etiquetaSaldo: "Saldo final"
+            });
+
+            this._abrirVentanaComprobante(html, "Recibo de liquidación");
+        } catch (error) {
+            console.error("Error en imprimirReciboLiquidacion:", error);
+            App.ui.toast(error.message || "Error al imprimir liquidación", "danger");
         }
     },
 
