@@ -119,6 +119,13 @@ App.views.finanzas = function() {
         return (parseFloat(i.stock_minimo || 0) || 0) > 0 && libre <= (parseFloat(i.stock_minimo || 0) || 0);
     }).length;
 
+    const cardAction = (onclick) => `
+        onclick="${onclick}"
+        style="cursor:pointer; transition:all .2s ease;"
+        onmouseover="this.style.transform='translateY(-2px)'"
+        onmouseout="this.style.transform='translateY(0)'"
+    `;
+
     return `
         <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4" style="background:linear-gradient(135deg, #ffffff 0%, #faf7ff 100%);">
@@ -141,6 +148,22 @@ App.views.finanzas = function() {
 
                         <button
                             class="dm-btn dm-btn-secondary dm-btn-sm"
+                            onclick="App.router.navigate('pedidos')"
+                            style="border-color:#3182CE; color:#3182CE;"
+                        >
+                            Pedidos
+                        </button>
+
+                        <button
+                            class="dm-btn dm-btn-secondary dm-btn-sm"
+                            onclick="App.router.navigate('reparaciones')"
+                            style="border-color:#805AD5; color:#805AD5;"
+                        >
+                            Reparaciones
+                        </button>
+
+                        <button
+                            class="dm-btn dm-btn-secondary dm-btn-sm"
                             onclick="App.router.navigate('nomina')"
                             style="border-color:#805AD5; color:#805AD5;"
                         >
@@ -159,13 +182,13 @@ App.views.finanzas = function() {
             </div>
 
             <div class="dm-grid dm-grid-2 dm-mb-4">
-                <div class="dm-card" style="background:#FFFBEA;">
+                <div class="dm-card" ${cardAction(`App.router.navigate('cobranza')`)} style="background:#FFFBEA; cursor:pointer;">
                     <div class="dm-kpi-label" style="color:#B7791F;">Dinero en la calle</div>
                     <div class="dm-kpi-value" style="color:#D69E2E; font-size:1.5rem;">$${dineroEnLaCalle.toFixed(2)}</div>
                     <div class="dm-text-sm dm-muted dm-mt-2">Pedidos + reparaciones pendientes por cobrar</div>
                 </div>
 
-                <div class="dm-card" style="background:#F0FFF4;">
+                <div class="dm-card" ${cardAction(`App.views.detalleFinanzas('ingresos','mes_actual')`)} style="background:#F0FFF4; cursor:pointer;">
                     <div class="dm-kpi-label" style="color:#2F855A;">Ingresos del mes</div>
                     <div class="dm-kpi-value" style="color:#38A169; font-size:1.5rem;">$${ingresosMes.toFixed(2)}</div>
                     <div class="dm-text-sm dm-muted dm-mt-2">Anticipos y abonos registrados en el mes</div>
@@ -173,22 +196,22 @@ App.views.finanzas = function() {
             </div>
 
             <div class="dm-grid dm-grid-4 dm-mb-4">
-                <div class="dm-card">
+                <div class="dm-card" ${cardAction(`App.router.navigate('pedidos')`)}>
                     <div class="dm-kpi-label">Pedidos activos</div>
                     <div class="dm-kpi-value">${pedidosActivos}</div>
                 </div>
 
-                <div class="dm-card">
+                <div class="dm-card" ${cardAction(`App.router.navigate('reparaciones')`)}>
                     <div class="dm-kpi-label">Reparaciones activas</div>
                     <div class="dm-kpi-value">${reparacionesActivas}</div>
                 </div>
 
-                <div class="dm-card">
+                <div class="dm-card" ${cardAction(`App.router.navigate('cobranza')`)}>
                     <div class="dm-kpi-label">Listos por entregar</div>
                     <div class="dm-kpi-value">${pedidosListos + reparacionesListas}</div>
                 </div>
 
-                <div class="dm-card">
+                <div class="dm-card" ${cardAction(`App.views.detalleFinanzas('gastos','mes_actual')`)}>
                     <div class="dm-kpi-label">Gastos del mes</div>
                     <div class="dm-kpi-value">$${gastosMes.toFixed(2)}</div>
                 </div>
@@ -199,6 +222,9 @@ App.views.finanzas = function() {
                     <div class="dm-card-title">Cobranza pendiente</div>
                     <div class="dm-text-sm dm-muted dm-mt-2">Pedidos: $${porCobrarPedidos.toFixed(2)}</div>
                     <div class="dm-text-sm dm-muted">Reparaciones: $${porCobrarReparaciones.toFixed(2)}</div>
+                    <div class="dm-list-card-actions dm-mt-3">
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('cobranza')">Ir a cobranza</button>
+                    </div>
                 </div>
 
                 <div class="dm-card" style="border-left:4px solid #805AD5;">
@@ -206,6 +232,9 @@ App.views.finanzas = function() {
                     <div class="dm-text-sm dm-muted dm-mt-2">Artesanos: $${porPagarArtesanos.toFixed(2)}</div>
                     <div class="dm-text-sm dm-muted">Compras: $${porPagarCompras.toFixed(2)}</div>
                     <div class="dm-text-sm dm-mt-2" style="font-weight:600;">Total: $${totalPorPagar.toFixed(2)}</div>
+                    <div class="dm-list-card-actions dm-mt-3">
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('nomina')">Ir a nómina</button>
+                    </div>
                 </div>
 
                 <div class="dm-card" style="border-left:4px solid #E53E3E;">
@@ -213,6 +242,23 @@ App.views.finanzas = function() {
                     <div class="dm-text-sm dm-muted dm-mt-2">Pedidos listos: ${pedidosListos}</div>
                     <div class="dm-text-sm dm-muted">Reparaciones listas: ${reparacionesListas}</div>
                     <div class="dm-text-sm dm-muted">Insumos críticos: ${insumosCriticos}</div>
+                    <div class="dm-list-card-actions dm-mt-3" style="flex-wrap:wrap;">
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('cobranza')">Ver listos</button>
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('catalogos')">Ver insumos</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dm-card dm-mb-4">
+                <div class="dm-card-title dm-mb-3">Acciones rápidas</div>
+                <div class="dm-list-card-actions" style="flex-wrap:wrap;">
+                    <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.router.navigate('cobranza')">💰 Cobranza</button>
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('pedidos')">📦 Pedidos</button>
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('reparaciones')">🪡 Reparaciones</button>
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('nomina')">🧵 Nómina</button>
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formGasto()">➕ Gasto</button>
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.detalleFinanzas('por_cobrar','todo')">📋 Ver por cobrar</button>
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.detalleFinanzas('por_pagar','todo')">📋 Ver por pagar</button>
                 </div>
             </div>
 
