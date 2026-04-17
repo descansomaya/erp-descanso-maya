@@ -365,8 +365,8 @@ Object.assign(App.logic, {
 
     async guardarAbono(datos) {
         try {
-            const pedidoId = datos.pedido_id || "";
-            const esReparacion = pedidoId.startsWith("REP-");
+            const registroId = datos.pedido_id || "";
+            const esReparacion = registroId.startsWith("REP-");
             const nuevoMonto = parseFloat(datos.monto) || 0;
 
             if (nuevoMonto <= 0) {
@@ -376,9 +376,10 @@ Object.assign(App.logic, {
 
             const operaciones = [];
             let saldoRealFinal = 0;
+            let nuevoAbono = null;
 
             if (!esReparacion) {
-                const pedidoObj = (App.state.pedidos || []).find(p => p.id === pedidoId);
+                const pedidoObj = (App.state.pedidos || []).find(p => p.id === registroId);
                 if (!pedidoObj) return;
 
                 const abonosPrevios = (App.state.abonos || [])
@@ -403,11 +404,33 @@ Object.assign(App.logic, {
                     });
                     pedidoObj.estado = "pagado";
                 }
+
+                nuevoAbono = {
+                    id: "ABO-" + Date.now(),
+                    pedido_id: registroId,
+                    cliente_id: datos.cliente_id,
+                    monto: nuevoMonto,
+                    nota: datos.nota || "Abono en caja",
+                    metodo_pago: datos.metodo_pago || "Efectivo",
+                    fecha: new Date().toISOString()
+                };
+
+                operaciones.push({
+                    action: "guardar_fila",
+                    nombreHoja: "abonos_clientes",
+                    datos: nuevoAbono
+                });
             } else {
-                const repObj = (App.state.reparaciones || []).find(r => r.id === pedidoId);
+                const repObj = (App.state.reparaciones || []).find(r => r.id === registroId);
                 if (!repObj) return;
 
-                const saldoPendiente = parseFloat(repObj.precio || 0) - parseFloat(repObj.anticipo || 0);
+                const abonosPreviosRep = (App.state.abonos_reparaciones || [])
+                    .filter(a => a.reparacion_id === repObj.id)
+                    .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+
+                const anticipoInicial = parseFloat(repObj.anticipo_inicial || 0) || 0;
+                const yaPagado = anticipoInicial + abonosPreviosRep;
+                const saldoPendiente = parseFloat(repObj.precio || 0) - yaPagado;
 
                 if (nuevoMonto > saldoPendiente + 0.05) {
                     alert(`❌ No puedes abonar más del saldo pendiente ($${saldoPendiente.toFixed(2)}).`);
@@ -415,44 +438,58 @@ Object.assign(App.logic, {
                 }
 
                 saldoRealFinal = saldoPendiente - nuevoMonto;
-                const nuevoAnticipo = parseFloat(repObj.anticipo || 0) + nuevoMonto;
 
-                const datosUpd = { anticipo: nuevoAnticipo };
+                if (!repObj.anticipo_inicial && parseFloat(repObj.anticipo || 0) > 0) {
+                    operaciones.push({
+                        action: "actualizar_fila",
+                        nombreHoja: "reparaciones",
+                        idFila: repObj.id,
+                        datosNuevos: { anticipo_inicial: parseFloat(repObj.anticipo || 0) }
+                    });
+                    repObj.anticipo_inicial = parseFloat(repObj.anticipo || 0);
+                }
+
+                const totalPagadoNuevo = yaPagado + nuevoMonto;
+
                 operaciones.push({
                     action: "actualizar_fila",
                     nombreHoja: "reparaciones",
                     idFila: repObj.id,
-                    datosNuevos: datosUpd
+                    datosNuevos: { anticipo: totalPagadoNuevo }
                 });
+                repObj.anticipo = totalPagadoNuevo;
 
-                repObj.anticipo = nuevoAnticipo;
+                nuevoAbono = {
+                    id: "ABR-" + Date.now(),
+                    reparacion_id: registroId,
+                    cliente_id: datos.cliente_id,
+                    monto: nuevoMonto,
+                    nota: datos.nota || "Abono en caja",
+                    metodo_pago: datos.metodo_pago || "Efectivo",
+                    fecha: new Date().toISOString()
+                };
+
+                operaciones.push({
+                    action: "guardar_fila",
+                    nombreHoja: "abonos_reparaciones",
+                    datos: nuevoAbono
+                });
             }
 
             App.ui.showLoader("Registrando pago...");
-
-            const nuevoAbono = {
-                id: "ABO-" + Date.now(),
-                pedido_id: pedidoId,
-                cliente_id: datos.cliente_id,
-                monto: nuevoMonto,
-                nota: datos.nota || "Abono en caja",
-                metodo_pago: datos.metodo_pago || "Efectivo",
-                fecha: new Date().toISOString()
-            };
-
-            operaciones.push({
-                action: "guardar_fila",
-                nombreHoja: "abonos_clientes",
-                datos: nuevoAbono
-            });
 
             const res = await App.api.fetch("ejecutar_lote", { operaciones });
 
             App.ui.hideLoader();
 
             if (res.status === "success") {
-                if (!Array.isArray(App.state.abonos)) App.state.abonos = [];
-                App.state.abonos.push(nuevoAbono);
+                if (!esReparacion) {
+                    if (!Array.isArray(App.state.abonos)) App.state.abonos = [];
+                    App.state.abonos.push(nuevoAbono);
+                } else {
+                    if (!Array.isArray(App.state.abonos_reparaciones)) App.state.abonos_reparaciones = [];
+                    App.state.abonos_reparaciones.push(nuevoAbono);
+                }
 
                 App.ui.toast(saldoRealFinal <= 0.05 ? "✅ Deuda liquidada" : "Pago registrado");
                 App.router.handleRoute();
@@ -514,7 +551,15 @@ Object.assign(App.logic, {
             saldo = total - anticipo - abonos;
         } else {
             total = parseFloat(registro.precio || 0) || 0;
-            saldo = total - anticipo;
+
+            const anticipoInicial = parseFloat(registro.anticipo_inicial || 0) || 0;
+            const abonosRep = (App.state.abonos_reparaciones || [])
+                .filter(a => a.reparacion_id === registroId)
+                .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+
+            abonos = abonosRep;
+            anticipo = anticipoInicial;
+            saldo = total - anticipoInicial - abonosRep;
         }
 
         return {
@@ -879,19 +924,29 @@ Object.assign(App.logic, {
 
     imprimirReciboAbono(abonoId) {
         try {
-            const abono = (App.state.abonos || []).find(a => a.id === abonoId);
-            if (!abono) {
-                App.ui.toast("Abono no encontrado", "danger");
-                return;
+            let abono = (App.state.abonos || []).find(a => a.id === abonoId);
+            let esReparacion = false;
+            let registroId = "";
+
+            if (abono) {
+                registroId = abono.pedido_id;
+            } else {
+                abono = (App.state.abonos_reparaciones || []).find(a => a.id === abonoId);
+                if (!abono) {
+                    App.ui.toast("Abono no encontrado", "danger");
+                    return;
+                }
+                esReparacion = true;
+                registroId = abono.reparacion_id;
             }
 
-            const resumen = this._getResumenFinancieroRegistro(abono.pedido_id);
+            const resumen = this._getResumenFinancieroRegistro(registroId);
             if (!resumen) {
                 App.ui.toast("Registro relacionado no encontrado", "danger");
                 return;
             }
 
-            const { esReparacion, registro, total, anticipo, abonos, saldo, detalles } = resumen;
+            const { registro, total, anticipo, abonos, saldo } = resumen;
             const cliente = this._getClientePorRegistro(registro);
             const nombreCliente = cliente ? cliente.nombre : "Cliente general";
             const fecha = String(abono.fecha || "").split("T")[0];
@@ -999,16 +1054,8 @@ Object.assign(App.logic, {
             }
 
             const esReparacion = String(pedido.id || "").startsWith("REP-");
-            const total = parseFloat(esReparacion ? pedido.precio : pedido.total || 0);
-            const anticipo = parseFloat(pedido.anticipo || 0);
-
-            const abonosExtra = esReparacion
-                ? 0
-                : (App.state.abonos || [])
-                    .filter(a => a.pedido_id === pedido.id)
-                    .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
-
-            const saldo = total - anticipo - abonosExtra;
+            const resumen = this._getResumenFinancieroRegistro(pedido.id);
+            const saldo = resumen ? parseFloat(resumen.saldo || 0) : 0;
 
             let mensaje = "";
 
