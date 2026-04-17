@@ -596,6 +596,10 @@ Object.assign(App.logic, {
             return;
         }
 
+        window.miniGraficaIG = window.miniGraficaIG || null;
+        window.miniGraficaCP = window.miniGraficaCP || null;
+        window.miniGraficaOperacion = window.miniGraficaOperacion || null;
+
         const hoy = new Date();
         const mesActual = hoy.getMonth();
         const anioActual = hoy.getFullYear();
@@ -694,7 +698,9 @@ Object.assign(App.logic, {
 
         const ctxIG = document.getElementById("miniGraficaIngresosGastos");
         if (ctxIG) {
-            if (window.miniGraficaIG) window.miniGraficaIG.destroy();
+            if (window.miniGraficaIG && typeof window.miniGraficaIG.destroy === 'function') {
+                window.miniGraficaIG.destroy();
+            }
             window.miniGraficaIG = new Chart(ctxIG, {
                 type: "bar",
                 data: {
@@ -716,7 +722,9 @@ Object.assign(App.logic, {
 
         const ctxCP = document.getElementById("miniGraficaCobrarPagar");
         if (ctxCP) {
-            if (window.miniGraficaCP) window.miniGraficaCP.destroy();
+            if (window.miniGraficaCP && typeof window.miniGraficaCP.destroy === 'function') {
+                window.miniGraficaCP.destroy();
+            }
             window.miniGraficaCP = new Chart(ctxCP, {
                 type: "doughnut",
                 data: {
@@ -742,7 +750,9 @@ Object.assign(App.logic, {
 
         const ctxOp = document.getElementById("miniGraficaOperacion");
         if (ctxOp) {
-            if (window.miniGraficaOperacion) window.miniGraficaOperacion.destroy();
+            if (window.miniGraficaOperacion && typeof window.miniGraficaOperacion.destroy === 'function') {
+                window.miniGraficaOperacion.destroy();
+            }
             window.miniGraficaOperacion = new Chart(ctxOp, {
                 type: "bar",
                 data: {
@@ -767,7 +777,7 @@ Object.assign(App.logic, {
             });
         }
     },
-    
+
     renderGraficasFinanzas(filtro) {
         const cont = document.getElementById("finanzas-contenedor");
         if (!cont) return;
@@ -1230,7 +1240,9 @@ Object.assign(App.logic, {
 
             const ctx1 = document.getElementById("graficaFinanzas");
             if (ctx1) {
-                if (window.graficaActual) window.graficaActual.destroy();
+                if (window.graficaActual && typeof window.graficaActual.destroy === 'function') {
+                    window.graficaActual.destroy();
+                }
                 window.graficaActual = new Chart(ctx1, {
                     type: "bar",
                     data: {
@@ -1251,7 +1263,9 @@ Object.assign(App.logic, {
 
             const ctxV = document.getElementById("graficaVentasCanvas");
             if (ctxV) {
-                if (window.graficaVentasD) window.graficaVentasD.destroy();
+                if (window.graficaVentasD && typeof window.graficaVentasD.destroy === 'function') {
+                    window.graficaVentasD.destroy();
+                }
                 window.graficaVentasD = new Chart(ctxV, {
                     type: "doughnut",
                     data: {
@@ -1277,7 +1291,9 @@ Object.assign(App.logic, {
 
             const ctxG = document.getElementById("graficaGastosCanvas");
             if (ctxG) {
-                if (window.graficaGastosD) window.graficaGastosD.destroy();
+                if (window.graficaGastosD && typeof window.graficaGastosD.destroy === 'function') {
+                    window.graficaGastosD.destroy();
+                }
                 window.graficaGastosD = new Chart(ctxG, {
                     type: "doughnut",
                     data: {
