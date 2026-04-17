@@ -41,9 +41,15 @@ App.views.reparaciones = function () {
     } else {
         reparaciones.forEach(r => {
             const cliente = (App.state.clientes || []).find(c => c.id === r.cliente_id) || {};
-            const total = parseFloat(r.precio || 0);
-            const anticipo = parseFloat(r.anticipo || 0);
-            const saldo = total - anticipo;
+            const total = parseFloat(r.precio || 0) || 0;
+            const abonosRep = (App.state.abonos_reparaciones || [])
+                .filter(a => a.reparacion_id === r.id)
+                .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+
+            const anticipoInicial = parseFloat(r.anticipo_inicial || 0) || 0;
+            const totalPagado = anticipoInicial + abonosRep;
+            const saldo = total - totalPagado;
+
             const fecha = r.fecha_creacion ? String(r.fecha_creacion).split('T')[0] : '';
             const estado = String(r.estado || 'pendiente').toLowerCase();
 
@@ -80,8 +86,12 @@ App.views.reparaciones = function () {
 
                     <div class="dm-card dm-mt-3 dm-mb-3" style="background:var(--dm-surface-2); padding:10px;">
                         <div class="dm-row-between dm-text-sm">
-                            <span class="dm-muted">Anticipo:</span>
-                            <strong>$${anticipo.toFixed(2)}</strong>
+                            <span class="dm-muted">Anticipo inicial:</span>
+                            <strong>$${anticipoInicial.toFixed(2)}</strong>
+                        </div>
+                        <div class="dm-row-between dm-text-sm">
+                            <span class="dm-muted">Abonos registrados:</span>
+                            <strong>$${abonosRep.toFixed(2)}</strong>
                         </div>
                     </div>
 
@@ -145,13 +155,13 @@ App.views.formReparacion = function (id = null) {
                 </div>
 
                 <div class="dm-form-group">
-                    <label class="dm-label">Anticipo ($)</label>
+                    <label class="dm-label">Anticipo inicial ($)</label>
                     <input
                         type="number"
                         step="0.01"
                         class="dm-input"
                         name="anticipo"
-                        value="${obj ? (obj.anticipo || 0) : 0}"
+                        value="${obj ? (obj.anticipo_inicial || obj.anticipo || 0) : 0}"
                         required
                     >
                 </div>
@@ -187,7 +197,12 @@ App.views.formReparacion = function (id = null) {
 
     App.ui.openSheet(obj ? 'Editar Reparación' : 'Nueva Reparación', formHTML, (data) => {
         if (obj) {
-            App.logic.actualizarRegistroGenerico('reparaciones', id, data, 'reparaciones');
+            const datosEdit = { ...data };
+            if (datosEdit.anticipo !== undefined) {
+                datosEdit.anticipo_inicial = parseFloat(datosEdit.anticipo || 0);
+                datosEdit.anticipo = parseFloat(datosEdit.anticipo || 0);
+            }
+            App.logic.actualizarRegistroGenerico('reparaciones', id, datosEdit, 'reparaciones');
         } else {
             App.logic.guardarReparacion(data);
         }
@@ -225,21 +240,14 @@ App.views.modalAbonosReparacion = function(reparacionId) {
     const reparacion = (App.state.reparaciones || []).find(x => x.id === reparacionId);
     if (!reparacion) return;
 
-    const total = parseFloat(reparacion.precio || 0);
-    const anticipoActual = parseFloat(reparacion.anticipo || 0);
-    const saldo = total - anticipoActual;
+    const total = parseFloat(reparacion.precio || 0) || 0;
+    const anticipoInicial = parseFloat(reparacion.anticipo_inicial || 0) || 0;
+    const abonos = (App.state.abonos_reparaciones || [])
+        .filter(a => a.reparacion_id === reparacionId)
+        .sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
 
-    const movimientos = [];
-
-    if (anticipoActual > 0) {
-        movimientos.push({
-            id: 'ANTICIPO-INICIAL',
-            monto: anticipoActual,
-            metodo_pago: 'Anticipo acumulado',
-            fecha: reparacion.fecha_creacion || '',
-            esAnticipo: true
-        });
-    }
+    const totalAbonos = abonos.reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+    const saldo = total - anticipoInicial - totalAbonos;
 
     let html = `
         <div class="dm-alert dm-alert-info dm-mb-4">
@@ -247,24 +255,45 @@ App.views.modalAbonosReparacion = function(reparacionId) {
         </div>
     `;
 
-    if (movimientos.length > 0) {
+    html += `
+        <div class="dm-card dm-mb-4" style="background:var(--dm-surface-2); padding:10px;">
+            <div class="dm-row-between dm-text-sm">
+                <span class="dm-muted">Anticipo inicial:</span>
+                <strong>$${anticipoInicial.toFixed(2)}</strong>
+            </div>
+            <div class="dm-row-between dm-text-sm">
+                <span class="dm-muted">Abonos registrados:</span>
+                <strong>$${totalAbonos.toFixed(2)}</strong>
+            </div>
+        </div>
+    `;
+
+    if (abonos.length > 0) {
         html += `<div class="dm-list dm-mb-4">`;
-        movimientos.forEach(m => {
-            const fecha = m.fecha ? String(m.fecha).split('T')[0] : '';
+        abonos.forEach(a => {
+            const fecha = a.fecha ? String(a.fecha).split('T')[0] : '';
             html += `
                 <div class="dm-list-card" style="padding:10px;">
                     <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
                         <div style="flex:1;">
-                            <strong>$${parseFloat(m.monto || 0).toFixed(2)}</strong>
-                            <div class="dm-text-sm dm-muted">${App.ui.safe(m.metodo_pago || '')}</div>
+                            <strong>$${parseFloat(a.monto || 0).toFixed(2)}</strong>
+                            <div class="dm-text-sm dm-muted">${a.metodo_pago ? App.ui.safe(a.metodo_pago) : ''}</div>
                             ${fecha ? `<div class="dm-text-sm dm-muted">${fecha}</div>` : ''}
                         </div>
 
                         <div class="dm-list-card-actions" style="margin-top:0; justify-content:flex-end;">
-                            ${!m.esAnticipo
-                                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboAbono('${m.id}')">🧾</button>`
-                                : ''
-                            }
+                            <button
+                                class="dm-btn dm-btn-secondary dm-btn-sm"
+                                onclick="App.logic.imprimirReciboAbono('${a.id}')"
+                            >
+                                🧾
+                            </button>
+                            <button
+                                class="dm-btn dm-btn-danger dm-btn-sm"
+                                onclick="App.logic.eliminarRegistroGenerico('abonos_reparaciones','${a.id}','abonos_reparaciones')"
+                            >
+                                X
+                            </button>
                         </div>
                     </div>
                 </div>
