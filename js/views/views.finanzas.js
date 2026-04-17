@@ -15,10 +15,13 @@ App.views.finanzas = function() {
     if (subtitle) subtitle.innerText = 'Dashboard ejecutivo y flujo de caja';
 
     setTimeout(() => {
+        if (App.logic?.renderMiniGraficasDashboard) {
+            App.logic.renderMiniGraficasDashboard();
+        }
         if (App.logic?.renderGraficasFinanzas) {
             App.logic.renderGraficasFinanzas('mes_actual');
         }
-    }, 60);
+    }, 80);
 
     const hoy = new Date();
     const mesActual = hoy.getMonth();
@@ -192,6 +195,44 @@ App.views.finanzas = function() {
                     <div class="dm-kpi-label" style="color:#2F855A;">Ingresos del mes</div>
                     <div class="dm-kpi-value" style="color:#38A169; font-size:1.5rem;">$${ingresosMes.toFixed(2)}</div>
                     <div class="dm-text-sm dm-muted dm-mt-2">Anticipos y abonos registrados en el mes</div>
+                </div>
+            </div>
+
+            <div class="dm-grid dm-grid-3 dm-mb-4">
+                <div class="dm-card">
+                    <div class="dm-card-header">
+                        <div>
+                            <div class="dm-card-title">Mini: ingresos vs gastos</div>
+                            <div class="dm-card-subtitle">Visión rápida del mes</div>
+                        </div>
+                    </div>
+                    <div style="position:relative; width:100%; height:180px;">
+                        <canvas id="miniGraficaIngresosGastos"></canvas>
+                    </div>
+                </div>
+
+                <div class="dm-card">
+                    <div class="dm-card-header">
+                        <div>
+                            <div class="dm-card-title">Mini: por cobrar vs por pagar</div>
+                            <div class="dm-card-subtitle">Presión financiera</div>
+                        </div>
+                    </div>
+                    <div style="position:relative; width:100%; height:180px;">
+                        <canvas id="miniGraficaCobrarPagar"></canvas>
+                    </div>
+                </div>
+
+                <div class="dm-card">
+                    <div class="dm-card-header">
+                        <div>
+                            <div class="dm-card-title">Mini: operación activa</div>
+                            <div class="dm-card-subtitle">Pedidos, reparaciones y listos</div>
+                        </div>
+                    </div>
+                    <div style="position:relative; width:100%; height:180px;">
+                        <canvas id="miniGraficaOperacion"></canvas>
+                    </div>
                 </div>
             </div>
 
