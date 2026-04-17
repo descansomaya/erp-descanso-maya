@@ -749,8 +749,10 @@ Object.assign(App.logic, {
             const clase = clasificarFecha(r.fecha_creacion);
             if (clase === "fuera") return;
 
+            const anticipoInicial = parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0;
+
             metrics[clase].ventas += parseFloat(r.precio || 0);
-            metrics[clase].ingresos += parseFloat(r.anticipo || 0);
+            metrics[clase].ingresos += anticipoInicial;
 
             if (clase === "actual") {
                 metrics.actual.desglVentas["Reparaciones"] = (metrics.actual.desglVentas["Reparaciones"] || 0) + parseFloat(r.precio || 0);
@@ -758,6 +760,13 @@ Object.assign(App.logic, {
         });
 
         (App.state.abonos || []).forEach((a) => {
+            const clase = clasificarFecha(a.fecha);
+            if (clase !== "fuera") {
+                metrics[clase].ingresos += parseFloat(a.monto || 0);
+            }
+        });
+
+        (App.state.abonos_reparaciones || []).forEach((a) => {
             const clase = clasificarFecha(a.fecha);
             if (clase !== "fuera") {
                 metrics[clase].ingresos += parseFloat(a.monto || 0);
@@ -841,7 +850,12 @@ Object.assign(App.logic, {
         });
 
         (App.state.reparaciones || []).forEach((r) => {
-            const sal = parseFloat(r.precio || 0) - parseFloat(r.anticipo || 0);
+            const anticipoInicial = parseFloat(r.anticipo_inicial || 0) || 0;
+            const abonosRep = (App.state.abonos_reparaciones || [])
+                .filter(a => a.reparacion_id === r.id)
+                .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+
+            const sal = parseFloat(r.precio || 0) - anticipoInicial - abonosRep;
             if (sal > 0) xCobrarGlobal += sal;
         });
 
@@ -989,7 +1003,10 @@ Object.assign(App.logic, {
         cont.innerHTML = html;
 
         setTimeout(() => {
-            if (!window.Chart) return;
+            if (!window.Chart) {
+                console.warn("Chart.js no está cargado.");
+                return;
+            }
 
             const colores = ["#4C51BF", "#ED8936", "#38B2AC", "#E53E3E", "#ECC94B", "#805AD5", "#3182CE", "#2F855A"];
 
