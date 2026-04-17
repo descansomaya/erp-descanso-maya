@@ -46,9 +46,10 @@ App.views.pedidos = function() {
 
 window.generarListaPedidos = function(tipo) {
     let pedidos = (App.state.pedidos || []).filter(p => {
-        if (tipo === 'activos') return p.estado !== 'entregado' && p.estado !== 'listo para entregar';
-        if (tipo === 'listos') return p.estado === 'listo para entregar';
-        return p.estado === 'entregado' || p.estado === 'pagado';
+        const estado = String(p.estado || '').toLowerCase();
+        if (tipo === 'activos') return estado !== 'entregado' && estado !== 'listo para entregar' && estado !== 'pagado';
+        if (tipo === 'listos') return estado === 'listo para entregar';
+        return estado === 'entregado' || estado === 'pagado';
     });
 
     if (pedidos.length === 0) {
@@ -74,6 +75,23 @@ window.generarListaPedidos = function(tipo) {
         let estColor = 'dm-badge-primary';
         if (estado === 'entregado' || estado === 'pagado') estColor = 'dm-badge-success';
         else if (estado === 'listo para entregar') estColor = 'dm-badge-warning';
+
+        const accionesOperativas = `
+            ${estado !== 'listo para entregar' && estado !== 'entregado' && estado !== 'pagado'
+                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.marcarPedidoListo('${p.id}')">📦 Listo</button>`
+                : ''
+            }
+
+            ${estado === 'listo para entregar' || estado === 'pagado'
+                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.marcarPedidoEntregado('${p.id}')">🚚 Entregado</button>`
+                : ''
+            }
+
+            ${saldo <= 0.05 && estado !== 'pagado'
+                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.cerrarPedidoSiLiquidado('${p.id}')">🔒 Cerrar</button>`
+                : ''
+            }
+        `;
 
         html += `
             <div class="dm-list-card">
@@ -110,7 +128,7 @@ window.generarListaPedidos = function(tipo) {
                     </div>
                 </div>
 
-                <div class="dm-list-card-actions">
+                <div class="dm-list-card-actions" style="flex-wrap:wrap;">
                     <button class="dm-btn dm-btn-info dm-btn-sm" onclick="App.views.modalDetallesPedido('${p.id}')">📦 Detalles</button>
                     <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formPedido('${p.id}')">✏️ Editar</button>
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💳 Abonos</button>
@@ -118,6 +136,7 @@ window.generarListaPedidos = function(tipo) {
                     ${ultimoAbono ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboAbono('${ultimoAbono.id}')">🧾 Últ. abono</button>` : ''}
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboLiquidacion('${p.id}')">✅ Liquidación</button>
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.enviarWhatsApp('${p.id}', '${p.estado === 'listo para entregar' ? 'listo' : 'cobro'}')">💬 WhatsApp</button>
+                    ${accionesOperativas}
                 </div>
             </div>
         `;
@@ -394,6 +413,11 @@ App.views.modalDetallesPedido = function(pedidoId) {
         return;
     }
 
+    const saldo = parseFloat(pedido.total || 0) - parseFloat(pedido.anticipo || 0) -
+        abonosLista.reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+
+    const estado = String(pedido.estado || '').toLowerCase();
+
     let html = `<div class="dm-list">`;
 
     detalles.forEach(d => {
@@ -418,6 +442,21 @@ App.views.modalDetallesPedido = function(pedidoId) {
             ${ultimoAbono ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboAbono('${ultimoAbono.id}')">🧾 Últ. abono</button>` : ''}
             <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboLiquidacion('${pedidoId}')">✅ Liquidación</button>
             <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.enviarWhatsApp('${pedidoId}', 'cobro')">💬 WhatsApp</button>
+
+            ${estado !== 'listo para entregar' && estado !== 'entregado' && estado !== 'pagado'
+                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.marcarPedidoListo('${pedidoId}')">📦 Listo</button>`
+                : ''
+            }
+
+            ${estado === 'listo para entregar' || estado === 'pagado'
+                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.marcarPedidoEntregado('${pedidoId}')">🚚 Entregado</button>`
+                : ''
+            }
+
+            ${saldo <= 0.05 && estado !== 'pagado'
+                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.cerrarPedidoSiLiquidado('${pedidoId}')">🔒 Cerrar</button>`
+                : ''
+            }
         </div>
     `;
 
