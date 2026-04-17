@@ -88,6 +88,7 @@ App.views.reparaciones = function () {
                     <div class="dm-list-card-actions" style="flex-wrap:wrap;">
                         <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formReparacion('${r.id}')">✏️ Editar</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.cambiarEstadoReparacion('${r.id}')">🔄 Estado</button>
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonosReparacion('${r.id}')">💳 Abonos</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirNota('${r.id}')">🖨️ Nota</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboLiquidacion('${r.id}')">✅ Liquidación</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.enviarWhatsApp('${r.id}', 'cobro')">💬 WhatsApp</button>
@@ -217,5 +218,102 @@ App.views.cambiarEstadoReparacion = function (id) {
 
     App.ui.openSheet('Cambiar estado', formHTML, (data) => {
         App.logic.actualizarRegistroGenerico('reparaciones', id, data, 'reparaciones');
+    });
+};
+
+App.views.modalAbonosReparacion = function(reparacionId) {
+    const reparacion = (App.state.reparaciones || []).find(x => x.id === reparacionId);
+    if (!reparacion) return;
+
+    const total = parseFloat(reparacion.precio || 0);
+    const anticipoActual = parseFloat(reparacion.anticipo || 0);
+    const saldo = total - anticipoActual;
+
+    const movimientos = [];
+
+    if (anticipoActual > 0) {
+        movimientos.push({
+            id: 'ANTICIPO-INICIAL',
+            monto: anticipoActual,
+            metodo_pago: 'Anticipo acumulado',
+            fecha: reparacion.fecha_creacion || '',
+            esAnticipo: true
+        });
+    }
+
+    let html = `
+        <div class="dm-alert dm-alert-info dm-mb-4">
+            Saldo pendiente: $${saldo.toFixed(2)}
+        </div>
+    `;
+
+    if (movimientos.length > 0) {
+        html += `<div class="dm-list dm-mb-4">`;
+        movimientos.forEach(m => {
+            const fecha = m.fecha ? String(m.fecha).split('T')[0] : '';
+            html += `
+                <div class="dm-list-card" style="padding:10px;">
+                    <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
+                        <div style="flex:1;">
+                            <strong>$${parseFloat(m.monto || 0).toFixed(2)}</strong>
+                            <div class="dm-text-sm dm-muted">${App.ui.safe(m.metodo_pago || '')}</div>
+                            ${fecha ? `<div class="dm-text-sm dm-muted">${fecha}</div>` : ''}
+                        </div>
+
+                        <div class="dm-list-card-actions" style="margin-top:0; justify-content:flex-end;">
+                            ${!m.esAnticipo
+                                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboAbono('${m.id}')">🧾</button>`
+                                : ''
+                            }
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        html += `</div>`;
+    }
+
+    if (saldo > 0) {
+        html += `
+            <form id="dynamic-form">
+                <input type="hidden" name="pedido_id" value="${reparacionId}">
+                <input type="hidden" name="cliente_id" value="${reparacion.cliente_id || ''}">
+
+                <div class="dm-form-row">
+                    <div class="dm-form-group">
+                        <label class="dm-label">Abonar ($)</label>
+                        <input
+                            type="number"
+                            step="0.01"
+                            class="dm-input"
+                            name="monto"
+                            max="${saldo}"
+                            required
+                        >
+                    </div>
+
+                    <div class="dm-form-group">
+                        <label class="dm-label">Método</label>
+                        <select class="dm-select" name="metodo_pago">
+                            <option value="Efectivo">Efectivo</option>
+                            <option value="Transferencia">Transferencia</option>
+                            <option value="Tarjeta">Tarjeta</option>
+                        </select>
+                    </div>
+                </div>
+
+                <input type="hidden" name="fecha" value="${new Date().toISOString()}">
+
+                <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
+                    Registrar Abono
+                </button>
+            </form>
+        `;
+    }
+
+    App.ui.openSheet('Abonos de Reparación', html, (data) => {
+        if (saldo > 0) {
+            App.logic.guardarAbono(data);
+        }
     });
 };
