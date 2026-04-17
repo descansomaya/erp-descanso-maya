@@ -590,6 +590,184 @@ Object.assign(App.logic, {
         this.imprimirComprobantePagoMasivo(ids, "Comprobante de pagos seleccionados");
     },
 
+    renderMiniGraficasDashboard() {
+        if (!window.Chart) {
+            console.warn("Chart.js no está cargado para mini gráficas.");
+            return;
+        }
+
+        const hoy = new Date();
+        const mesActual = hoy.getMonth();
+        const anioActual = hoy.getFullYear();
+
+        const esMismoMes = (fechaStr) => {
+            if (!fechaStr) return false;
+            const f = new Date(fechaStr);
+            return !isNaN(f.getTime()) && f.getMonth() === mesActual && f.getFullYear() === anioActual;
+        };
+
+        const pedidos = App.state.pedidos || [];
+        const reparaciones = App.state.reparaciones || [];
+        const abonos = App.state.abonos || [];
+        const abonosReparaciones = App.state.abonos_reparaciones || [];
+        const gastos = App.state.gastos || [];
+        const pagosArtesanos = App.state.pago_artesanos || [];
+        const compras = App.state.compras || [];
+
+        const ingresosMesPedidos = pedidos
+            .filter(p => esMismoMes(p.fecha_creacion))
+            .reduce((acc, p) => acc + (parseFloat(p.anticipo || 0) || 0), 0);
+
+        const ingresosMesAbonos = abonos
+            .filter(a => esMismoMes(a.fecha))
+            .reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0);
+
+        const ingresosMesReparacionesInicial = reparaciones
+            .filter(r => esMismoMes(r.fecha_creacion))
+            .reduce((acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0), 0);
+
+        const ingresosMesAbonosReparacion = abonosReparaciones
+            .filter(a => esMismoMes(a.fecha))
+            .reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0);
+
+        const ingresosMes = ingresosMesPedidos + ingresosMesAbonos + ingresosMesReparacionesInicial + ingresosMesAbonosReparacion;
+
+        const gastosMes = gastos
+            .filter(g => esMismoMes(g.fecha))
+            .reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
+
+        const porCobrarPedidos = pedidos.reduce((acc, p) => {
+            const totalAbonos = abonos
+                .filter(a => a.pedido_id === p.id)
+                .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+
+            const saldo = (parseFloat(p.total || 0) || 0) - (parseFloat(p.anticipo || 0) || 0) - totalAbonos;
+            return acc + (saldo > 0 ? saldo : 0);
+        }, 0);
+
+        const porCobrarReparaciones = reparaciones.reduce((acc, r) => {
+            const anticipoInicial = parseFloat(r.anticipo_inicial || 0) || 0;
+            const totalAbonosRep = abonosReparaciones
+                .filter(a => a.reparacion_id === r.id)
+                .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+
+            const saldo = (parseFloat(r.precio || 0) || 0) - anticipoInicial - totalAbonosRep;
+            return acc + (saldo > 0 ? saldo : 0);
+        }, 0);
+
+        const porPagarArtesanos = pagosArtesanos
+            .filter(p => String(p.estado || '').toLowerCase() === 'pendiente')
+            .reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+
+        const porPagarCompras = compras.reduce((acc, c) => {
+            const total = parseFloat(c.total || 0) || 0;
+            const pagado = c.monto_pagado !== undefined && c.monto_pagado !== ''
+                ? parseFloat(c.monto_pagado || 0)
+                : total;
+            const deuda = total - pagado;
+            return acc + (deuda > 0 ? deuda : 0);
+        }, 0);
+
+        const totalPorCobrar = porCobrarPedidos + porCobrarReparaciones;
+        const totalPorPagar = porPagarArtesanos + porPagarCompras;
+
+        const pedidosActivos = pedidos.filter(p => {
+            const e = String(p.estado || '').toLowerCase();
+            return e !== 'entregado' && e !== 'pagado';
+        }).length;
+
+        const reparacionesActivas = reparaciones.filter(r => {
+            const e = String(r.estado || '').toLowerCase();
+            return e !== 'entregada';
+        }).length;
+
+        const listos = pedidos.filter(p => String(p.estado || '').toLowerCase() === 'listo para entregar').length
+            + reparaciones.filter(r => String(r.estado || '').toLowerCase() === 'lista').length;
+
+        const baseOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            }
+        };
+
+        const ctxIG = document.getElementById("miniGraficaIngresosGastos");
+        if (ctxIG) {
+            if (window.miniGraficaIG) window.miniGraficaIG.destroy();
+            window.miniGraficaIG = new Chart(ctxIG, {
+                type: "bar",
+                data: {
+                    labels: ["Ingresos", "Gastos"],
+                    datasets: [{
+                        data: [ingresosMes, gastosMes],
+                        backgroundColor: ["#38A169", "#E53E3E"],
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    ...baseOptions,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        const ctxCP = document.getElementById("miniGraficaCobrarPagar");
+        if (ctxCP) {
+            if (window.miniGraficaCP) window.miniGraficaCP.destroy();
+            window.miniGraficaCP = new Chart(ctxCP, {
+                type: "doughnut",
+                data: {
+                    labels: ["Por cobrar", "Por pagar"],
+                    datasets: [{
+                        data: [totalPorCobrar, totalPorPagar],
+                        backgroundColor: ["#D69E2E", "#805AD5"]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: "bottom",
+                            labels: { boxWidth: 12, font: { size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        const ctxOp = document.getElementById("miniGraficaOperacion");
+        if (ctxOp) {
+            if (window.miniGraficaOperacion) window.miniGraficaOperacion.destroy();
+            window.miniGraficaOperacion = new Chart(ctxOp, {
+                type: "bar",
+                data: {
+                    labels: ["Pedidos", "Reparaciones", "Listos"],
+                    datasets: [{
+                        data: [pedidosActivos, reparacionesActivas, listos],
+                        backgroundColor: ["#3182CE", "#805AD5", "#D69E2E"],
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+    },
+    
     renderGraficasFinanzas(filtro) {
         const cont = document.getElementById("finanzas-contenedor");
         if (!cont) return;
