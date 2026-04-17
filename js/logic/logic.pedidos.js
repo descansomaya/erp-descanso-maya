@@ -503,6 +503,61 @@ Object.assign(App.logic, {
         }
     },
 
+    async eliminarAbonoReparacion(abonoId, reparacionId) {
+        try {
+            if (!confirm("⚠️ ¿Eliminar este abono de reparación?")) return;
+
+            const reparacion = (App.state.reparaciones || []).find(r => r.id === reparacionId);
+            const abono = (App.state.abonos_reparaciones || []).find(a => a.id === abonoId);
+
+            if (!reparacion || !abono) {
+                App.ui.toast("No se encontró el abono o la reparación", "danger");
+                return;
+            }
+
+            const anticipoInicial = parseFloat(reparacion.anticipo_inicial || 0) || 0;
+            const abonosRestantes = (App.state.abonos_reparaciones || [])
+                .filter(a => a.reparacion_id === reparacionId && a.id !== abonoId)
+                .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+
+            const nuevoAcumulado = anticipoInicial + abonosRestantes;
+
+            App.ui.showLoader("Eliminando abono...");
+
+            const operaciones = [
+                {
+                    action: "eliminar_fila",
+                    nombreHoja: "abonos_reparaciones",
+                    idFila: abonoId
+                },
+                {
+                    action: "actualizar_fila",
+                    nombreHoja: "reparaciones",
+                    idFila: reparacionId,
+                    datosNuevos: { anticipo: nuevoAcumulado }
+                }
+            ];
+
+            const res = await App.api.fetch("ejecutar_lote", { operaciones });
+
+            App.ui.hideLoader();
+
+            if (res.status === "success") {
+                App.state.abonos_reparaciones = (App.state.abonos_reparaciones || []).filter(a => a.id !== abonoId);
+                reparacion.anticipo = nuevoAcumulado;
+
+                App.ui.toast("Abono eliminado");
+                App.router.handleRoute();
+            } else {
+                App.ui.toast(res.message || "Error al eliminar abono", "danger");
+            }
+        } catch (error) {
+            console.error("Error en eliminarAbonoReparacion:", error);
+            App.ui.hideLoader();
+            App.ui.toast(error.message || "Error al eliminar abono", "danger");
+        }
+    },
+
     _getClientePorRegistro(registro) {
         return (App.state.clientes || []).find(c => c.id === registro?.cliente_id) || null;
     },
