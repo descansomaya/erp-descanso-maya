@@ -18,15 +18,18 @@ App.views.cobranza = function() {
     const clientes = App.state.clientes || [];
     const abonos = App.state.abonos || [];
     const reparaciones = App.state.reparaciones || [];
+    const abonosReparaciones = App.state.abonos_reparaciones || [];
 
     let listosConDeuda = [];
     let enProcesoConDeuda = [];
     let totalPorCobrar = 0;
 
     pedidos.forEach(p => {
-        const abonosPedido = abonos
-            .filter(a => a.pedido_id === p.id)
-            .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+        const abonosPedidoLista = abonos.filter(a => a.pedido_id === p.id);
+        const abonosPedido = abonosPedidoLista.reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+        const ultimoAbono = abonosPedidoLista.length
+            ? [...abonosPedidoLista].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))[0]
+            : null;
 
         const saldo = parseFloat(p.total || 0) - parseFloat(p.anticipo || 0) - abonosPedido;
 
@@ -69,7 +72,7 @@ App.views.cobranza = function() {
                         </div>
                     </div>
 
-                    <div class="dm-list-card-actions">
+                    <div class="dm-list-card-actions" style="flex-wrap:wrap;">
                         <button
                             class="dm-btn dm-btn-primary dm-btn-sm"
                             style="background:var(--success); border-color:var(--success);"
@@ -83,6 +86,22 @@ App.views.cobranza = function() {
                             onclick="App.logic.imprimirNota('${p.id}')"
                         >
                             🖨️ Nota
+                        </button>
+
+                        ${ultimoAbono ? `
+                            <button
+                                class="dm-btn dm-btn-secondary dm-btn-sm"
+                                onclick="App.logic.imprimirReciboAbono('${ultimoAbono.id}')"
+                            >
+                                🧾 Últ. abono
+                            </button>
+                        ` : ''}
+
+                        <button
+                            class="dm-btn dm-btn-secondary dm-btn-sm"
+                            onclick="App.logic.imprimirReciboLiquidacion('${p.id}')"
+                        >
+                            ✅ Liquidación
                         </button>
 
                         ${c && c.telefono ? `
@@ -106,7 +125,18 @@ App.views.cobranza = function() {
     reparaciones.forEach(r => {
         const c = clientes.find(cli => cli.id === r.cliente_id);
         const nombreCli = c ? c.nombre : 'Cliente';
-        const saldo = parseFloat(r.precio || 0) - parseFloat(r.anticipo || 0);
+
+        const abonosRepLista = abonosReparaciones
+            .filter(a => a.reparacion_id === r.id);
+
+        const totalAbonosRep = abonosRepLista.reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+        const ultimoAbonoRep = abonosRepLista.length
+            ? [...abonosRepLista].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))[0]
+            : null;
+
+        const anticipoInicial = parseFloat(r.anticipo_inicial || 0) || 0;
+        const totalPagado = anticipoInicial + totalAbonosRep;
+        const saldo = parseFloat(r.precio || 0) - totalPagado;
 
         if (saldo > 0) {
             totalPorCobrar += saldo;
@@ -140,12 +170,12 @@ App.views.cobranza = function() {
                             <strong>$${parseFloat(r.precio || 0).toFixed(2)}</strong>
                         </div>
                         <div class="dm-row-between dm-text-sm">
-                            <span class="dm-muted">Anticipo:</span>
-                            <strong>$${parseFloat(r.anticipo || 0).toFixed(2)}</strong>
+                            <span class="dm-muted">Pagado:</span>
+                            <strong>$${totalPagado.toFixed(2)}</strong>
                         </div>
                     </div>
 
-                    <div class="dm-list-card-actions">
+                    <div class="dm-list-card-actions" style="flex-wrap:wrap;">
                         <button
                             class="dm-btn dm-btn-primary dm-btn-sm"
                             style="background:var(--success); border-color:var(--success);"
@@ -159,6 +189,22 @@ App.views.cobranza = function() {
                             onclick="App.logic.imprimirNota('${r.id}')"
                         >
                             🖨️ Nota
+                        </button>
+
+                        ${ultimoAbonoRep ? `
+                            <button
+                                class="dm-btn dm-btn-secondary dm-btn-sm"
+                                onclick="App.logic.imprimirReciboAbono('${ultimoAbonoRep.id}')"
+                            >
+                                🧾 Últ. abono
+                            </button>
+                        ` : ''}
+
+                        <button
+                            class="dm-btn dm-btn-secondary dm-btn-sm"
+                            onclick="App.logic.imprimirReciboLiquidacion('${r.id}')"
+                        >
+                            ✅ Liquidación
                         </button>
 
                         ${c && c.telefono ? `
