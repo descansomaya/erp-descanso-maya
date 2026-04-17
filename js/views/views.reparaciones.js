@@ -58,6 +58,23 @@ App.views.reparaciones = function () {
             if (estado === 'lista' || estado === 'entregada') estColor = 'dm-badge-success';
             else if (estado === 'proceso') estColor = 'dm-badge-warning';
 
+            const accionesOperativas = `
+                ${estado !== 'lista' && estado !== 'entregada'
+                    ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.marcarReparacionLista('${r.id}')">🪡 Lista</button>`
+                    : ''
+                }
+
+                ${estado === 'lista'
+                    ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.marcarReparacionEntregada('${r.id}')">🚚 Entregada</button>`
+                    : ''
+                }
+
+                ${saldo <= 0.05 && estado !== 'entregada'
+                    ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.cerrarReparacionSiLiquidada('${r.id}')">🔒 Cerrar</button>`
+                    : ''
+                }
+            `;
+
             html += `
                 <div class="dm-list-card tarj-rep">
                     <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
@@ -102,7 +119,8 @@ App.views.reparaciones = function () {
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonosReparacion('${r.id}')">💳 Abonos</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirNota('${r.id}')">🖨️ Nota</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboLiquidacion('${r.id}')">✅ Liquidación</button>
-                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.enviarWhatsApp('${r.id}', 'cobro')">💬 WhatsApp</button>
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.enviarWhatsApp('${r.id}', '${r.estado === 'lista' || r.estado === 'entregada' ? 'listo' : 'cobro'}')">💬 WhatsApp</button>
+                        ${accionesOperativas}
                         <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.eliminarReparacion('${r.id}')">🗑️</button>
                     </div>
                 </div>
