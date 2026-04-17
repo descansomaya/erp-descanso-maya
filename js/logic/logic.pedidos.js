@@ -482,6 +482,130 @@ Object.assign(App.logic, {
         }
     },
 
+        async marcarReparacionLista(reparacionId) {
+        try {
+            const reparacion = (App.state.reparaciones || []).find(r => r.id === reparacionId);
+            if (!reparacion) {
+                App.ui.toast("Reparación no encontrada", "danger");
+                return;
+            }
+
+            if (reparacion.estado === "lista") {
+                App.ui.toast("La reparación ya está marcada como lista", "warning");
+                return;
+            }
+
+            if (!confirm("¿Marcar esta reparación como lista?")) return;
+
+            App.ui.showLoader("Actualizando estado...");
+
+            const res = await App.api.fetch("actualizar_fila", {
+                nombreHoja: "reparaciones",
+                idFila: reparacionId,
+                datosNuevos: { estado: "lista" }
+            });
+
+            App.ui.hideLoader();
+
+            if (res.status === "success") {
+                reparacion.estado = "lista";
+                App.ui.toast("Reparación marcada como lista");
+                App.router.handleRoute();
+            } else {
+                App.ui.toast(res.message || "Error al actualizar reparación", "danger");
+            }
+        } catch (error) {
+            console.error("Error en marcarReparacionLista:", error);
+            App.ui.hideLoader();
+            App.ui.toast(error.message || "Error al actualizar reparación", "danger");
+        }
+    },
+
+    async marcarReparacionEntregada(reparacionId) {
+        try {
+            const reparacion = (App.state.reparaciones || []).find(r => r.id === reparacionId);
+            if (!reparacion) {
+                App.ui.toast("Reparación no encontrada", "danger");
+                return;
+            }
+
+            if (reparacion.estado !== "lista" && reparacion.estado !== "entregada") {
+                App.ui.toast("Primero marca la reparación como lista", "warning");
+                return;
+            }
+
+            if (reparacion.estado === "entregada") {
+                App.ui.toast("La reparación ya está marcada como entregada", "warning");
+                return;
+            }
+
+            if (!confirm("¿Marcar esta reparación como entregada?")) return;
+
+            App.ui.showLoader("Cerrando entrega...");
+
+            const res = await App.api.fetch("actualizar_fila", {
+                nombreHoja: "reparaciones",
+                idFila: reparacionId,
+                datosNuevos: { estado: "entregada" }
+            });
+
+            App.ui.hideLoader();
+
+            if (res.status === "success") {
+                reparacion.estado = "entregada";
+                App.ui.toast("Reparación marcada como entregada");
+                App.router.handleRoute();
+            } else {
+                App.ui.toast(res.message || "Error al marcar entregada", "danger");
+            }
+        } catch (error) {
+            console.error("Error en marcarReparacionEntregada:", error);
+            App.ui.hideLoader();
+            App.ui.toast(error.message || "Error al marcar entregada", "danger");
+        }
+    },
+
+    async cerrarReparacionSiLiquidada(reparacionId) {
+        try {
+            const resumen = this._getResumenFinancieroRegistro(reparacionId);
+            if (!resumen || !resumen.esReparacion) {
+                App.ui.toast("Reparación no encontrada", "danger");
+                return;
+            }
+
+            if (parseFloat(resumen.saldo || 0) > 0.05) {
+                App.ui.toast(`Aún hay saldo pendiente de $${parseFloat(resumen.saldo).toFixed(2)}`, "warning");
+                return;
+            }
+
+            const reparacion = resumen.registro;
+
+            if (!confirm("¿Cerrar esta reparación como entregada y liquidada?")) return;
+
+            App.ui.showLoader("Cerrando reparación...");
+
+            const res = await App.api.fetch("actualizar_fila", {
+                nombreHoja: "reparaciones",
+                idFila: reparacionId,
+                datosNuevos: { estado: "entregada" }
+            });
+
+            App.ui.hideLoader();
+
+            if (res.status === "success") {
+                reparacion.estado = "entregada";
+                App.ui.toast("Reparación liquidada y cerrada");
+                App.router.handleRoute();
+            } else {
+                App.ui.toast(res.message || "Error al cerrar reparación", "danger");
+            }
+        } catch (error) {
+            console.error("Error en cerrarReparacionSiLiquidada:", error);
+            App.ui.hideLoader();
+            App.ui.toast(error.message || "Error al cerrar reparación", "danger");
+        }
+    },
+
     async guardarAbono(datos) {
         try {
             const registroId = datos.pedido_id || "";
