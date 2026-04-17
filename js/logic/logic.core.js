@@ -40,6 +40,7 @@ Object.assign(App.logic, {
                 "ordenes_produccion",
                 "artesanos",
                 "abonos_clientes",
+                "abonos_reparaciones",
                 "gastos",
                 "compras",
                 "proveedores",
@@ -67,6 +68,7 @@ Object.assign(App.logic, {
             App.state.ordenes_produccion = bd["ordenes_produccion"] || [];
             App.state.artesanos = bd["artesanos"] || [];
             App.state.abonos = bd["abonos_clientes"] || [];
+            App.state.abonos_reparaciones = bd["abonos_reparaciones"] || [];
             App.state.gastos = bd["gastos"] || [];
             App.state.compras = bd["compras"] || [];
             App.state.proveedores = bd["proveedores"] || [];
@@ -114,6 +116,7 @@ Object.assign(App.logic, {
             { nombre: "ordenes_produccion_artesanos", state: "ordenes_produccion_artesanos" },
             { nombre: "artesanos", state: "artesanos" },
             { nombre: "abonos_clientes", state: "abonos" },
+            { nombre: "abonos_reparaciones", state: "abonos_reparaciones" },
             { nombre: "gastos", state: "gastos" },
             { nombre: "compras", state: "compras" },
             { nombre: "proveedores", state: "proveedores" },
@@ -253,6 +256,23 @@ Object.assign(App.logic, {
                         <div>
                             <strong style="color:var(--primary);">${p.id}</strong><br>
                             <small style="color:var(--text-muted);">Pedido en estado: ${p.estado}</small>
+                        </div>
+                    </div>
+                `);
+            }
+        });
+
+        (App.state.reparaciones || []).forEach(r => {
+            const idRep = String(r.id || "").toLowerCase();
+            const desc = String(r.descripcion || "").toLowerCase();
+            if (idRep.includes(q) || desc.includes(q)) {
+                resultados.push(`
+                    <div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display:flex; align-items:center; gap:10px;"
+                        onclick="App.ui.closeSheet(); App.router.navigate('reparaciones');">
+                        <span style="font-size:1.5rem;">🪡</span>
+                        <div>
+                            <strong style="color:#6D28D9;">${r.id}</strong><br>
+                            <small style="color:var(--text-muted);">${App.ui.escapeHTML(r.descripcion || "Reparación")}</small>
                         </div>
                     </div>
                 `);
