@@ -42,11 +42,12 @@ App.views.reparaciones = function () {
         reparaciones.forEach(r => {
             const cliente = (App.state.clientes || []).find(c => c.id === r.cliente_id) || {};
             const total = parseFloat(r.precio || 0) || 0;
+
+            const anticipoInicial = parseFloat(r.anticipo_inicial || 0) || 0;
             const abonosRep = (App.state.abonos_reparaciones || [])
                 .filter(a => a.reparacion_id === r.id)
                 .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
 
-            const anticipoInicial = parseFloat(r.anticipo_inicial || 0) || 0;
             const totalPagado = anticipoInicial + abonosRep;
             const saldo = total - totalPagado;
 
@@ -290,7 +291,7 @@ App.views.modalAbonosReparacion = function(reparacionId) {
                             </button>
                             <button
                                 class="dm-btn dm-btn-danger dm-btn-sm"
-                                onclick="App.logic.eliminarRegistroGenerico('abonos_reparaciones','${a.id}','abonos_reparaciones')"
+                                onclick="App.logic.eliminarAbonoReparacion('${a.id}', '${reparacionId}')"
                             >
                                 X
                             </button>
