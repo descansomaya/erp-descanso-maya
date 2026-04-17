@@ -20,18 +20,125 @@ App.views.finanzas = function() {
         }
     }, 60);
 
+    const hoy = new Date();
+    const mesActual = hoy.getMonth();
+    const anioActual = hoy.getFullYear();
+
+    const esMismoMes = (fechaStr) => {
+        if (!fechaStr) return false;
+        const f = new Date(fechaStr);
+        return !isNaN(f.getTime()) && f.getMonth() === mesActual && f.getFullYear() === anioActual;
+    };
+
+    const pedidos = App.state.pedidos || [];
+    const reparaciones = App.state.reparaciones || [];
+    const abonos = App.state.abonos || [];
+    const abonosReparaciones = App.state.abonos_reparaciones || [];
+    const gastos = App.state.gastos || [];
+    const pagosArtesanos = App.state.pago_artesanos || [];
+    const compras = App.state.compras || [];
+    const inventario = App.state.inventario || [];
+
+    const pedidosActivos = pedidos.filter(p => {
+        const e = String(p.estado || '').toLowerCase();
+        return e !== 'entregado' && e !== 'pagado';
+    }).length;
+
+    const reparacionesActivas = reparaciones.filter(r => {
+        const e = String(r.estado || '').toLowerCase();
+        return e !== 'entregada';
+    }).length;
+
+    const pedidosListos = pedidos.filter(p => String(p.estado || '').toLowerCase() === 'listo para entregar').length;
+    const reparacionesListas = reparaciones.filter(r => String(r.estado || '').toLowerCase() === 'lista').length;
+
+    const porCobrarPedidos = pedidos.reduce((acc, p) => {
+        const totalAbonos = abonos
+            .filter(a => a.pedido_id === p.id)
+            .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+
+        const saldo = (parseFloat(p.total || 0) || 0) - (parseFloat(p.anticipo || 0) || 0) - totalAbonos;
+        return acc + (saldo > 0 ? saldo : 0);
+    }, 0);
+
+    const porCobrarReparaciones = reparaciones.reduce((acc, r) => {
+        const anticipoInicial = parseFloat(r.anticipo_inicial || 0) || 0;
+        const totalAbonosRep = abonosReparaciones
+            .filter(a => a.reparacion_id === r.id)
+            .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+
+        const saldo = (parseFloat(r.precio || 0) || 0) - anticipoInicial - totalAbonosRep;
+        return acc + (saldo > 0 ? saldo : 0);
+    }, 0);
+
+    const dineroEnLaCalle = porCobrarPedidos + porCobrarReparaciones;
+
+    const ingresosMesPedidos = pedidos
+        .filter(p => esMismoMes(p.fecha_creacion))
+        .reduce((acc, p) => acc + (parseFloat(p.anticipo || 0) || 0), 0);
+
+    const ingresosMesAbonos = abonos
+        .filter(a => esMismoMes(a.fecha))
+        .reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0);
+
+    const ingresosMesReparacionesInicial = reparaciones
+        .filter(r => esMismoMes(r.fecha_creacion))
+        .reduce((acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0), 0);
+
+    const ingresosMesAbonosReparacion = abonosReparaciones
+        .filter(a => esMismoMes(a.fecha))
+        .reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0);
+
+    const ingresosMes = ingresosMesPedidos + ingresosMesAbonos + ingresosMesReparacionesInicial + ingresosMesAbonosReparacion;
+
+    const gastosMes = gastos
+        .filter(g => esMismoMes(g.fecha))
+        .reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
+
+    const porPagarArtesanos = pagosArtesanos
+        .filter(p => String(p.estado || '').toLowerCase() === 'pendiente')
+        .reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+
+    const porPagarCompras = compras.reduce((acc, c) => {
+        const total = parseFloat(c.total || 0) || 0;
+        const pagado = c.monto_pagado !== undefined && c.monto_pagado !== ''
+            ? parseFloat(c.monto_pagado || 0)
+            : total;
+        const deuda = total - pagado;
+        return acc + (deuda > 0 ? deuda : 0);
+    }, 0);
+
+    const totalPorPagar = porPagarArtesanos + porPagarCompras;
+
+    const insumosCriticos = inventario.filter(i => {
+        const libre =
+            (parseFloat(i.stock_real || 0) || 0) -
+            (parseFloat(i.stock_reservado || 0) || 0) -
+            (parseFloat(i.stock_comprometido || 0) || 0);
+
+        return (parseFloat(i.stock_minimo || 0) || 0) > 0 && libre <= (parseFloat(i.stock_minimo || 0) || 0);
+    }).length;
+
     return `
         <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4" style="background:linear-gradient(135deg, #ffffff 0%, #faf7ff 100%);">
                 <div class="dm-row-between" style="align-items:flex-start; gap:16px; flex-wrap:wrap;">
                     <div>
-                        <h3 class="dm-card-title">Dashboard Financiero</h3>
+                        <h3 class="dm-card-title">Dashboard Ejecutivo</h3>
                         <p class="dm-muted dm-mt-2" style="max-width:680px;">
-                            Consulta ingresos reales, salidas de caja, cuentas por cobrar, cuentas por pagar y distribución por categorías.
+                            Consulta operación, cobranza, caja, pagos pendientes y alertas clave del negocio.
                         </p>
                     </div>
 
                     <div class="dm-list-card-actions" style="margin-top:0; display:flex; gap:8px; flex-wrap:wrap;">
+                        <button
+                            class="dm-btn dm-btn-secondary dm-btn-sm"
+                            onclick="App.router.navigate('cobranza')"
+                            style="border-color:#D69E2E; color:#B7791F;"
+                        >
+                            Cobranza
+                        </button>
+
                         <button
                             class="dm-btn dm-btn-secondary dm-btn-sm"
                             onclick="App.router.navigate('nomina')"
@@ -51,7 +158,66 @@ App.views.finanzas = function() {
                 </div>
             </div>
 
+            <div class="dm-grid dm-grid-2 dm-mb-4">
+                <div class="dm-card" style="background:#FFFBEA;">
+                    <div class="dm-kpi-label" style="color:#B7791F;">Dinero en la calle</div>
+                    <div class="dm-kpi-value" style="color:#D69E2E; font-size:1.5rem;">$${dineroEnLaCalle.toFixed(2)}</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Pedidos + reparaciones pendientes por cobrar</div>
+                </div>
+
+                <div class="dm-card" style="background:#F0FFF4;">
+                    <div class="dm-kpi-label" style="color:#2F855A;">Ingresos del mes</div>
+                    <div class="dm-kpi-value" style="color:#38A169; font-size:1.5rem;">$${ingresosMes.toFixed(2)}</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Anticipos y abonos registrados en el mes</div>
+                </div>
+            </div>
+
+            <div class="dm-grid dm-grid-4 dm-mb-4">
+                <div class="dm-card">
+                    <div class="dm-kpi-label">Pedidos activos</div>
+                    <div class="dm-kpi-value">${pedidosActivos}</div>
+                </div>
+
+                <div class="dm-card">
+                    <div class="dm-kpi-label">Reparaciones activas</div>
+                    <div class="dm-kpi-value">${reparacionesActivas}</div>
+                </div>
+
+                <div class="dm-card">
+                    <div class="dm-kpi-label">Listos por entregar</div>
+                    <div class="dm-kpi-value">${pedidosListos + reparacionesListas}</div>
+                </div>
+
+                <div class="dm-card">
+                    <div class="dm-kpi-label">Gastos del mes</div>
+                    <div class="dm-kpi-value">$${gastosMes.toFixed(2)}</div>
+                </div>
+            </div>
+
+            <div class="dm-grid dm-grid-3 dm-mb-4">
+                <div class="dm-card" style="border-left:4px solid #D69E2E;">
+                    <div class="dm-card-title">Cobranza pendiente</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Pedidos: $${porCobrarPedidos.toFixed(2)}</div>
+                    <div class="dm-text-sm dm-muted">Reparaciones: $${porCobrarReparaciones.toFixed(2)}</div>
+                </div>
+
+                <div class="dm-card" style="border-left:4px solid #805AD5;">
+                    <div class="dm-card-title">Por pagar</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Artesanos: $${porPagarArtesanos.toFixed(2)}</div>
+                    <div class="dm-text-sm dm-muted">Compras: $${porPagarCompras.toFixed(2)}</div>
+                    <div class="dm-text-sm dm-mt-2" style="font-weight:600;">Total: $${totalPorPagar.toFixed(2)}</div>
+                </div>
+
+                <div class="dm-card" style="border-left:4px solid #E53E3E;">
+                    <div class="dm-card-title">Alertas</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Pedidos listos: ${pedidosListos}</div>
+                    <div class="dm-text-sm dm-muted">Reparaciones listas: ${reparacionesListas}</div>
+                    <div class="dm-text-sm dm-muted">Insumos críticos: ${insumosCriticos}</div>
+                </div>
+            </div>
+
             <div class="dm-card dm-mb-4" style="padding:12px;">
+                <div class="dm-card-title dm-mb-3">Filtros del panel financiero</div>
                 <div class="dm-tabs" style="display:flex; gap:8px; overflow-x:auto; flex-wrap:nowrap; white-space:nowrap;">
                     <button class="dm-tab active pill-fin" onclick="App.views.activarFiltroFinanzas(this, 'mes_actual', false)">Este mes</button>
                     <button class="dm-tab pill-fin" onclick="App.views.activarFiltroFinanzas(this, 'mes_pasado', false)">Mes pasado</button>
@@ -124,9 +290,7 @@ App.views._filtrarPagosArtesanos = function(estado = 'pendiente', query = '', ar
             : String(pa.estado || '').toLowerCase() === estado.toLowerCase();
 
         if (!coincideEstado) return false;
-
         if (artesanoId && pa.artesano_id !== artesanoId) return false;
-
         if (!q) return true;
 
         const artesano = (App.state.artesanos || []).find(a => a.id === pa.artesano_id);
@@ -154,18 +318,12 @@ App.views._renderListaPagosArtesanos = function(estado = 'pendiente', query = ''
     const obtenerOrigenPago = (pa) => {
         const ordenId = pa.orden_id || "";
         if (!ordenId) {
-            return {
-                etiqueta: "Sin orden vinculada",
-                detalle: pa.tipo_trabajo || "Trabajo"
-            };
+            return { etiqueta: "Sin orden vinculada", detalle: pa.tipo_trabajo || "Trabajo" };
         }
 
         const orden = (App.state.ordenes_produccion || []).find(o => o.id === ordenId);
         if (!orden) {
-            return {
-                etiqueta: ordenId,
-                detalle: pa.tipo_trabajo || "Trabajo"
-            };
+            return { etiqueta: ordenId, detalle: pa.tipo_trabajo || "Trabajo" };
         }
 
         const pedidoDetalle = (App.state.pedido_detalle || []).find(d => d.id === orden.pedido_detalle_id);
@@ -405,6 +563,7 @@ App.views.detalleFinanzas = function(tipo, filtro) {
 
     const pedFiltrados = (App.state.pedidos || []).filter(p => filtrarFecha(p.fecha_creacion));
     const aboFiltrados = (App.state.abonos || []).filter(a => filtrarFecha(a.fecha));
+    const aboRepFiltrados = (App.state.abonos_reparaciones || []).filter(a => filtrarFecha(a.fecha));
     const gasFiltrados = (App.state.gastos || []).filter(g => filtrarFecha(g.fecha));
     const repFiltradas = (App.state.reparaciones || []).filter(r => filtrarFecha(r.fecha_creacion));
 
@@ -453,9 +612,9 @@ App.views.detalleFinanzas = function(tipo, filtro) {
 
     else if (tipo === 'ingresos') {
         const ants = pedFiltrados.filter(p => parseFloat(p.anticipo || 0) > 0);
-        const antsRep = repFiltradas.filter(r => parseFloat(r.anticipo || 0) > 0);
+        const antsRep = repFiltradas.filter(r => parseFloat(r.anticipo_inicial || r.anticipo || 0) > 0);
 
-        if (ants.length === 0 && aboFiltrados.length === 0 && antsRep.length === 0) {
+        if (ants.length === 0 && aboFiltrados.length === 0 && antsRep.length === 0 && aboRepFiltrados.length === 0) {
             html += `<div class="dm-alert dm-alert-info">No hay ingresos.</div>`;
         }
 
@@ -480,10 +639,10 @@ App.views.detalleFinanzas = function(tipo, filtro) {
                 <div class="dm-list-card">
                     <div class="dm-row-between">
                         <div>
-                            <strong>Pago ${App.ui.safe((r.id || '').replace('REP-', ''))} <span style="color:#805AD5;">(Rep)</span></strong><br>
+                            <strong>Anticipo ${App.ui.safe((r.id || '').replace('REP-', ''))} <span style="color:#805AD5;">(Rep)</span></strong><br>
                             <small class="dm-muted">${fecha}</small>
                         </div>
-                        <div style="color:var(--success); font-weight:bold;">$${parseFloat(r.anticipo || 0).toFixed(2)}</div>
+                        <div style="color:var(--success); font-weight:bold;">$${parseFloat(r.anticipo_inicial || r.anticipo || 0).toFixed(2)}</div>
                     </div>
                 </div>
             `;
@@ -497,6 +656,21 @@ App.views.detalleFinanzas = function(tipo, filtro) {
                     <div class="dm-row-between">
                         <div>
                             <strong>Abono a ${App.ui.safe((a.pedido_id || '').replace('PED-', ''))} ${getEtiqueta(p.cliente_id)}</strong><br>
+                            <small class="dm-muted">${fecha}</small>
+                        </div>
+                        <div style="color:var(--success); font-weight:bold;">$${parseFloat(a.monto || 0).toFixed(2)}</div>
+                    </div>
+                </div>
+            `;
+        });
+
+        aboRepFiltrados.forEach(a => {
+            const fecha = a.fecha ? String(a.fecha).split('T')[0] : '';
+            html += `
+                <div class="dm-list-card">
+                    <div class="dm-row-between">
+                        <div>
+                            <strong>Abono a ${App.ui.safe((a.reparacion_id || '').replace('REP-', ''))} <span style="color:#805AD5;">(Rep)</span></strong><br>
                             <small class="dm-muted">${fecha}</small>
                         </div>
                         <div style="color:var(--success); font-weight:bold;">$${parseFloat(a.monto || 0).toFixed(2)}</div>
@@ -537,11 +711,11 @@ App.views.detalleFinanzas = function(tipo, filtro) {
         let hayCobros = false;
 
         (App.state.pedidos || []).forEach(p => {
-            const abonos = (App.state.abonos || [])
+            const abonosPedido = (App.state.abonos || [])
                 .filter(a => a.pedido_id === p.id)
                 .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
 
-            const saldo = parseFloat(p.total || 0) - parseFloat(p.anticipo || 0) - abonos;
+            const saldo = parseFloat(p.total || 0) - parseFloat(p.anticipo || 0) - abonosPedido;
 
             if (saldo > 0) {
                 hayCobros = true;
@@ -561,7 +735,13 @@ App.views.detalleFinanzas = function(tipo, filtro) {
         });
 
         (App.state.reparaciones || []).forEach(r => {
-            const saldo = parseFloat(r.precio || 0) - parseFloat(r.anticipo || 0);
+            const anticipoInicial = parseFloat(r.anticipo_inicial || 0) || 0;
+            const abonosRep = (App.state.abonos_reparaciones || [])
+                .filter(a => a.reparacion_id === r.id)
+                .reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+
+            const saldo = parseFloat(r.precio || 0) - anticipoInicial - abonosRep;
+
             if (saldo > 0) {
                 hayCobros = true;
                 const fecha = r.fecha_creacion ? String(r.fecha_creacion).split('T')[0] : '';
@@ -586,7 +766,7 @@ App.views.detalleFinanzas = function(tipo, filtro) {
         let hayDeudas = false;
 
         (App.state.pago_artesanos || []).forEach(pa => {
-            if (pa.estado === 'pendiente') {
+            if (String(pa.estado || '').toLowerCase() === 'pendiente') {
                 hayDeudas = true;
                 const a = (App.state.artesanos || []).find(x => x.id === pa.artesano_id);
                 const fecha = pa.fecha ? String(pa.fecha).split('T')[0] : '';
