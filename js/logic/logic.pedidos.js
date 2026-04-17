@@ -184,7 +184,7 @@ Object.assign(App.logic, {
                             const mat = (App.state.inventario || []).find(m => m.id === matId);
                             if (!mat) continue;
 
-                            if (pedido.estado === "listo para entregar" || pedido.estado === "pagado") {
+                            if (pedido.estado === "listo para entregar" || pedido.estado === "pagado" || pedido.estado === "entregado") {
                                 const nuevoReal = parseFloat(mat.stock_real || 0) + cantTeorica;
                                 operaciones.push({
                                     action: "actualizar_fila",
@@ -268,7 +268,7 @@ Object.assign(App.logic, {
                 return;
             }
 
-            if (!confirm("¿Marcar pedido como entregado y descontarlo físicamente de la bodega?")) return;
+            if (!confirm("¿Marcar pedido como listo para entregar y descontarlo físicamente de la bodega?")) return;
 
             const operaciones = [];
             const nuevosMovs = [];
@@ -338,7 +338,7 @@ Object.assign(App.logic, {
                 datosNuevos: { estado: "listo para entregar" }
             });
 
-            App.ui.showLoader("Entregando...");
+            App.ui.showLoader("Preparando entrega...");
             const res = await App.api.fetch("ejecutar_lote", { operaciones });
             App.ui.hideLoader();
 
@@ -350,16 +350,135 @@ Object.assign(App.logic, {
                 }
                 App.state.movimientos_inventario.push(...nuevosMovs);
 
-                App.ui.toast("Descontado de bodega");
+                App.ui.toast("Pedido listo para entregar");
                 App.router.handleRoute();
                 App.logic.revisarAlertasStock();
             } else {
-                App.ui.toast(res.message || "Error al entregar pedido", "danger");
+                App.ui.toast(res.message || "Error al preparar pedido", "danger");
             }
         } catch (error) {
             console.error("Error en entregarDeBodega:", error);
             App.ui.hideLoader();
-            App.ui.toast(error.message || "Error al entregar pedido", "danger");
+            App.ui.toast(error.message || "Error al preparar pedido", "danger");
+        }
+    },
+
+    async marcarPedidoListo(pedidoId) {
+        try {
+            const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
+            if (!pedido) {
+                App.ui.toast("Pedido no encontrado", "danger");
+                return;
+            }
+
+            if (pedido.estado === "listo para entregar") {
+                App.ui.toast("El pedido ya está listo para entregar", "warning");
+                return;
+            }
+
+            if (!confirm("¿Marcar este pedido como listo para entregar?")) return;
+
+            App.ui.showLoader("Actualizando estado...");
+
+            const res = await App.api.fetch("actualizar_fila", {
+                nombreHoja: "pedidos",
+                idFila: pedidoId,
+                datosNuevos: { estado: "listo para entregar" }
+            });
+
+            App.ui.hideLoader();
+
+            if (res.status === "success") {
+                pedido.estado = "listo para entregar";
+                App.ui.toast("Pedido marcado como listo para entregar");
+                App.router.handleRoute();
+            } else {
+                App.ui.toast(res.message || "Error al actualizar pedido", "danger");
+            }
+        } catch (error) {
+            console.error("Error en marcarPedidoListo:", error);
+            App.ui.hideLoader();
+            App.ui.toast(error.message || "Error al actualizar pedido", "danger");
+        }
+    },
+
+    async marcarPedidoEntregado(pedidoId) {
+        try {
+            const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
+            if (!pedido) {
+                App.ui.toast("Pedido no encontrado", "danger");
+                return;
+            }
+
+            if (pedido.estado !== "listo para entregar" && pedido.estado !== "pagado") {
+                App.ui.toast("Primero marca el pedido como listo para entregar o liquídalo", "warning");
+                return;
+            }
+
+            if (!confirm("¿Marcar este pedido como entregado?")) return;
+
+            App.ui.showLoader("Cerrando entrega...");
+
+            const res = await App.api.fetch("actualizar_fila", {
+                nombreHoja: "pedidos",
+                idFila: pedidoId,
+                datosNuevos: { estado: "entregado" }
+            });
+
+            App.ui.hideLoader();
+
+            if (res.status === "success") {
+                pedido.estado = "entregado";
+                App.ui.toast("Pedido marcado como entregado");
+                App.router.handleRoute();
+            } else {
+                App.ui.toast(res.message || "Error al marcar entregado", "danger");
+            }
+        } catch (error) {
+            console.error("Error en marcarPedidoEntregado:", error);
+            App.ui.hideLoader();
+            App.ui.toast(error.message || "Error al marcar entregado", "danger");
+        }
+    },
+
+    async cerrarPedidoSiLiquidado(pedidoId) {
+        try {
+            const resumen = this._getResumenFinancieroRegistro(pedidoId);
+            if (!resumen || resumen.esReparacion) {
+                App.ui.toast("Pedido no encontrado", "danger");
+                return;
+            }
+
+            if (parseFloat(resumen.saldo || 0) > 0.05) {
+                App.ui.toast(`Aún hay saldo pendiente de $${parseFloat(resumen.saldo).toFixed(2)}`, "warning");
+                return;
+            }
+
+            const pedido = resumen.registro;
+
+            if (!confirm("¿Cerrar este pedido como pagado?")) return;
+
+            App.ui.showLoader("Cerrando pedido...");
+
+            const res = await App.api.fetch("actualizar_fila", {
+                nombreHoja: "pedidos",
+                idFila: pedidoId,
+                datosNuevos: { estado: "pagado" }
+            });
+
+            App.ui.hideLoader();
+
+            if (res.status === "success") {
+                pedido.estado = "pagado";
+                App.ui.toast("Pedido liquidado correctamente");
+                App.router.handleRoute();
+            } else {
+                App.ui.toast(res.message || "Error al cerrar pedido", "danger");
+            }
+        } catch (error) {
+            console.error("Error en cerrarPedidoSiLiquidado:", error);
+            App.ui.hideLoader();
+            App.ui.toast(error.message || "Error al cerrar pedido", "danger");
         }
     },
 
