@@ -111,116 +111,84 @@ App.views._totalPagoArtesanosOrden = function (ordenId) {
     return asignaciones.reduce((acc, a) => acc + (parseFloat(a.pago_estimado || 0) || 0), 0);
 };
 
-App.views._generarListaProd = function (estadoFiltro) {
-    const ordenes = (App.state?.ordenes_produccion || [])
-        .filter(o => o.estado === estadoFiltro)
-        .sort((a, b) => new Date(b.fecha_creacion || 0) - new Date(a.fecha_creacion || 0));
+App.views._buildOrdenCard = function (o) {
+    const pDetalle = (App.state?.pedido_detalle || []).find(d => d.id === o.pedido_detalle_id) || {};
+    const producto = (App.state?.productos || []).find(p => p.id === pDetalle.producto_id) || {};
+    const pedido = (App.state?.pedidos || []).find(p => p.id === pDetalle.pedido_id) || {};
+    const cliente = (App.state?.clientes || []).find(c => c.id === pedido.cliente_id) || {};
+    const nombreCliente = pedido.cliente_id === 'STOCK_INTERNO' ? 'STOCK BODEGA' : (cliente.nombre || 'Cliente');
 
-    if (ordenes.length === 0) {
-        return `<div class="dm-alert dm-alert-info">No hay órdenes en esta sección.</div>`;
-    }
+    const badgeClass = o.estado === 'listo' ? 'dm-badge-success' : o.estado === 'proceso' ? 'dm-badge-warning' : 'dm-badge-info';
 
-    let html = `<div class="dm-list">`;
-
-    ordenes.forEach(o => {
-        const pDetalle = (App.state?.pedido_detalle || []).find(d => d.id === o.pedido_detalle_id) || {};
-        const producto = (App.state?.productos || []).find(p => p.id === pDetalle.producto_id) || {};
-
-        const estColor =
-            o.estado === "listo"
-                ? "dm-badge-success"
-                : o.estado === "proceso"
-                    ? "dm-badge-warning"
-                    : "dm-badge-info";
-
-        let costoMateriales = 0;
-        let listaHilosHTML = "";
-        const receta = App.views._getRecetaOrden(o);
-
-        if (receta.length > 0) {
-            listaHilosHTML += `<ul style="margin:5px 0 0 20px; padding:0; font-size:13px; color:var(--dm-muted);">`;
-
-            receta.forEach(item => {
-                const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id);
-                if (!mat) return;
-
-                const costoItem =
-                    (parseFloat(mat.costo_unitario || 0) || 0) *
-                    (parseFloat(item.cant || 0) || 0);
-
-                costoMateriales += costoItem;
-                listaHilosHTML += `<li>${App.ui.safe(item.cant)}x ${App.ui.safe(mat.nombre)} (${App.ui.safe(item.uso || "N/A")})</li>`;
-            });
-
-            listaHilosHTML += `</ul>`;
-        } else {
-            listaHilosHTML = `<div class="dm-text-sm dm-muted dm-mt-1"><i>Sin hilos asignados</i></div>`;
+    let costoMateriales = 0;
+    const receta = App.views._getRecetaOrden(o);
+    const resumenReceta = receta.slice(0, 3).map(item => {
+        const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id);
+        if (mat) {
+            costoMateriales += (parseFloat(mat.costo_unitario || 0) || 0) * (parseFloat(item.cant || 0) || 0);
         }
+        return mat ? `${App.ui.safe(item.cant)}x ${App.ui.safe(mat.nombre)}` : null;
+    }).filter(Boolean);
 
-        const precioVenta =
-            (parseFloat(pDetalle.precio_unitario || 0) || 0) *
-            (parseFloat(pDetalle.cantidad || 1) || 1);
+    const precioVenta = (parseFloat(pDetalle.precio_unitario || 0) || 0) * (parseFloat(pDetalle.cantidad || 1) || 1);
+    const pagoArtesano = App.views._totalPagoArtesanosOrden(o.id);
+    const utilidad = precioVenta - costoMateriales - pagoArtesano;
+    const colorUtilidad = utilidad > 0 ? 'var(--dm-success)' : utilidad === 0 ? 'var(--dm-warning)' : 'var(--dm-danger)';
 
-        const pagoArtesano = App.views._totalPagoArtesanosOrden(o.id);
-        const utilidad = precioVenta - costoMateriales - pagoArtesano;
+    return `
+        <div class="dm-list-card">
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <div class="dm-row-between" style="align-items:flex-start; gap:10px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:0;">
+                        <div class="dm-list-card-title" style="word-break:break-word;">${App.ui.safe(producto.nombre || 'Producto')}</div>
+                        <div class="dm-list-card-subtitle">${App.ui.safe(nombreCliente)} · Folio ${App.ui.safe((pDetalle.pedido_id || '').replace('PED-', ''))}</div>
+                    </div>
+                    <span class="dm-badge ${badgeClass}">${App.ui.safe((o.estado || '').toUpperCase())}</span>
+                </div>
 
-        const colorUtilidad =
-            utilidad > 0
-                ? "var(--dm-success)"
-                : utilidad === 0
-                    ? "var(--dm-warning)"
-                    : "var(--dm-danger)";
-
-        const asignacionesHTML = App.views._renderAsignacionesOrden(o.id);
-
-        html += `
-            <div class="dm-list-card">
-                <div class="dm-list-card-top">
-                    <div>
-                        <div class="dm-list-card-title">${App.ui.safe(producto.nombre || "Producto")}</div>
-                        <div class="dm-list-card-subtitle dm-mt-2">
-                            <span class="dm-badge ${estColor}">${App.ui.safe((o.estado || "").toUpperCase())}</span>
-                            <span class="dm-badge dm-badge-primary">Folio: ${App.ui.safe((pDetalle.pedido_id || "").replace("PED-", ""))}</span>
-                        </div>
+                <div class="dm-card" style="background:var(--dm-surface-2); padding:10px;">
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(110px,1fr)); gap:10px; text-align:center;">
+                        <div><small class="dm-muted">Venta</small><br><strong>$${precioVenta.toFixed(2)}</strong></div>
+                        <div><small class="dm-muted">Insumos</small><br><strong>$${costoMateriales.toFixed(2)}</strong></div>
+                        <div><small class="dm-muted">Artesanos</small><br><strong>$${pagoArtesano.toFixed(2)}</strong></div>
+                        <div><small class="dm-muted">Utilidad</small><br><strong style="color:${colorUtilidad};">$${utilidad.toFixed(2)}</strong></div>
                     </div>
                 </div>
 
-                <div class="dm-list-card-meta dm-mt-3 dm-mb-3" style="background:var(--dm-surface-2); padding:10px; border-radius:var(--dm-radius-md);">
-                    <div class="dm-mt-2">🧑‍🎨 <strong>Asignaciones:</strong>
-                        ${asignacionesHTML}
-                    </div>
-
-                    <div class="dm-mt-2">🧶 <strong>Hilos Asignados:</strong>
-                        ${listaHilosHTML}
-                    </div>
-
-                    <hr style="border:0; border-top:1px dashed var(--dm-border); margin:10px 0;">
-
-                    <div class="dm-row-between" style="align-items:center;">
-                        <div class="dm-text-sm dm-muted">
-                            Venta: $${precioVenta.toFixed(2)}<br>
-                            Insumos: $${costoMateriales.toFixed(2)}<br>
-                            Artesanos: $${pagoArtesano.toFixed(2)}
-                        </div>
-                        <div style="text-align:right;">
-                            <span class="dm-text-sm dm-muted">Utilidad Neta</span><br>
-                            <strong style="color:${colorUtilidad}; font-size:16px;">$${utilidad.toFixed(2)}</strong>
-                        </div>
-                    </div>
+                <div class="dm-text-sm dm-muted">
+                    <strong>Artesanos:</strong> ${App.views._getAsignacionesOrden(o.id).length || 0}
+                    ${resumenReceta.length ? `<br><strong>Hilos:</strong> ${resumenReceta.join(' · ')}` : '<br><strong>Hilos:</strong> Sin asignar'}
                 </div>
 
-                <div class="dm-list-card-actions">
+                <div class="dm-list-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verDetallesProduccion('${o.id}')">👁️ Detalles</button>
-                    ${o.estado === "pendiente" ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'iniciar')">▶️ Iniciar</button>` : ""}
-                    ${o.estado === "proceso" ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'terminar')">✅ Terminar</button>` : ""}
+                    ${o.estado === 'pendiente' ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'iniciar')">▶️ Iniciar</button>` : ''}
+                    ${o.estado === 'proceso' ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'terminar')">✅ Terminar</button>` : ''}
                     <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'eliminar')">🗑️</button>
                 </div>
             </div>
-        `;
-    });
+        </div>
+    `;
+};
 
-    html += `</div>`;
-    return html;
+App.views._renderProduccionColumn = function (estado, titulo, icono, badgeClass) {
+    const ordenes = (App.state?.ordenes_produccion || [])
+        .filter(o => o.estado === estado)
+        .sort((a, b) => new Date(b.fecha_creacion || 0) - new Date(a.fecha_creacion || 0));
+
+    const contenido = ordenes.length
+        ? ordenes.map(o => App.views._buildOrdenCard(o)).join('')
+        : `<div class="dm-alert dm-alert-info">No hay órdenes en esta sección.</div>`;
+
+    return `
+        <div class="dm-card">
+            <div class="dm-row-between" style="align-items:center; gap:10px; margin-bottom:12px;">
+                <div class="dm-card-title">${icono} ${titulo}</div>
+                <span class="dm-badge ${badgeClass}">${ordenes.length}</span>
+            </div>
+            <div class="dm-list">${contenido}</div>
+        </div>
+    `;
 };
 
 // ==========================================
@@ -229,36 +197,39 @@ App.views._generarListaProd = function (estadoFiltro) {
 App.views.produccion = function () {
     const headerTitle = document.getElementById("app-header-title");
     const headerSubtitle = document.getElementById("app-header-subtitle");
+    const bottomNav = document.getElementById('bottom-nav');
 
     if (headerTitle) headerTitle.innerText = "Taller";
     if (headerSubtitle) headerSubtitle.innerText = "Órdenes de producción";
+    if (bottomNav) bottomNav.style.display = 'flex';
+
+    const ordenes = App.state?.ordenes_produccion || [];
+    const pendientes = ordenes.filter(o => o.estado === 'pendiente').length;
+    const proceso = ordenes.filter(o => o.estado === 'proceso').length;
+    const listas = ordenes.filter(o => o.estado === 'listo').length;
 
     return `
-        <div class="dm-section">
-            <div class="dm-tabs dm-mb-4">
-                <button class="dm-tab active tab-btn-prod" onclick="window.switchTabProd('pendientes', this)">🕒 En Cola</button>
-                <button class="dm-tab tab-btn-prod" onclick="window.switchTabProd('proceso', this)">🔥 En Proceso</button>
-                <button class="dm-tab tab-btn-prod" onclick="window.switchTabProd('listas', this)">✅ Listas</button>
+        <div class="dm-section" style="padding-bottom:90px;">
+            <div class="dm-card dm-mb-4" style="background:linear-gradient(135deg, #ffffff 0%, #faf7ff 100%);">
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <div>
+                        <h3 class="dm-card-title">Producción PRO</h3>
+                        <p class="dm-muted" style="margin-top:6px;">Control visual del taller, carga operativa y avance por orden sin perder la lógica actual.</p>
+                    </div>
+                    <input type="text" id="bus-prod-pro" class="dm-input" onkeyup="window.filtrarLista('bus-prod-pro', 'dm-list-card')" placeholder="🔍 Buscar orden, producto o artesano...">
+                </div>
             </div>
 
-            <input
-                type="text"
-                id="bus-prod"
-                class="dm-input dm-mb-4"
-                onkeyup="window.filtrarLista('bus-prod', 'dm-list-card')"
-                placeholder="🔍 Buscar orden, producto o artesano..."
-            >
-
-            <div id="tab-pendientes" class="tab-content-prod" style="display:block;">
-                ${App.views._generarListaProd("pendiente")}
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(170px,1fr)); gap:12px;">
+                <div class="dm-card"><small class="dm-muted">En cola</small><div class="dm-text-xl dm-fw-bold">${pendientes}</div></div>
+                <div class="dm-card"><small class="dm-muted">En proceso</small><div class="dm-text-xl dm-fw-bold" style="color:var(--dm-warning);">${proceso}</div></div>
+                <div class="dm-card"><small class="dm-muted">Listas</small><div class="dm-text-xl dm-fw-bold" style="color:var(--dm-success);">${listas}</div></div>
             </div>
 
-            <div id="tab-proceso" class="tab-content-prod" style="display:none;">
-                ${App.views._generarListaProd("proceso")}
-            </div>
-
-            <div id="tab-listas" class="tab-content-prod" style="display:none;">
-                ${App.views._generarListaProd("listo")}
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px,1fr)); gap:12px; align-items:start;">
+                ${App.views._renderProduccionColumn('pendiente', 'En cola', '🕒', 'dm-badge-info')}
+                ${App.views._renderProduccionColumn('proceso', 'En proceso', '🔥', 'dm-badge-warning')}
+                ${App.views._renderProduccionColumn('listo', 'Listas', '✅', 'dm-badge-success')}
             </div>
         </div>
     `;
@@ -373,8 +344,7 @@ App.views.formAsignacionMultiArtesano = function (ordenId, asignacionId = null) 
 
             <div class="dm-form-group">
                 <label class="dm-label">Artesano</label>
-                <select class="dm-select" name="artesano_id" id="select-artesano-multi" required
-                    onchange="window.cargarTarifasMulti(this.value)">
+                <select class="dm-select" name="artesano_id" id="select-artesano-multi" required onchange="window.cargarTarifasMulti(this.value)">
                     <option value="">-- Seleccione artesano --</option>
                     ${artesanosOpts}
                 </select>
@@ -382,8 +352,7 @@ App.views.formAsignacionMultiArtesano = function (ordenId, asignacionId = null) 
 
             <div class="dm-form-group">
                 <label class="dm-label">Tarifa</label>
-                <select class="dm-select" name="tarifa_artesano_id" id="select-tarifas-multi" required
-                    onchange="window.calcTotalTrabajoMulti()">
+                <select class="dm-select" name="tarifa_artesano_id" id="select-tarifas-multi" required onchange="window.calcTotalTrabajoMulti()">
                     <option value="">-- Seleccione artesano primero --</option>
                 </select>
             </div>
@@ -445,20 +414,15 @@ App.views.formAsignacionMultiArtesano = function (ordenId, asignacionId = null) 
     if (asignacion?.artesano_id) {
         setTimeout(() => {
             window.cargarTarifasMulti(asignacion.artesano_id);
-
             const selectTarifas = document.getElementById("select-tarifas-multi");
             if (selectTarifas && asignacion.tarifa_artesano_id) {
                 selectTarifas.value = asignacion.tarifa_artesano_id;
             }
-
             window.calcTotalTrabajoMulti();
         }, 150);
     }
 };
 
-// ==========================================
-// HELPERS GLOBALES MULTIARTESANO
-// ==========================================
 window.cargarTarifasMulti = function (artesanoId) {
     const tarifas = (App.state?.tarifas_artesano || []).filter(t => t.artesano_id === artesanoId);
     const select = document.getElementById("select-tarifas-multi");
@@ -467,13 +431,7 @@ window.cargarTarifasMulti = function (artesanoId) {
     select.innerHTML =
         '<option value="">-- Seleccione Trabajo --</option>' +
         tarifas.map(t => `
-            <option
-                value="${t.id || ''}"
-                data-monto="${t.monto || 0}"
-                data-modo-calculo="${t.modo_calculo || 'fijo'}"
-                data-aplica-a="${t.aplica_a || 'total'}"
-                data-tarifa-nombre="${App.ui.escapeHTML(t.clasificacion || 'Tarea')}"
-            >
+            <option value="${t.id || ''}" data-monto="${t.monto || 0}" data-modo-calculo="${t.modo_calculo || 'fijo'}" data-aplica-a="${t.aplica_a || 'total'}" data-tarifa-nombre="${App.ui.escapeHTML(t.clasificacion || 'Tarea')}">
                 ${App.ui.escapeHTML(t.clasificacion || "Tarea")} ($${t.monto || 0})
             </option>
         `).join("");
@@ -534,9 +492,6 @@ window.calcTotalTrabajoMulti = function () {
     pago.value = (monto * baseCalculo).toFixed(2);
 };
 
-// ==========================================
-// MODAL DE MATERIA PRIMA
-// ==========================================
 App.views.modalMateriaPrima = function (ordenId) {
     const ord = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
     if (!ord) return;
@@ -565,17 +520,8 @@ App.views.modalMateriaPrima = function (ordenId) {
     html += `
             </div>
 
-            <button
-                type="button"
-                class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4"
-                onclick="window.agregarFilaRecetaProd()"
-            >
-                + Añadir hilo
-            </button>
-
-            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
-                💾 Guardar y Descontar Inventario
-            </button>
+            <button type="button" class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="window.agregarFilaRecetaProd()">+ Añadir hilo</button>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">💾 Guardar y Descontar Inventario</button>
         </form>
     `;
 
@@ -585,14 +531,9 @@ App.views.modalMateriaPrima = function (ordenId) {
         const usos = Array.isArray(data["uso[]"]) ? data["uso[]"] : [data["uso[]"]];
 
         const recetaFinal = [];
-
         for (let i = 0; i < matIds.length; i++) {
             if (matIds[i]) {
-                recetaFinal.push({
-                    mat_id: matIds[i],
-                    cant: cants[i],
-                    uso: usos[i]
-                });
+                recetaFinal.push({ mat_id: matIds[i], cant: cants[i], uso: usos[i] });
             }
         }
 
