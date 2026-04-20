@@ -117,12 +117,10 @@ App.views.accionAbono = function (button, abonoId, actionName) {
 // PEDIDOS
 // ==========================================
 App.views.pedidos = function() {
-
     const pedidos = App.state.pedidos || [];
 
     const getColorEstado = (estado) => {
         estado = String(estado || '').toLowerCase();
-
         if (estado.includes('produccion')) return 'var(--dm-primary)';
         if (estado.includes('listo')) return '#D69E2E';
         if (estado.includes('entregado') || estado.includes('pagado')) return 'var(--dm-success)';
@@ -131,16 +129,17 @@ App.views.pedidos = function() {
 
     let html = `
         <div class="dm-section" style="padding-bottom:90px;">
-
             <div class="dm-card dm-mb-4">
-                <h3 class="dm-card-title">Pedidos</h3>
-                <input 
-                    type="text"
-                    id="bus-ped"
-                    class="dm-input"
-                    placeholder="🔍 Buscar pedido o cliente..."
-                    onkeyup="window.filtrarLista('bus-ped','tarj-ped')"
-                >
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <h3 class="dm-card-title">Pedidos</h3>
+                    <input
+                        type="text"
+                        id="bus-ped"
+                        class="dm-input"
+                        placeholder="🔍 Buscar pedido o cliente..."
+                        onkeyup="window.filtrarLista('bus-ped','tarj-ped')"
+                    >
+                </div>
             </div>
 
             <div class="dm-list">
@@ -151,17 +150,13 @@ App.views.pedidos = function() {
     }
 
     pedidos.forEach(p => {
-
         const colorEstado = getColorEstado(p.estado);
 
         html += `
             <div class="dm-list-card tarj-ped">
-
                 <div style="display:flex; flex-direction:column; gap:12px;">
-
-                    <!-- HEADER -->
-                    <div class="dm-row-between" style="flex-wrap:wrap; gap:10px;">
-                        <div>
+                    <div class="dm-row-between" style="flex-wrap:wrap; gap:10px; align-items:flex-start;">
+                        <div style="flex:1; min-width:0;">
                             <strong>${App.ui.safe(p.id)}</strong><br>
                             <small class="dm-muted">${App.ui.safe(p.cliente_nombre || '')}</small>
                         </div>
@@ -171,13 +166,7 @@ App.views.pedidos = function() {
                         </span>
                     </div>
 
-                    <!-- INFO PRINCIPAL -->
-                    <div style="
-                        display:grid;
-                        grid-template-columns:repeat(auto-fit, minmax(120px,1fr));
-                        gap:10px;
-                        text-align:center;
-                    ">
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(110px,1fr)); gap:10px; text-align:center;">
                         <div>
                             <small class="dm-muted">Total</small><br>
                             <strong>${App.ui.money(p.total || 0)}</strong>
@@ -192,26 +181,10 @@ App.views.pedidos = function() {
                         </div>
                     </div>
 
-                    <!-- ACCIONES -->
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
-
-                        <button class="dm-btn dm-btn-primary dm-btn-sm"
-                            onclick="App.views.detallePedido('${p.id}')">
-                            👁️ Ver
-                        </button>
-
-                        <button class="dm-btn dm-btn-secondary dm-btn-sm"
-                            onclick="App.logic.siguienteEstadoPedido('${p.id}')">
-                            ▶️ Avanzar
-                        </button>
-
-                        <button class="dm-btn dm-btn-success dm-btn-sm"
-                            onclick="App.views.formAbono('${p.id}')">
-                            💰 Cobrar
-                        </button>
-
+                        <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.modalDetallesPedido('${p.id}')">👁️ Ver</button>
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💰 Cobrar</button>
                     </div>
-
                 </div>
             </div>
         `;
