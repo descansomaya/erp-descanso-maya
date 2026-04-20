@@ -117,39 +117,114 @@ App.views.accionAbono = function (button, abonoId, actionName) {
 // PEDIDOS
 // ==========================================
 App.views.pedidos = function() {
-    const title = document.getElementById('app-header-title');
-    const subtitle = document.getElementById('app-header-subtitle');
-    const bottomNav = document.getElementById('bottom-nav');
 
-    if (title) title.innerText = 'Pedidos';
-    if (subtitle) subtitle.innerText = 'Gestión de pedidos';
-    if (bottomNav) bottomNav.style.display = 'flex';
+    const pedidos = App.state.pedidos || [];
 
-    return `
+    const getColorEstado = (estado) => {
+        estado = String(estado || '').toLowerCase();
+
+        if (estado.includes('produccion')) return 'var(--dm-primary)';
+        if (estado.includes('listo')) return '#D69E2E';
+        if (estado.includes('entregado') || estado.includes('pagado')) return 'var(--dm-success)';
+        return 'var(--dm-muted)';
+    };
+
+    let html = `
         <div class="dm-section" style="padding-bottom:90px;">
-            <div class="dm-card dm-mb-4" style="padding:10px;">
-                <div class="dm-tabs tabs-pedidos-mobile" style="display:flex; gap:8px; overflow-x:auto; overflow-y:hidden; white-space:nowrap; scrollbar-width:none; -ms-overflow-style:none;">
-                    <button class="dm-tab active tab-btn-ped" onclick="window.switchTabPed('activos', this)">🟢 Activos / Taller</button>
-                    <button class="dm-tab tab-btn-ped" onclick="window.switchTabPed('listos', this)">🟠 Listos / Cobro</button>
-                    <button class="dm-tab tab-btn-ped" onclick="window.switchTabPed('historial', this)">✅ Historial</button>
+
+            <div class="dm-card dm-mb-4">
+                <h3 class="dm-card-title">Pedidos</h3>
+                <input 
+                    type="text"
+                    id="bus-ped"
+                    class="dm-input"
+                    placeholder="🔍 Buscar pedido o cliente..."
+                    onkeyup="window.filtrarLista('bus-ped','tarj-ped')"
+                >
+            </div>
+
+            <div class="dm-list">
+    `;
+
+    if (pedidos.length === 0) {
+        html += `<div class="dm-alert dm-alert-info">No hay pedidos.</div>`;
+    }
+
+    pedidos.forEach(p => {
+
+        const colorEstado = getColorEstado(p.estado);
+
+        html += `
+            <div class="dm-list-card tarj-ped">
+
+                <div style="display:flex; flex-direction:column; gap:12px;">
+
+                    <!-- HEADER -->
+                    <div class="dm-row-between" style="flex-wrap:wrap; gap:10px;">
+                        <div>
+                            <strong>${App.ui.safe(p.id)}</strong><br>
+                            <small class="dm-muted">${App.ui.safe(p.cliente_nombre || '')}</small>
+                        </div>
+
+                        <span class="dm-badge" style="background:${colorEstado}; color:white;">
+                            ${App.ui.safe(p.estado || 'Pendiente')}
+                        </span>
+                    </div>
+
+                    <!-- INFO PRINCIPAL -->
+                    <div style="
+                        display:grid;
+                        grid-template-columns:repeat(auto-fit, minmax(120px,1fr));
+                        gap:10px;
+                        text-align:center;
+                    ">
+                        <div>
+                            <small class="dm-muted">Total</small><br>
+                            <strong>${App.ui.money(p.total || 0)}</strong>
+                        </div>
+                        <div>
+                            <small class="dm-muted">Anticipo</small><br>
+                            <strong>${App.ui.money(p.anticipo || 0)}</strong>
+                        </div>
+                        <div>
+                            <small class="dm-muted">Fecha</small><br>
+                            <strong>${(p.fecha_creacion || '').split('T')[0]}</strong>
+                        </div>
+                    </div>
+
+                    <!-- ACCIONES -->
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+
+                        <button class="dm-btn dm-btn-primary dm-btn-sm"
+                            onclick="App.views.detallePedido('${p.id}')">
+                            👁️ Ver
+                        </button>
+
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm"
+                            onclick="App.logic.siguienteEstadoPedido('${p.id}')">
+                            ▶️ Avanzar
+                        </button>
+
+                        <button class="dm-btn dm-btn-success dm-btn-sm"
+                            onclick="App.views.formAbono('${p.id}')">
+                            💰 Cobrar
+                        </button>
+
+                    </div>
+
                 </div>
             </div>
+        `;
+    });
 
-            <div id="tab-activos" class="tab-content-ped" style="display:block;">
-                ${window.generarListaPedidos('activos')}
-            </div>
-
-            <div id="tab-listos" class="tab-content-ped" style="display:none;">
-                ${window.generarListaPedidos('listos')}
-            </div>
-
-            <div id="tab-historial" class="tab-content-ped" style="display:none;">
-                ${window.generarListaPedidos('historial')}
+    html += `
             </div>
         </div>
 
         <button class="dm-fab" onclick="App.views.formPedido()">+</button>
     `;
+
+    return html;
 };
 
 window.generarListaPedidos = function(tipo) {
