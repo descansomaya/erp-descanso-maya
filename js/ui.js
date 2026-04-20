@@ -2,8 +2,9 @@ window.App = window.App || {};
 App.ui = App.ui || {};
 
 Object.assign(App.ui, {
+    _actionLocks: App.ui._actionLocks || new Set(),
+
     init() {
-        // Punto de inicialización UI
         console.log("UI iniciada");
     },
 
@@ -50,6 +51,108 @@ Object.assign(App.ui, {
         }, 3000);
     },
 
+    setButtonLoading(button, isLoading, loadingText = "Procesando...") {
+        if (!button) return;
+
+        if (isLoading) {
+            if (!button.dataset.originalHtml) {
+                button.dataset.originalHtml = button.innerHTML;
+            }
+            button.disabled = true;
+            button.classList.add("is-loading");
+            button.innerHTML = `<span class="dm-loader" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:8px;"></span>${this.escapeHTML(loadingText)}`;
+            return;
+        }
+
+        button.disabled = false;
+        button.classList.remove("is-loading");
+        if (button.dataset.originalHtml) {
+            button.innerHTML = button.dataset.originalHtml;
+            delete button.dataset.originalHtml;
+        }
+    },
+
+    isActionLocked(lockKey) {
+        return !!lockKey && this._actionLocks.has(lockKey);
+    },
+
+    lockAction(lockKey) {
+        if (!lockKey) return true;
+        if (this._actionLocks.has(lockKey)) return false;
+        this._actionLocks.add(lockKey);
+        return true;
+    },
+
+    unlockAction(lockKey) {
+        if (!lockKey) return;
+        this._actionLocks.delete(lockKey);
+    },
+
+    async runSafeAction(config, action) {
+        const cfg = config || {};
+        const lockKey = cfg.lockKey || null;
+        const button = cfg.button || null;
+        const loadingText = cfg.loadingText || "Procesando...";
+        const loaderMessage = cfg.loaderMessage || loadingText;
+        const successMessage = cfg.successMessage || "Acción completada";
+        const errorTitle = cfg.errorTitle || "No se pudo completar la acción";
+        const showGlobalLoader = cfg.showGlobalLoader !== false;
+        const closeSheetOnSuccess = !!cfg.closeSheetOnSuccess;
+        const toastOnSuccess = cfg.toastOnSuccess !== false;
+
+        if (lockKey && !this.lockAction(lockKey)) {
+            this.toast("Ya hay una acción en proceso. Espera un momento.", "warning");
+            return { ok: false, skipped: true, reason: "locked" };
+        }
+
+        try {
+            if (button) {
+                this.setButtonLoading(button, true, loadingText);
+            }
+
+            if (showGlobalLoader) {
+                this.showLoader(loaderMessage);
+            }
+
+            const result = await action();
+
+            if (closeSheetOnSuccess) {
+                this.closeSheet();
+            }
+
+            if (toastOnSuccess) {
+                this.toast(successMessage, "success");
+            }
+
+            return { ok: true, result };
+        } catch (error) {
+            console.error("runSafeAction error:", error);
+
+            if (App.renderFatalError && cfg.fatalOnError) {
+                App.renderFatalError(errorTitle, error, {
+                    source: cfg.source || "App.ui.runSafeAction",
+                    detail: error?.stack || "Sin stack trace"
+                });
+            } else {
+                this.toast(`${errorTitle}: ${error?.message || error || "Error desconocido"}`, "danger");
+            }
+
+            return { ok: false, error };
+        } finally {
+            if (showGlobalLoader) {
+                this.hideLoader();
+            }
+
+            if (button) {
+                this.setButtonLoading(button, false);
+            }
+
+            if (lockKey) {
+                this.unlockAction(lockKey);
+            }
+        }
+    },
+
     openSheet(titulo, contenidoHTML, callbackFormulario = null) {
         const bg = document.getElementById("sheet-bg");
         const sheet = document.getElementById("sheet-content");
@@ -68,13 +171,12 @@ Object.assign(App.ui, {
             </div>
         `;
 
-       bg.classList.remove("hidden");
+        bg.classList.remove("hidden");
 
-if (App.compat && typeof App.compat.apply === "function") {
-    App.compat.apply(sheet);
-}
+        if (App.compat && typeof App.compat.apply === "function") {
+            App.compat.apply(sheet);
+        }
 
-        // cerrar al tocar fondo
         bg.onclick = (e) => {
             if (e.target === bg) this.closeSheet();
         };
@@ -82,10 +184,19 @@ if (App.compat && typeof App.compat.apply === "function") {
         if (callbackFormulario) {
             const form = document.getElementById("dynamic-form");
             if (form) {
-                form.onsubmit = (e) => {
+                form.onsubmit = async (e) => {
                     e.preventDefault();
                     const data = this.serializeForm(form);
-                    callbackFormulario(data);
+                    const submitButton = form.querySelector('button[type="submit"]');
+
+                    await this.runSafeAction({
+                        lockKey: `form:${titulo}`,
+                        button: submitButton,
+                        loadingText: "Guardando...",
+                        loaderMessage: "Guardando información...",
+                        errorTitle: "No se pudo guardar",
+                        toastOnSuccess: false
+                    }, async () => callbackFormulario(data, form, submitButton));
                 };
             }
         }
