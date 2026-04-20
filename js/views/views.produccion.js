@@ -1,6 +1,72 @@
 window.App = window.App || {};
 App.views = App.views || {};
 
+App.views.runProduccionAction = async function (button, lockKey, actionFn, options = {}) {
+    return App.ui.runSafeAction({
+        lockKey,
+        button,
+        loadingText: options.loadingText || "Procesando...",
+        loaderMessage: options.loaderMessage || "Actualizando producción...",
+        successMessage: options.successMessage || "Acción completada",
+        errorTitle: options.errorTitle || "No se pudo completar la acción",
+        toastOnSuccess: options.toastOnSuccess !== false
+    }, async () => actionFn());
+};
+
+App.views.accionProduccion = function (button, ordenId, actionName) {
+    const actions = {
+        iniciar: {
+            fn: () => App.logic.cambiarEstadoProduccion(ordenId, 'proceso'),
+            loadingText: 'Iniciando...',
+            loaderMessage: 'Moviendo orden a proceso...',
+            successMessage: 'Orden iniciada',
+            errorTitle: 'No se pudo iniciar la orden'
+        },
+        terminar: {
+            fn: () => App.logic.cambiarEstadoProduccion(ordenId, 'listo'),
+            loadingText: 'Terminando...',
+            loaderMessage: 'Marcando orden como lista...',
+            successMessage: 'Orden terminada',
+            errorTitle: 'No se pudo terminar la orden'
+        },
+        eliminar: {
+            fn: () => App.logic.eliminarRegistroGenerico('ordenes_produccion', ordenId, 'ordenes_produccion'),
+            loadingText: 'Eliminando...',
+            loaderMessage: 'Eliminando orden de producción...',
+            successMessage: 'Orden eliminada',
+            errorTitle: 'No se pudo eliminar la orden'
+        }
+    };
+
+    const config = actions[actionName];
+    if (!config) {
+        App.ui.toast('Acción no disponible', 'warning');
+        return;
+    }
+
+    return App.views.runProduccionAction(button, `produccion:${ordenId}:${actionName}`, config.fn, config);
+};
+
+App.views.accionAsignacionProduccion = function (button, ordenId, asignacionId, actionName) {
+    const actions = {
+        cancelar: {
+            fn: () => App.logic.cancelarAsignacionMultiArtesano(asignacionId),
+            loadingText: 'Eliminando...',
+            loaderMessage: 'Cancelando asignación...',
+            successMessage: 'Asignación cancelada',
+            errorTitle: 'No se pudo cancelar la asignación'
+        }
+    };
+
+    const config = actions[actionName];
+    if (!config) {
+        App.ui.toast('Acción no disponible', 'warning');
+        return;
+    }
+
+    return App.views.runProduccionAction(button, `produccion:${ordenId}:asignacion:${asignacionId}:${actionName}`, config.fn, config);
+};
+
 // ==========================================
 // HELPERS INTERNOS DE PRODUCCIÓN
 // ==========================================
@@ -145,9 +211,9 @@ App.views._generarListaProd = function (estadoFiltro) {
 
                 <div class="dm-list-card-actions">
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verDetallesProduccion('${o.id}')">👁️ Detalles</button>
-                    ${o.estado === "pendiente" ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.logic.cambiarEstadoProduccion('${o.id}', 'proceso')">▶️ Iniciar</button>` : ""}
-                    ${o.estado === "proceso" ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.logic.cambiarEstadoProduccion('${o.id}', 'listo')">✅ Terminar</button>` : ""}
-                    <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.eliminarRegistroGenerico('ordenes_produccion', '${o.id}', 'ordenes_produccion')">🗑️</button>
+                    ${o.estado === "pendiente" ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'iniciar')">▶️ Iniciar</button>` : ""}
+                    ${o.estado === "proceso" ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'terminar')">✅ Terminar</button>` : ""}
+                    <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'eliminar')">🗑️</button>
                 </div>
             </div>
         `;
@@ -236,7 +302,7 @@ App.views.verDetallesProduccion = function (ordenId) {
                             <strong>$${(parseFloat(a.pago_estimado || 0) || 0).toFixed(2)}</strong>
                             <div class="dm-list-card-actions" style="justify-content:flex-end; margin-top:8px;">
                                 <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formAsignacionMultiArtesano('${o.id}', '${a.id}'), 250);">✏️</button>
-                                <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.cancelarAsignacionMultiArtesano('${a.id}')">🗑️</button>
+                                <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionAsignacionProduccion(this, '${o.id}', '${a.id}', 'cancelar')">🗑️</button>
                             </div>
                         </div>
                     </div>
@@ -360,12 +426,20 @@ App.views.formAsignacionMultiArtesano = function (ordenId, asignacionId = null) 
         </form>
     `;
 
-    App.ui.openSheet(asignacion ? "Editar asignación" : "Nueva asignación de artesano", formHTML, (data) => {
-        if (asignacion) {
-            App.logic.editarAsignacionMultiArtesano(data);
-        } else {
-            App.logic.guardarAsignacionMultiArtesano(data);
-        }
+    App.ui.openSheet(asignacion ? "Editar asignación" : "Nueva asignación de artesano", formHTML, async (data) => {
+        return App.ui.runSafeAction({
+            lockKey: asignacion ? `produccion:${ordenId}:asignacion:${asignacion.id}:editar` : `produccion:${ordenId}:asignacion:nueva`,
+            loadingText: asignacion ? 'Guardando...' : 'Asignando...',
+            loaderMessage: asignacion ? 'Guardando asignación...' : 'Guardando asignación de artesano...',
+            successMessage: asignacion ? 'Asignación actualizada' : 'Asignación guardada',
+            errorTitle: asignacion ? 'No se pudo actualizar la asignación' : 'No se pudo guardar la asignación',
+            closeSheetOnSuccess: true
+        }, async () => {
+            if (asignacion) {
+                return App.logic.editarAsignacionMultiArtesano(data);
+            }
+            return App.logic.guardarAsignacionMultiArtesano(data);
+        });
     });
 
     if (asignacion?.artesano_id) {
@@ -505,7 +579,7 @@ App.views.modalMateriaPrima = function (ordenId) {
         </form>
     `;
 
-    App.ui.openSheet("Hilos Utilizados", html, (data) => {
+    App.ui.openSheet("Hilos Utilizados", html, async (data) => {
         const matIds = Array.isArray(data["mat_id[]"]) ? data["mat_id[]"] : [data["mat_id[]"]];
         const cants = Array.isArray(data["cant[]"]) ? data["cant[]"] : [data["cant[]"]];
         const usos = Array.isArray(data["uso[]"]) ? data["uso[]"] : [data["uso[]"]];
@@ -522,6 +596,13 @@ App.views.modalMateriaPrima = function (ordenId) {
             }
         }
 
-        App.logic.guardarRecetaProduccion(ordenId, recetaFinal);
+        return App.ui.runSafeAction({
+            lockKey: `produccion:${ordenId}:receta:guardar`,
+            loadingText: 'Guardando...',
+            loaderMessage: 'Guardando receta y descontando inventario...',
+            successMessage: 'Hilos asignados correctamente',
+            errorTitle: 'No se pudieron guardar los hilos',
+            closeSheetOnSuccess: true
+        }, async () => App.logic.guardarRecetaProduccion(ordenId, recetaFinal));
     });
 };
