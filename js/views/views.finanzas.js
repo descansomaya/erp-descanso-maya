@@ -63,13 +63,17 @@ App.views._resumenCosteoPlaneacion = function () {
 
     const totalEntradasEsperadas =
         pedidos.reduce((acc, p) => {
-            const totalAbonos = abonos.filter(a => a.pedido_id === p.id).reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+            const totalAbonos = abonos
+                .filter(a => a.pedido_id === p.id)
+                .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
             const saldo = (parseFloat(p.total || 0) || 0) - (parseFloat(p.anticipo || 0) || 0) - totalAbonos;
             return acc + (saldo > 0 ? saldo : 0);
         }, 0) +
         reparaciones.reduce((acc, r) => {
             const anticipo = parseFloat(r.anticipo_inicial || 0) || 0;
-            const totalAbonos = abonosRep.filter(a => a.reparacion_id === r.id).reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+            const totalAbonos = abonosRep
+                .filter(a => a.reparacion_id === r.id)
+                .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
             const saldo = (parseFloat(r.precio || 0) || 0) - anticipo - totalAbonos;
             return acc + (saldo > 0 ? saldo : 0);
         }, 0);
@@ -77,17 +81,23 @@ App.views._resumenCosteoPlaneacion = function () {
     const totalSalidasComprometidas =
         compras.reduce((acc, c) => {
             const total = parseFloat(c.total || 0) || 0;
-            const pagado = c.monto_pagado !== undefined && c.monto_pagado !== '' ? parseFloat(c.monto_pagado || 0) : total;
+            const pagado = c.monto_pagado !== undefined && c.monto_pagado !== ''
+                ? parseFloat(c.monto_pagado || 0)
+                : total;
             const deuda = total - pagado;
             return acc + (deuda > 0 ? deuda : 0);
         }, 0) +
-        pagosArtesanos.filter(p => String(p.estado || '').toLowerCase() === 'pendiente').reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+        pagosArtesanos
+            .filter(p => String(p.estado || '').toLowerCase() === 'pendiente')
+            .reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
 
     return {
         totalUtilidad: detallePedidos.reduce((acc, x) => acc + x.utilidad, 0),
         totalVentas: detallePedidos.reduce((acc, x) => acc + x.venta, 0),
         totalCosto: detallePedidos.reduce((acc, x) => acc + x.costoTotal, 0),
-        margenPromedio: detallePedidos.length ? detallePedidos.reduce((acc, x) => acc + x.margen, 0) / detallePedidos.length : 0,
+        margenPromedio: detallePedidos.length
+            ? detallePedidos.reduce((acc, x) => acc + x.margen, 0) / detallePedidos.length
+            : 0,
         topRentables: [...detallePedidos].sort((a, b) => b.utilidad - a.utilidad).slice(0, 5),
         topBajoMargen: [...detallePedidos].sort((a, b) => a.margen - b.margen).slice(0, 5),
         entradasEsperadas: totalEntradasEsperadas,
@@ -155,14 +165,20 @@ App.views.finanzas = function() {
     const reparacionesListas = reparaciones.filter(r => String(r.estado || '').toLowerCase() === 'lista').length;
 
     const porCobrarPedidos = pedidos.reduce((acc, p) => {
-        const totalAbonos = abonos.filter(a => a.pedido_id === p.id).reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+        const totalAbonos = abonos
+            .filter(a => a.pedido_id === p.id)
+            .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+
         const saldo = (parseFloat(p.total || 0) || 0) - (parseFloat(p.anticipo || 0) || 0) - totalAbonos;
         return acc + (saldo > 0 ? saldo : 0);
     }, 0);
 
     const porCobrarReparaciones = reparaciones.reduce((acc, r) => {
         const anticipoInicial = parseFloat(r.anticipo_inicial || 0) || 0;
-        const totalAbonosRep = abonosReparaciones.filter(a => a.reparacion_id === r.id).reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+        const totalAbonosRep = abonosReparaciones
+            .filter(a => a.reparacion_id === r.id)
+            .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+
         const saldo = (parseFloat(r.precio || 0) || 0) - anticipoInicial - totalAbonosRep;
         return acc + (saldo > 0 ? saldo : 0);
     }, 0);
@@ -175,15 +191,23 @@ App.views.finanzas = function() {
         reparaciones.filter(r => esMismoMes(r.fecha_creacion)).reduce((acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0), 0) +
         abonosReparaciones.filter(a => esMismoMes(a.fecha)).reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0);
 
-    const gastosMes = gastos.filter(g => esMismoMes(g.fecha)).reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
+    const gastosMes = gastos
+        .filter(g => esMismoMes(g.fecha))
+        .reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
 
-    const porPagarArtesanos = pagosArtesanos.filter(p => String(p.estado || '').toLowerCase() === 'pendiente').reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+    const porPagarArtesanos = pagosArtesanos
+        .filter(p => String(p.estado || '').toLowerCase() === 'pendiente')
+        .reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+
     const porPagarCompras = compras.reduce((acc, c) => {
         const total = parseFloat(c.total || 0) || 0;
-        const pagado = c.monto_pagado !== undefined && c.monto_pagado !== '' ? parseFloat(c.monto_pagado || 0) : total;
+        const pagado = c.monto_pagado !== undefined && c.monto_pagado !== ''
+            ? parseFloat(c.monto_pagado || 0)
+            : total;
         const deuda = total - pagado;
         return acc + (deuda > 0 ? deuda : 0);
     }, 0);
+
     const totalPorPagar = porPagarArtesanos + porPagarCompras;
 
     const insumosCriticos = inventario.filter(i => {
@@ -191,7 +215,9 @@ App.views.finanzas = function() {
             (parseFloat(i.stock_real || 0) || 0) -
             (parseFloat(i.stock_reservado || 0) || 0) -
             (parseFloat(i.stock_comprometido || 0) || 0);
-        return (parseFloat(i.stock_minimo || 0) || 0) > 0 && libre <= (parseFloat(i.stock_minimo || 0) || 0);
+
+        return (parseFloat(i.stock_minimo || 0) || 0) > 0 &&
+            libre <= (parseFloat(i.stock_minimo || 0) || 0);
     }).length;
 
     const topRentablesHTML = costeo.topRentables.length
@@ -241,7 +267,6 @@ App.views.finanzas = function() {
                             Consulta operación, cobranza, caja, pagos pendientes, margen real y planeación financiera.
                         </p>
                     </div>
-
                     <div class="dm-list-card-actions" style="margin-top:0; display:flex; gap:8px; flex-wrap:wrap;">
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('cobranza')" style="border-color:#D69E2E; color:#B7791F;">Cobranza</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('pedidos')" style="border-color:#3182CE; color:#3182CE;">Pedidos</button>
