@@ -5,6 +5,114 @@
 window.App = window.App || {};
 App.views = App.views || {};
 
+App.views.runPedidoAction = async function (button, pedidoId, actionName, actionFn, options = {}) {
+    return App.ui.runSafeAction({
+        lockKey: options.lockKey || `pedido:${pedidoId}:${actionName}`,
+        button,
+        loadingText: options.loadingText || "Procesando...",
+        loaderMessage: options.loaderMessage || "Actualizando pedido...",
+        successMessage: options.successMessage || "Acción completada",
+        errorTitle: options.errorTitle || "No se pudo actualizar el pedido",
+        toastOnSuccess: options.toastOnSuccess !== false
+    }, async () => actionFn());
+};
+
+App.views.accionPedido = function (button, pedidoId, actionName) {
+    const actions = {
+        marcarListo: {
+            fn: () => App.logic.marcarPedidoListo(pedidoId),
+            loadingText: "Marcando...",
+            loaderMessage: "Marcando pedido como listo...",
+            successMessage: "Pedido marcado como listo",
+            errorTitle: "No se pudo marcar como listo"
+        },
+        marcarEntregado: {
+            fn: () => App.logic.marcarPedidoEntregado(pedidoId),
+            loadingText: "Entregando...",
+            loaderMessage: "Marcando pedido como entregado...",
+            successMessage: "Pedido marcado como entregado",
+            errorTitle: "No se pudo marcar como entregado"
+        },
+        cerrarPedido: {
+            fn: () => App.logic.cerrarPedidoSiLiquidado(pedidoId),
+            loadingText: "Cerrando...",
+            loaderMessage: "Cerrando pedido...",
+            successMessage: "Pedido cerrado correctamente",
+            errorTitle: "No se pudo cerrar el pedido"
+        },
+        imprimirNota: {
+            fn: () => App.logic.imprimirNota(pedidoId),
+            loadingText: "Generando...",
+            loaderMessage: "Generando nota...",
+            successMessage: "Nota generada",
+            errorTitle: "No se pudo generar la nota"
+        },
+        imprimirLiquidacion: {
+            fn: () => App.logic.imprimirReciboLiquidacion(pedidoId),
+            loadingText: "Generando...",
+            loaderMessage: "Generando recibo de liquidación...",
+            successMessage: "Recibo generado",
+            errorTitle: "No se pudo generar la liquidación"
+        },
+        whatsappCobro: {
+            fn: () => App.logic.enviarWhatsApp(pedidoId, 'cobro'),
+            loadingText: "Preparando...",
+            loaderMessage: "Preparando mensaje de WhatsApp...",
+            successMessage: "Mensaje preparado",
+            errorTitle: "No se pudo preparar WhatsApp"
+        },
+        whatsappListo: {
+            fn: () => App.logic.enviarWhatsApp(pedidoId, 'listo'),
+            loadingText: "Preparando...",
+            loaderMessage: "Preparando mensaje de WhatsApp...",
+            successMessage: "Mensaje preparado",
+            errorTitle: "No se pudo preparar WhatsApp"
+        }
+    };
+
+    const config = actions[actionName];
+    if (!config) {
+        App.ui.toast('Acción no disponible', 'warning');
+        return;
+    }
+
+    return App.views.runPedidoAction(button, pedidoId, actionName, config.fn, config);
+};
+
+App.views.accionAbono = function (button, abonoId, actionName) {
+    const actions = {
+        imprimirRecibo: {
+            fn: () => App.logic.imprimirReciboAbono(abonoId),
+            loadingText: "Generando...",
+            loaderMessage: "Generando recibo de abono...",
+            successMessage: "Recibo generado",
+            errorTitle: "No se pudo generar el recibo"
+        },
+        eliminarAbono: {
+            fn: () => App.logic.eliminarRegistroGenerico('abonos_clientes', abonoId, 'abonos'),
+            loadingText: "Eliminando...",
+            loaderMessage: "Eliminando abono...",
+            successMessage: "Abono eliminado",
+            errorTitle: "No se pudo eliminar el abono"
+        }
+    };
+
+    const config = actions[actionName];
+    if (!config) {
+        App.ui.toast('Acción no disponible', 'warning');
+        return;
+    }
+
+    return App.ui.runSafeAction({
+        lockKey: `abono:${abonoId}:${actionName}`,
+        button,
+        loadingText: config.loadingText,
+        loaderMessage: config.loaderMessage,
+        successMessage: config.successMessage,
+        errorTitle: config.errorTitle
+    }, async () => config.fn());
+};
+
 // ==========================================
 // PEDIDOS
 // ==========================================
@@ -71,6 +179,7 @@ window.generarListaPedidos = function(tipo) {
         const saldo = parseFloat(p.total || 0) - parseFloat(p.anticipo || 0) - abonos;
         const estado = String(p.estado || '').toLowerCase();
         const fecha = p.fecha_creacion ? String(p.fecha_creacion).split('T')[0] : '';
+        const whatsappAction = p.estado === 'listo para entregar' ? 'whatsappListo' : 'whatsappCobro';
 
         let estColor = 'dm-badge-primary';
         if (estado === 'entregado' || estado === 'pagado') estColor = 'dm-badge-success';
@@ -78,17 +187,17 @@ window.generarListaPedidos = function(tipo) {
 
         const accionesOperativas = `
             ${estado !== 'listo para entregar' && estado !== 'entregado' && estado !== 'pagado'
-                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.marcarPedidoListo('${p.id}')">📦 Listo</button>`
+                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'marcarListo')">📦 Listo</button>`
                 : ''
             }
 
             ${estado === 'listo para entregar' || estado === 'pagado'
-                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.marcarPedidoEntregado('${p.id}')">🚚 Entregado</button>`
+                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'marcarEntregado')">🚚 Entregado</button>`
                 : ''
             }
 
             ${saldo <= 0.05 && estado !== 'pagado'
-                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.cerrarPedidoSiLiquidado('${p.id}')">🔒 Cerrar</button>`
+                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'cerrarPedido')">🔒 Cerrar</button>`
                 : ''
             }
         `;
@@ -132,10 +241,10 @@ window.generarListaPedidos = function(tipo) {
                     <button class="dm-btn dm-btn-info dm-btn-sm" onclick="App.views.modalDetallesPedido('${p.id}')">📦 Detalles</button>
                     <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formPedido('${p.id}')">✏️ Editar</button>
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💳 Abonos</button>
-                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirNota('${p.id}')">🖨️ Nota</button>
-                    ${ultimoAbono ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboAbono('${ultimoAbono.id}')">🧾 Últ. abono</button>` : ''}
-                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboLiquidacion('${p.id}')">✅ Liquidación</button>
-                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.enviarWhatsApp('${p.id}', '${p.estado === 'listo para entregar' ? 'listo' : 'cobro'}')">💬 WhatsApp</button>
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'imprimirNota')">🖨️ Nota</button>
+                    ${ultimoAbono ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionAbono(this, '${ultimoAbono.id}', 'imprimirRecibo')">🧾 Últ. abono</button>` : ''}
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'imprimirLiquidacion')">✅ Liquidación</button>
+                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', '${whatsappAction}')">💬 WhatsApp</button>
                     ${accionesOperativas}
                 </div>
             </div>
@@ -233,9 +342,21 @@ App.views.formPedido = function(id = null) {
         </form>
     `;
 
-    App.ui.openSheet(obj ? 'Editar Pedido' : 'Nuevo Pedido', formHTML, (data) => {
-        if (obj) App.logic.actualizarRegistroGenerico('pedidos', id, data, 'pedidos');
-        else App.logic.guardarNuevoPedido(data);
+    App.ui.openSheet(obj ? 'Editar Pedido' : 'Nuevo Pedido', formHTML, async (data) => {
+        const action = obj
+            ? () => App.logic.actualizarRegistroGenerico('pedidos', id, data, 'pedidos')
+            : () => App.logic.guardarNuevoPedido(data);
+
+        const result = await App.ui.runSafeAction({
+            lockKey: obj ? `pedido:${id}:editar` : 'pedido:nuevo',
+            loadingText: obj ? 'Guardando...' : 'Creando...',
+            loaderMessage: obj ? 'Guardando pedido...' : 'Creando pedido...',
+            successMessage: obj ? 'Pedido actualizado' : 'Pedido creado',
+            errorTitle: obj ? 'No se pudo actualizar el pedido' : 'No se pudo crear el pedido',
+            closeSheetOnSuccess: true
+        }, async () => action());
+
+        return result;
     });
 
     setTimeout(() => {
@@ -273,13 +394,13 @@ App.views.modalAbonos = function(pedidoId) {
                         <div class="dm-list-card-actions" style="margin-top:0; justify-content:flex-end;">
                             <button
                                 class="dm-btn dm-btn-secondary dm-btn-sm"
-                                onclick="App.logic.imprimirReciboAbono('${a.id}')"
+                                onclick="App.views.accionAbono(this, '${a.id}', 'imprimirRecibo')"
                             >
                                 🧾
                             </button>
                             <button
                                 class="dm-btn dm-btn-danger dm-btn-sm"
-                                onclick="App.logic.eliminarRegistroGenerico('abonos_clientes','${a.id}','abonos')"
+                                onclick="App.views.accionAbono(this, '${a.id}', 'eliminarAbono')"
                             >
                                 X
                             </button>
@@ -329,10 +450,17 @@ App.views.modalAbonos = function(pedidoId) {
         `;
     }
 
-    App.ui.openSheet('Abonos del Pedido', html, (data) => {
-        if (saldo > 0) {
-            App.logic.guardarAbono(data);
-        }
+    App.ui.openSheet('Abonos del Pedido', html, async (data) => {
+        if (saldo <= 0) return;
+
+        return App.ui.runSafeAction({
+            lockKey: `pedido:${pedidoId}:abono:nuevo`,
+            loadingText: 'Registrando...',
+            loaderMessage: 'Registrando abono...',
+            successMessage: 'Abono registrado',
+            errorTitle: 'No se pudo registrar el abono',
+            closeSheetOnSuccess: true
+        }, async () => App.logic.guardarAbono(data));
     });
 };
 
@@ -417,6 +545,7 @@ App.views.modalDetallesPedido = function(pedidoId) {
         abonosLista.reduce((s, a) => s + parseFloat(a.monto || 0), 0);
 
     const estado = String(pedido.estado || '').toLowerCase();
+    const whatsappAction = estado === 'listo para entregar' ? 'whatsappListo' : 'whatsappCobro';
 
     let html = `<div class="dm-list">`;
 
@@ -438,23 +567,23 @@ App.views.modalDetallesPedido = function(pedidoId) {
     html += `
         </div>
         <div class="dm-list-card-actions dm-mt-3" style="flex-wrap:wrap;">
-            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirNota('${pedidoId}')">🖨️ Imprimir Nota</button>
-            ${ultimoAbono ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboAbono('${ultimoAbono.id}')">🧾 Últ. abono</button>` : ''}
-            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.imprimirReciboLiquidacion('${pedidoId}')">✅ Liquidación</button>
-            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.enviarWhatsApp('${pedidoId}', 'cobro')">💬 WhatsApp</button>
+            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'imprimirNota')">🖨️ Imprimir Nota</button>
+            ${ultimoAbono ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionAbono(this, '${ultimoAbono.id}', 'imprimirRecibo')">🧾 Últ. abono</button>` : ''}
+            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'imprimirLiquidacion')">✅ Liquidación</button>
+            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', '${whatsappAction}')">💬 WhatsApp</button>
 
             ${estado !== 'listo para entregar' && estado !== 'entregado' && estado !== 'pagado'
-                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.marcarPedidoListo('${pedidoId}')">📦 Listo</button>`
+                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'marcarListo')">📦 Listo</button>`
                 : ''
             }
 
             ${estado === 'listo para entregar' || estado === 'pagado'
-                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.marcarPedidoEntregado('${pedidoId}')">🚚 Entregado</button>`
+                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'marcarEntregado')">🚚 Entregado</button>`
                 : ''
             }
 
             ${saldo <= 0.05 && estado !== 'pagado'
-                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.logic.cerrarPedidoSiLiquidado('${pedidoId}')">🔒 Cerrar</button>`
+                ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'cerrarPedido')">🔒 Cerrar</button>`
                 : ''
             }
         </div>
