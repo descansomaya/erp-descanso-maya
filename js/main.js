@@ -4,13 +4,165 @@ App.forms = App.forms || {};
 App.debug = App.debug || {};
 App.logic = App.logic || {};
 App.router = App.router || {};
+App.views = App.views || {};
+
+// ==========================================
+// DEBUG / UTILIDADES DE ARRANQUE
+// ==========================================
+App.debug.lastError = App.debug.lastError || null;
+App.debug.bootLog = App.debug.bootLog || [];
+
+App.logBootStep = function (step, extra) {
+    const entry = {
+        step,
+        extra: extra || null,
+        at: new Date().toISOString()
+    };
+
+    App.debug.bootLog.push(entry);
+    console.info("[BOOT]", step, extra || "");
+    return entry;
+};
+
+App.safeEscape = function (value) {
+    const text = String(value ?? "");
+
+    if (App.ui && typeof App.ui.escapeHTML === "function") {
+        return App.ui.escapeHTML(text);
+    }
+
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+};
+
+App.setLastError = function (payload) {
+    App.debug.lastError = {
+        ...payload,
+        at: new Date().toISOString()
+    };
+    return App.debug.lastError;
+};
+
+App.renderFatalError = function (title, error, options) {
+    const opts = options || {};
+    const content = document.getElementById("app-content");
+    const headerTitle = document.getElementById("app-header-title");
+    const headerSubtitle = document.getElementById("app-header-subtitle");
+
+    const message = error?.message || error || "Error desconocido";
+    const source = opts.source || error?.source || "app";
+    const detail = opts.detail || error?.stack || "Sin detalle adicional";
+
+    App.setLastError({
+        title,
+        message,
+        source,
+        detail
+    });
+
+    console.error("[FATAL]", title, { message, source, detail, error });
+
+    if (headerTitle) headerTitle.textContent = "Error de aplicación";
+    if (headerSubtitle) headerSubtitle.textContent = "Se detuvo el arranque de Descanso Maya ERP";
+
+    if (!content) return;
+
+    content.innerHTML = `
+        <div class="dm-card" style="max-width:920px; margin:24px auto; border:1px solid rgba(220,38,38,.18);">
+            <div class="dm-alert dm-alert-danger dm-mb-3">
+                <strong>${App.safeEscape(title || "No se pudo iniciar Descanso Maya ERP")}</strong>
+            </div>
+
+            <p class="dm-mb-2"><strong>Mensaje:</strong> ${App.safeEscape(message)}</p>
+            <p class="dm-mb-3"><strong>Origen:</strong> ${App.safeEscape(source)}</p>
+
+            <div class="dm-row dm-mb-3" style="gap:12px; flex-wrap:wrap;">
+                <button class="dm-btn dm-btn-primary" onclick="window.location.reload()">Reintentar</button>
+                <button class="dm-btn dm-btn-ghost" onclick="window.location.hash='inicio'; window.location.reload();">Ir a inicio</button>
+            </div>
+
+            <details>
+                <summary style="cursor:pointer;"><strong>Ver detalle técnico</strong></summary>
+                <pre style="white-space:pre-wrap; word-break:break-word; background:#f8fafc; padding:12px; border-radius:10px; margin-top:12px; font-size:12px;">${App.safeEscape(detail)}</pre>
+            </details>
+        </div>
+    `;
+};
+
+App.handleGlobalError = function (kind, payload) {
+    const normalized = {
+        kind,
+        message: payload?.message || payload?.reason?.message || payload || "Error desconocido",
+        source: payload?.source || payload?.filename || kind,
+        lineno: payload?.lineno || null,
+        colno: payload?.colno || null,
+        stack: payload?.error?.stack || payload?.reason?.stack || null
+    };
+
+    App.setLastError(normalized);
+    console.error(`[${kind}]`, normalized);
+
+    const detailParts = [
+        normalized.stack,
+        normalized.lineno ? `Línea: ${normalized.lineno}` : null,
+        normalized.colno ? `Columna: ${normalized.colno}` : null
+    ].filter(Boolean);
+
+    App.renderFatalError(
+        kind === "unhandledrejection" ? "Promesa no controlada durante el arranque" : "Error global durante el arranque",
+        normalized.message,
+        {
+            source: normalized.source,
+            detail: detailParts.join("\n") || "Sin stack trace disponible"
+        }
+    );
+};
 
 // ==========================================
 // MANEJO GLOBAL DE ERRORES
 // ==========================================
-window.onerror = function (message, source, lineno) {
-    console.error("Error global:", { message, source, lineno });
-    alert("Hubo un error al cargar:\n" + message + "\nLínea: " + lineno);
+window.onerror = function (message, source, lineno, colno, error) {
+    App.handleGlobalError("onerror", {
+        message,
+        source,
+        lineno,
+        colno,
+        error
+    });
+    return false;
+};
+
+window.onunhandledrejection = function (event) {
+    App.handleGlobalError("unhandledrejection", {
+        reason: event?.reason
+    });
+};
+
+// ==========================================
+// VALIDACIÓN DE DEPENDENCIAS
+// ==========================================
+App.checkDependencies = function () {
+    const checks = [
+        { label: "App.state", ok: !!App.state },
+        { label: "App.ui", ok: !!App.ui },
+        { label: "App.views", ok: !!App.views },
+        { label: "App.logic", ok: !!App.logic },
+        { label: "App.router", ok: !!App.router },
+        { label: "App.router.init", ok: typeof App.router?.init === "function" },
+        { label: "App.router.handleRoute", ok: typeof App.router?.handleRoute === "function" }
+    ];
+
+    const missing = checks.filter(item => !item.ok).map(item => item.label);
+
+    if (missing.length) {
+        throw new Error(`Dependencias faltantes: ${missing.join(", ")}`);
+    }
+
+    return true;
 };
 
 // ==========================================
@@ -362,52 +514,61 @@ App.router = {
     },
 
     handleRoute() {
-        const contentDiv = document.getElementById("app-content");
-        const headerTitle = document.getElementById("app-header-title");
-        const headerSubtitle = document.getElementById("app-header-subtitle");
+        try {
+            const contentDiv = document.getElementById("app-content");
+            const headerTitle = document.getElementById("app-header-title");
+            const headerSubtitle = document.getElementById("app-header-subtitle");
 
-        if (!App.state?.sessionToken) {
-            App.ui.hideLoader();
-
-            if (headerTitle) headerTitle.textContent = "Acceso Restringido";
-            if (headerSubtitle) headerSubtitle.textContent = "Ingresa tu PIN";
-
-            if (contentDiv) {
-                if (typeof App.views?.login === "function") {
-                    contentDiv.innerHTML = App.views.login();
-                } else {
-                    contentDiv.innerHTML = `
-                        <div style="text-align:center; padding:40px;">
-                            <h2 class="dm-mb-3">Descanso Maya</h2>
-                            <p class="dm-alert dm-alert-danger dm-mb-3">Archivo de vistas dañado o cargando...</p>
-                            <input type="password" id="pin-input" class="dm-input dm-mb-3" placeholder="PIN">
-                            <button class="dm-btn dm-btn-primary" onclick="App.logic.verificarPIN(document.getElementById('pin-input').value)">Entrar</button>
-                        </div>
-                    `;
+            if (!App.state?.sessionToken) {
+                if (typeof App.ui?.hideLoader === "function") {
+                    App.ui.hideLoader();
                 }
+
+                if (headerTitle) headerTitle.textContent = "Acceso Restringido";
+                if (headerSubtitle) headerSubtitle.textContent = "Ingresa tu PIN";
+
+                if (contentDiv) {
+                    if (typeof App.views?.login === "function") {
+                        contentDiv.innerHTML = App.views.login();
+                    } else {
+                        contentDiv.innerHTML = `
+                            <div style="text-align:center; padding:40px;">
+                                <h2 class="dm-mb-3">Descanso Maya</h2>
+                                <p class="dm-alert dm-alert-danger dm-mb-3">Archivo de vistas dañado o cargando...</p>
+                                <input type="password" id="pin-input" class="dm-input dm-mb-3" placeholder="PIN">
+                                <button class="dm-btn dm-btn-primary" onclick="App.logic.verificarPIN(document.getElementById('pin-input').value)">Entrar</button>
+                            </div>
+                        `;
+                    }
+                }
+                return;
             }
-            return;
-        }
 
-        const hash = window.location.hash.substring(1) || "inicio";
+            const hash = window.location.hash.substring(1) || "inicio";
 
-        document.querySelectorAll(".dm-bottom-nav a").forEach(el => el.classList.remove("active"));
-        document.querySelectorAll(".dm-sidebar-link").forEach(el => el.classList.remove("active"));
+            document.querySelectorAll(".dm-bottom-nav a").forEach(el => el.classList.remove("active"));
+            document.querySelectorAll(".dm-sidebar-link").forEach(el => el.classList.remove("active"));
 
-        const activeMobile = document.querySelector(`.dm-bottom-nav a[onclick*="${hash}"]`);
-        const activeDesktop = document.querySelector(`.dm-sidebar-link[onclick*="${hash}"]`);
+            const activeMobile = document.querySelector(`.dm-bottom-nav a[onclick*="${hash}"]`);
+            const activeDesktop = document.querySelector(`.dm-sidebar-link[onclick*="${hash}"]`);
 
-        if (activeMobile) activeMobile.classList.add("active");
-        if (activeDesktop) activeDesktop.classList.add("active");
+            if (activeMobile) activeMobile.classList.add("active");
+            if (activeDesktop) activeDesktop.classList.add("active");
 
-        if (App.views && typeof App.views[hash] === "function") {
-            if (contentDiv) contentDiv.innerHTML = App.views[hash]();
+            if (App.views && typeof App.views[hash] === "function") {
+                if (contentDiv) contentDiv.innerHTML = App.views[hash]();
 
-            const titleConfig = this.getTitleConfig(hash);
-            if (headerTitle) headerTitle.textContent = titleConfig.title;
-            if (headerSubtitle) headerSubtitle.textContent = titleConfig.subtitle;
-        } else if (contentDiv) {
-            contentDiv.innerHTML = `<div class="dm-card"><p class="dm-center dm-muted">Módulo no encontrado.</p></div>`;
+                const titleConfig = this.getTitleConfig(hash);
+                if (headerTitle) headerTitle.textContent = titleConfig.title;
+                if (headerSubtitle) headerSubtitle.textContent = titleConfig.subtitle;
+            } else if (contentDiv) {
+                contentDiv.innerHTML = `<div class="dm-card"><p class="dm-center dm-muted">Módulo no encontrado.</p></div>`;
+            }
+        } catch (error) {
+            App.renderFatalError("Falló el router al cargar la vista", error, {
+                source: "App.router.handleRoute",
+                detail: error?.stack || "Sin stack trace"
+            });
         }
     }
 };
@@ -417,31 +578,41 @@ App.router = {
 // ==========================================
 App.start = function () {
     try {
+        App.logBootStep("start.begin");
+        App.checkDependencies();
+        App.logBootStep("dependencies.ok");
+
         if (this.ui && typeof this.ui.init === "function") {
+            App.logBootStep("ui.init.begin");
             this.ui.init();
+            App.logBootStep("ui.init.ok");
         }
 
         if (App.compat?.init) {
+            App.logBootStep("compat.init.begin");
             App.compat.init();
+            App.logBootStep("compat.init.ok");
         }
 
         if (!this.state?.sessionToken) {
+            App.logBootStep("router.init.no-session");
             this.router.init();
-        } else if (this.logic && typeof this.logic.cargarDatosIniciales === "function") {
+            return;
+        }
+
+        if (this.logic && typeof this.logic.cargarDatosIniciales === "function") {
+            App.logBootStep("logic.cargarDatosIniciales.begin");
             this.logic.cargarDatosIniciales();
+            App.logBootStep("logic.cargarDatosIniciales.ok");
         } else {
+            App.logBootStep("router.init.fallback");
             this.router.init();
         }
     } catch (error) {
-        console.error("Error al iniciar App:", error);
-        const content = document.getElementById("app-content");
-        if (content) {
-            content.innerHTML = `
-                <div class="dm-card">
-                    <p class="dm-alert dm-alert-danger">Error al iniciar la aplicación: ${App.ui.escapeHTML(error.message)}</p>
-                </div>
-            `;
-        }
+        App.renderFatalError("Error al iniciar la aplicación", error, {
+            source: "App.start",
+            detail: error?.stack || "Sin stack trace"
+        });
     }
 };
 
