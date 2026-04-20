@@ -13,8 +13,9 @@ Object.assign(App.logic, {
             const compraId = "COM-" + Date.now();
             const detallesCompra = [];
             const operaciones = [];
-            const nuevosMovs = [];
             const nuevosAbonosProv = [];
+            const nuevosProductos = [];
+            const productosActualizados = [];
 
             const mats = Array.isArray(datos["mat_id[]"])
                 ? datos["mat_id[]"]
@@ -29,6 +30,7 @@ Object.assign(App.logic, {
                 : (datos["precio_u[]"] ? [datos["precio_u[]"]] : []);
 
             const gastoPorTipo = {};
+            const movimientosCompra = [];
 
             for (let i = 0; i < mats.length; i++) {
                 const matId = mats[i];
@@ -54,63 +56,7 @@ Object.assign(App.logic, {
                     costo_unitario: precioUnitario
                 });
 
-                const nuevoStockReal = parseFloat(material.stock_real || 0) + cant;
-
-                operaciones.push({
-                    action: "actualizar_fila",
-                    nombreHoja: "materiales",
-                    idFila: material.id,
-                    datosNuevos: {
-                        stock_real: nuevoStockReal,
-                        costo_unitario: precioUnitario
-                    }
-                });
-
-                material.stock_real = nuevoStockReal;
-                material.costo_unitario = precioUnitario;
-
-                if (material.tipo === "reventa") {
-                    const existeProd = (App.state.productos || []).find(
-                        p => p.mat_1 === material.id || String(p.nombre || "").toLowerCase() === String(material.nombre || "").toLowerCase()
-                    );
-
-                    if (!existeProd) {
-                        const nuevoProd = {
-                            id: "PROD-" + Date.now() + "-" + i,
-                            nombre: material.nombre,
-                            categoria: "reventa",
-                            clasificacion: "Reventa",
-                            precio_venta: 0,
-                            mat_1: material.id,
-                            cant_1: 1,
-                            uso_1: "Completo",
-                            activo: "TRUE",
-                            fecha_creacion: new Date().toISOString()
-                        };
-
-                        operaciones.push({
-                            action: "guardar_fila",
-                            nombreHoja: "productos",
-                            datos: nuevoProd
-                        });
-
-                        if (!Array.isArray(App.state.productos)) App.state.productos = [];
-                        App.state.productos.push(nuevoProd);
-                    } else if (existeProd.mat_1 !== material.id) {
-                        operaciones.push({
-                            action: "actualizar_fila",
-                            nombreHoja: "productos",
-                            idFila: existeProd.id,
-                            datosNuevos: { mat_1: material.id }
-                        });
-
-                        existeProd.mat_1 = material.id;
-                    }
-                }
-
-                const mov = {
-                    id: "MOV-" + Date.now() + "-" + i,
-                    fecha: datos.fecha,
+                movimientosCompra.push({
                     tipo_movimiento: "entrada_compra",
                     origen: "compra",
                     origen_id: compraId,
@@ -120,18 +66,58 @@ Object.assign(App.logic, {
                     tipo: "entrada",
                     cantidad: cant,
                     costo_unitario: precioUnitario,
-                    total: totalFila,
                     motivo: "Compra a proveedor",
-                    notas: "Compra a proveedor"
-                };
-
-                nuevosMovs.push(mov);
-
-                operaciones.push({
-                    action: "guardar_fila",
-                    nombreHoja: "movimientos_inventario",
-                    datos: mov
+                    notas: "Compra a proveedor",
+                    fecha: datos.fecha,
+                    actualizar_costo_unitario: true
                 });
+            }
+
+            const resultadoLote = App.logic.movimientos.crearLoteMovimientos(movimientosCompra);
+            operaciones.push(...resultadoLote.operaciones);
+
+            for (let i = 0; i < mats.length; i++) {
+                const matId = mats[i];
+                if (!matId) continue;
+
+                const material = (App.state.inventario || []).find(m => m.id === matId);
+                if (!material || material.tipo !== "reventa") continue;
+
+                const existeProd = (App.state.productos || []).find(
+                    p => p.mat_1 === material.id || String(p.nombre || "").toLowerCase() === String(material.nombre || "").toLowerCase()
+                );
+
+                if (!existeProd) {
+                    const nuevoProd = {
+                        id: "PROD-" + Date.now() + "-" + i,
+                        nombre: material.nombre,
+                        categoria: "reventa",
+                        clasificacion: "Reventa",
+                        precio_venta: 0,
+                        mat_1: material.id,
+                        cant_1: 1,
+                        uso_1: "Completo",
+                        activo: "TRUE",
+                        fecha_creacion: new Date().toISOString()
+                    };
+
+                    operaciones.push({
+                        action: "guardar_fila",
+                        nombreHoja: "productos",
+                        datos: nuevoProd
+                    });
+
+                    nuevosProductos.push(nuevoProd);
+                } else if (existeProd.mat_1 !== material.id) {
+                    operaciones.push({
+                        action: "actualizar_fila",
+                        nombreHoja: "productos",
+                        idFila: existeProd.id,
+                        datosNuevos: { mat_1: material.id }
+                    });
+
+                    productosActualizados.push({ id: existeProd.id, mat_1: material.id });
+                }
             }
 
             const totalNum = parseFloat(datos.total || 0);
@@ -205,11 +191,18 @@ Object.assign(App.logic, {
             if (res.status === "success") {
                 if (!Array.isArray(App.state.compras)) App.state.compras = [];
                 if (!Array.isArray(App.state.abonos_proveedores)) App.state.abonos_proveedores = [];
-                if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
+                if (!Array.isArray(App.state.productos)) App.state.productos = [];
+
+                App.logic.movimientos.aplicarEnEstado(resultadoLote);
 
                 App.state.compras.push(compra);
                 App.state.abonos_proveedores.push(...nuevosAbonosProv);
-                App.state.movimientos_inventario.push(...nuevosMovs);
+                App.state.productos.push(...nuevosProductos);
+
+                productosActualizados.forEach(update => {
+                    const prod = (App.state.productos || []).find(p => p.id === update.id);
+                    if (prod) prod.mat_1 = update.mat_1;
+                });
 
                 App.ui.toast("Compra registrada");
                 App.router.handleRoute();
