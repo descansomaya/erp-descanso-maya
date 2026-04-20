@@ -305,10 +305,7 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
     `;
 
     App.ui.openSheet(obj ? 'Editar Pedido' : 'Nuevo Pedido', formHTML, async (data) => {
-        const action = obj
-            ? () => App.logic.actualizarRegistroGenerico('pedidos', obj.id, data, 'pedidos')
-            : () => App.logic.guardarNuevoPedido(data);
-
+        const action = obj ? () => App.logic.actualizarRegistroGenerico('pedidos', obj.id, data, 'pedidos') : () => App.logic.guardarNuevoPedido(data);
         return App.ui.runSafeAction({
             lockKey: obj ? `pedido:${obj.id}:editar` : 'pedido:nuevo',
             loadingText: obj ? 'Guardando...' : 'Creando...',
@@ -401,10 +398,22 @@ App.views.modalAbonos = function(pedidoId) {
 // ==========================================
 // COTIZACIONES
 // ==========================================
+App.views._resumenConversionCotizaciones = function () {
+    const cotizaciones = App.state.cotizaciones || [];
+    const total = cotizaciones.length;
+    const convertidas = cotizaciones.filter(c => String(c.estado_conversion || '').toLowerCase() === 'convertida').length;
+    const pendientes = total - convertidas;
+    const montoCotizado = cotizaciones.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
+    const montoConvertido = cotizaciones
+        .filter(c => String(c.estado_conversion || '').toLowerCase() === 'convertida')
+        .reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
+    const tasa = total > 0 ? (convertidas / total) * 100 : 0;
+    return { total, convertidas, pendientes, montoCotizado, montoConvertido, tasa };
+};
+
 App.views.cotizaciones = function() {
     const cotizaciones = [...(App.state.cotizaciones || [])].sort((a, b) => new Date(b.fecha || b.fecha_creacion || 0) - new Date(a.fecha || a.fecha_creacion || 0));
-
-    const totalCotizado = cotizaciones.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
+    const resumen = App.views._resumenConversionCotizaciones();
     const fabricado = cotizaciones.filter(c => String(c.tipo || '').toLowerCase() === 'fabricado').length;
     const reventa = cotizaciones.filter(c => String(c.tipo || '').toLowerCase() === 'reventa').length;
     const reparacion = cotizaciones.filter(c => String(c.tipo || '').toLowerCase() === 'reparacion').length;
@@ -412,10 +421,17 @@ App.views.cotizaciones = function() {
     let html = `
         <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
-                <div class="dm-card"><small class="dm-muted">Total cotizado</small><div class="dm-text-xl dm-fw-bold">${App.ui.money(totalCotizado)}</div></div>
+                <div class="dm-card"><small class="dm-muted">Total cotizado</small><div class="dm-text-xl dm-fw-bold">${App.ui.money(resumen.montoCotizado)}</div></div>
+                <div class="dm-card"><small class="dm-muted">Monto convertido</small><div class="dm-text-xl dm-fw-bold" style="color:var(--dm-success);">${App.ui.money(resumen.montoConvertido)}</div></div>
+                <div class="dm-card"><small class="dm-muted">Tasa conversión</small><div class="dm-text-xl dm-fw-bold">${resumen.tasa.toFixed(1)}%</div></div>
+                <div class="dm-card"><small class="dm-muted">Pendientes</small><div class="dm-text-xl dm-fw-bold" style="color:${resumen.pendientes > 0 ? 'var(--dm-warning)' : 'var(--dm-success)'};">${resumen.pendientes}</div></div>
+            </div>
+
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
                 <div class="dm-card"><small class="dm-muted">Fabricado</small><div class="dm-text-xl dm-fw-bold">${fabricado}</div></div>
                 <div class="dm-card"><small class="dm-muted">Reventa</small><div class="dm-text-xl dm-fw-bold">${reventa}</div></div>
                 <div class="dm-card"><small class="dm-muted">Reparación</small><div class="dm-text-xl dm-fw-bold">${reparacion}</div></div>
+                <div class="dm-card"><small class="dm-muted">Convertidas</small><div class="dm-text-xl dm-fw-bold" style="color:var(--dm-success);">${resumen.convertidas}</div></div>
             </div>
 
             <div class="dm-card dm-mb-4">
@@ -438,6 +454,7 @@ App.views.cotizaciones = function() {
             const fecha = String(c.fecha || c.fecha_creacion || '').split('T')[0];
             const tipo = String(c.tipo || 'general').toLowerCase();
             const badgeClass = tipo === 'fabricado' ? 'dm-badge-primary' : tipo === 'reventa' ? 'dm-badge-success' : 'dm-badge-warning';
+            const yaConvertida = String(c.estado_conversion || '').toLowerCase() === 'convertida';
 
             html += `
                 <div class="dm-list-card tarj-cot">
@@ -448,7 +465,10 @@ App.views.cotizaciones = function() {
                                 <div class="dm-list-card-subtitle">${App.ui.safe(c.cliente_nombre || 'Cliente')}</div>
                                 <div class="dm-text-sm dm-muted">${fecha}</div>
                             </div>
-                            <div><span class="dm-badge ${badgeClass}">${App.ui.safe((c.tipo || 'general').toUpperCase())}</span></div>
+                            <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+                                <span class="dm-badge ${badgeClass}">${App.ui.safe((c.tipo || 'general').toUpperCase())}</span>
+                                ${yaConvertida ? `<span class="dm-badge dm-badge-success">CONVERTIDA</span>` : `<span class="dm-badge dm-badge-warning">PENDIENTE</span>`}
+                            </div>
                         </div>
 
                         <div class="dm-card" style="background:var(--dm-surface-2); padding:10px;">
@@ -460,6 +480,7 @@ App.views.cotizaciones = function() {
                             <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verCotizacion('${c.id}')">👁️ Ver</button>
                             <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formCotizacion('${c.id}')">✏️ Editar</button>
                             <button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.convertirCotizacion('${c.id}')">🔁 Convertir</button>
+                            ${!yaConvertida ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.autoConvertirCotizacion('${c.id}')">⚡ Directo</button>` : ''}
                         </div>
                     </div>
                 </div>
@@ -532,7 +553,6 @@ App.views.formCotizacion = function(id = null) {
             </div>
 
             <input type="hidden" name="fecha" value="${obj ? (obj.fecha || new Date().toISOString()) : new Date().toISOString()}">
-
             <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">${obj ? 'Guardar Cambios' : 'Guardar Cotización'}</button>
         </form>
     `;
@@ -566,14 +586,68 @@ App.views.verCotizacion = function(cotizacionId) {
     App.ui.openSheet(`Cotización ${cotizacionId}`, html);
 };
 
+App.views._marcarCotizacionConvertida = async function (cotizacionId, extras = {}) {
+    const cot = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
+    if (!cot) return;
+
+    const payload = Object.assign({
+        estado_conversion: 'convertida',
+        fecha_conversion: new Date().toISOString()
+    }, extras);
+
+    try {
+        await App.logic.actualizarRegistroGenerico('cotizaciones', cotizacionId, payload, 'cotizaciones');
+    } catch (e) {
+        Object.assign(cot, payload);
+    }
+};
+
+App.views.autoConvertirCotizacion = async function (cotizacionId) {
+    const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
+    if (!c) return;
+
+    const tipo = String(c.tipo || '').toLowerCase();
+    try {
+        App.ui.showLoader('Auto-convirtiendo cotización...');
+
+        if (tipo === 'reparacion') {
+            const dataRep = {
+                cliente_nombre: c.cliente_nombre || 'Cliente',
+                descripcion: c.concepto || c.detalles || 'Reparación desde cotización',
+                precio: c.total || 0,
+                anticipo_inicial: 0
+            };
+            await App.logic.guardarNuevoGenerico('reparaciones', dataRep, 'REP', 'reparaciones');
+            await App.views._marcarCotizacionConvertida(cotizacionId, { convertido_a: 'reparacion' });
+        } else {
+            const dataPedido = {
+                cliente_id: c.cliente_id || 'STOCK_INTERNO',
+                producto_id: c.producto_id || '',
+                cantidad: c.cantidad || 1,
+                total: c.total || 0,
+                anticipo: 0,
+                fecha_entrega: new Date().toISOString().split('T')[0]
+            };
+            await App.logic.guardarNuevoPedido(dataPedido);
+            await App.views._marcarCotizacionConvertida(cotizacionId, { convertido_a: 'pedido' });
+        }
+
+        App.ui.hideLoader();
+        App.ui.toast('Cotización convertida automáticamente');
+        if (App.router?.handleRoute) App.router.handleRoute();
+    } catch (error) {
+        console.error('Error en autoConvertirCotizacion:', error);
+        App.ui.hideLoader();
+        App.ui.toast(error.message || 'No se pudo auto-convertir la cotización', 'danger');
+    }
+};
+
 App.views.convertirCotizacion = function(cotizacionId) {
     const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
     if (!c) return;
 
     const tipo = String(c.tipo || '').toLowerCase();
-    if (tipo === 'reparacion') {
-        return App.views.formReparacionDesdeCotizacion(cotizacionId);
-    }
+    if (tipo === 'reparacion') return App.views.formReparacionDesdeCotizacion(cotizacionId);
     return App.views.formPedidoDesdeCotizacion(cotizacionId);
 };
 
@@ -602,17 +676,14 @@ App.views.formReparacionDesdeCotizacion = function(cotizacionId) {
     const formHTML = `
         <form id="dynamic-form">
             <div class="dm-alert dm-alert-info dm-mb-3">Conversión desde cotización ${App.ui.safe(c.id || '')}</div>
-
             <div class="dm-form-group">
                 <label class="dm-label">Cliente</label>
                 <input type="text" class="dm-input" name="cliente_nombre" value="${App.ui.escapeHTML(c.cliente_nombre || '')}" required>
             </div>
-
             <div class="dm-form-group">
                 <label class="dm-label">Descripción reparación</label>
                 <textarea class="dm-textarea" name="descripcion" required>${App.ui.escapeHTML(c.concepto || c.detalles || '')}</textarea>
             </div>
-
             <div class="dm-form-row">
                 <div class="dm-form-group">
                     <label class="dm-label">Precio</label>
@@ -623,13 +694,14 @@ App.views.formReparacionDesdeCotizacion = function(cotizacionId) {
                     <input type="number" step="0.01" class="dm-input" name="anticipo_inicial" value="0">
                 </div>
             </div>
-
             <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Crear reparación</button>
         </form>
     `;
 
     App.ui.openSheet('Convertir a reparación', formHTML, async (data) => {
-        return App.logic.guardarNuevoGenerico('reparaciones', data, 'REP', 'reparaciones');
+        const res = await App.logic.guardarNuevoGenerico('reparaciones', data, 'REP', 'reparaciones');
+        await App.views._marcarCotizacionConvertida(cotizacionId, { convertido_a: 'reparacion' });
+        return res;
     });
 };
 
