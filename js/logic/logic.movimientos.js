@@ -171,5 +171,71 @@ Object.assign(App.logic.movimientos, {
             if (!tipoMovimiento) return true;
             return m.tipo_movimiento === tipoMovimiento;
         });
+    },
+
+    crearMovimientoReversa(movimientoOriginal, overrides = {}) {
+        if (!movimientoOriginal) {
+            throw new Error("Movimiento original no válido para reversa");
+        }
+
+        const tipoReversa = movimientoOriginal.tipo === "entrada" ? "salida" : "entrada";
+        const cantidadBase = Math.abs(this.toNumber(movimientoOriginal.cantidad, 0));
+
+        return {
+            tipo_movimiento: overrides.tipo_movimiento || `${movimientoOriginal.tipo_movimiento || 'movimiento'}_reversa`,
+            origen: overrides.origen || "reversa",
+            origen_id: overrides.origen_id || movimientoOriginal.origen_id || "",
+            ref_tipo: movimientoOriginal.ref_tipo || "material",
+            ref_id: movimientoOriginal.ref_id || movimientoOriginal.material_id || "",
+            material_id: movimientoOriginal.material_id || movimientoOriginal.ref_id || "",
+            tipo: tipoReversa,
+            cantidad: cantidadBase,
+            costo_unitario: this.toNumber(movimientoOriginal.costo_unitario, 0),
+            motivo: overrides.motivo || `Reversa de ${movimientoOriginal.tipo_movimiento || 'movimiento'}`,
+            notas: overrides.notas || `Reversa automática de ${movimientoOriginal.id || 'movimiento sin id'}`,
+            fecha: overrides.fecha || new Date().toISOString().split("T")[0]
+        };
+    },
+
+    crearLoteReversaDesdeMovimientos(movimientosOriginales = [], overrides = {}) {
+        const lista = (Array.isArray(movimientosOriginales) ? movimientosOriginales : [])
+            .filter(Boolean)
+            .map(m => this.crearMovimientoReversa(m, overrides));
+
+        return this.crearLoteMovimientos(lista);
+    },
+
+    revertirMovimientosPorOrigen(origenId, options = {}) {
+        const movimientos = this.buscarMovimientosPorOrigen(origenId, options.tipoMovimiento || null)
+            .filter(m => !String(m.tipo_movimiento || "").endsWith("_reversa"));
+
+        if (!movimientos.length) {
+            return {
+                ok: true,
+                resultados: [],
+                operaciones: [],
+                movimientos: []
+            };
+        }
+
+        return this.crearLoteReversaDesdeMovimientos(movimientos, {
+            origen: options.origen || "reversa",
+            origen_id: options.origen_id || origenId,
+            tipo_movimiento: options.tipo_movimiento_reversa,
+            motivo: options.motivo,
+            notas: options.notas,
+            fecha: options.fecha
+        });
+    },
+
+    eliminarMovimientosOriginalesPorOrigen(origenId, tipoMovimiento = null) {
+        const movimientos = this.buscarMovimientosPorOrigen(origenId, tipoMovimiento)
+            .filter(m => !String(m.tipo_movimiento || "").endsWith("_reversa"));
+
+        return movimientos.map(m => ({
+            action: "eliminar_fila",
+            nombreHoja: "movimientos_inventario",
+            idFila: m.id
+        }));
     }
 });
