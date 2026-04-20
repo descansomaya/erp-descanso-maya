@@ -53,55 +53,22 @@ App.views._resumenInventario = function () {
         if (real <= 0) resumen.itemsEnCero += 1;
         if (minimo > 0 && libre <= minimo) resumen.itemsCriticos += 1;
 
-        resumen.topCriticos.push({
-            id: i.id,
-            nombre: i.nombre,
-            libre,
-            minimo,
-            unidad: i.unidad || "",
-            tipo: i.tipo || "otro"
-        });
-
-        resumen.topValor.push({
-            id: i.id,
-            nombre: i.nombre,
-            valor,
-            stock: real,
-            costo,
-            unidad: i.unidad || ""
-        });
-
-        resumen.topRotacion.push({
-            id: i.id,
-            nombre: i.nombre,
-            salidas30d: salidasItem30d,
-            stock: real,
-            diasCobertura,
-            unidad: i.unidad || ''
-        });
+        resumen.topCriticos.push({ id: i.id, nombre: i.nombre, libre, minimo, unidad: i.unidad || "", tipo: i.tipo || "otro" });
+        resumen.topValor.push({ id: i.id, nombre: i.nombre, valor, stock: real, costo, unidad: i.unidad || "" });
+        resumen.topRotacion.push({ id: i.id, nombre: i.nombre, salidas30d: salidasItem30d, stock: real, diasCobertura, unidad: i.unidad || '' });
     });
 
     movimientos.forEach(m => {
         const fechaMov = m.fecha ? new Date(m.fecha) : null;
         if (!fechaMov || isNaN(fechaMov.getTime()) || fechaMov < hace30) return;
-
         const cantidad = Math.abs(parseFloat(m.cantidad || 0) || 0);
         if (String(m.tipo || "").toLowerCase() === "entrada") resumen.entradas30d += cantidad;
         if (String(m.tipo || "").toLowerCase() === "salida") resumen.salidas30d += cantidad;
     });
 
-    resumen.topCriticos = resumen.topCriticos
-        .filter(x => x.minimo > 0)
-        .sort((a, b) => (a.libre - a.minimo) - (b.libre - b.minimo))
-        .slice(0, 5);
-
-    resumen.topValor = resumen.topValor
-        .sort((a, b) => b.valor - a.valor)
-        .slice(0, 5);
-
-    resumen.topRotacion = resumen.topRotacion
-        .sort((a, b) => b.salidas30d - a.salidas30d)
-        .slice(0, 5);
+    resumen.topCriticos = resumen.topCriticos.filter(x => x.minimo > 0).sort((a, b) => (a.libre - a.minimo) - (b.libre - b.minimo)).slice(0, 5);
+    resumen.topValor = resumen.topValor.sort((a, b) => b.valor - a.valor).slice(0, 5);
+    resumen.topRotacion = resumen.topRotacion.sort((a, b) => b.salidas30d - a.salidas30d).slice(0, 5);
 
     return resumen;
 };
@@ -109,50 +76,44 @@ App.views._resumenInventario = function () {
 App.views._renderDashboardInventario = function () {
     const r = App.views._resumenInventario();
 
-    const topCriticosHTML = r.topCriticos.length
-        ? r.topCriticos.map(x => `
-            <div class="dm-row-between dm-mb-2" style="gap:12px; align-items:flex-start;">
-                <div style="flex:1; min-width:0;">
-                    <strong style="word-break:break-word;">${App.ui.safe(x.nombre)}</strong><br>
-                    <small class="dm-muted">${App.ui.safe(x.tipo)} · ${App.ui.safe(x.unidad)}</small>
-                </div>
-                <div style="text-align:right; flex:0 0 auto;">
-                    <strong style="color:var(--dm-danger);">${App.ui.number(x.libre, 1)}</strong><br>
-                    <small class="dm-muted">Mín: ${App.ui.number(x.minimo, 1)}</small>
-                </div>
+    const topCriticosHTML = r.topCriticos.length ? r.topCriticos.map(x => `
+        <div class="dm-row-between dm-mb-2" style="gap:12px; align-items:flex-start;">
+            <div style="flex:1; min-width:0;">
+                <strong style="word-break:break-word;">${App.ui.safe(x.nombre)}</strong><br>
+                <small class="dm-muted">${App.ui.safe(x.tipo)} · ${App.ui.safe(x.unidad)}</small>
             </div>
-        `).join("")
-        : `<div class="dm-alert dm-alert-success">Sin materiales críticos.</div>`;
+            <div style="text-align:right; flex:0 0 auto;">
+                <strong style="color:var(--dm-danger);">${App.ui.number(x.libre, 1)}</strong><br>
+                <small class="dm-muted">Mín: ${App.ui.number(x.minimo, 1)}</small>
+            </div>
+        </div>
+    `).join("") : `<div class="dm-alert dm-alert-success">Sin materiales críticos.</div>`;
 
-    const topValorHTML = r.topValor.length
-        ? r.topValor.map(x => `
-            <div class="dm-row-between dm-mb-2" style="gap:12px; align-items:flex-start;">
-                <div style="flex:1; min-width:0;">
-                    <strong style="word-break:break-word;">${App.ui.safe(x.nombre)}</strong><br>
-                    <small class="dm-muted">Stock: ${App.ui.number(x.stock, 1)} ${App.ui.safe(x.unidad)}</small>
-                </div>
-                <div style="text-align:right; flex:0 0 auto;">
-                    <strong>${App.ui.money(x.valor)}</strong><br>
-                    <small class="dm-muted">Costo: ${App.ui.money(x.costo)}</small>
-                </div>
+    const topValorHTML = r.topValor.length ? r.topValor.map(x => `
+        <div class="dm-row-between dm-mb-2" style="gap:12px; align-items:flex-start;">
+            <div style="flex:1; min-width:0;">
+                <strong style="word-break:break-word;">${App.ui.safe(x.nombre)}</strong><br>
+                <small class="dm-muted">Stock: ${App.ui.number(x.stock, 1)} ${App.ui.safe(x.unidad)}</small>
             </div>
-        `).join("")
-        : `<div class="dm-alert dm-alert-info">Sin datos suficientes.</div>`;
+            <div style="text-align:right; flex:0 0 auto;">
+                <strong>${App.ui.money(x.valor)}</strong><br>
+                <small class="dm-muted">Costo: ${App.ui.money(x.costo)}</small>
+            </div>
+        </div>
+    `).join("") : `<div class="dm-alert dm-alert-info">Sin datos suficientes.</div>`;
 
-    const topRotacionHTML = r.topRotacion.length
-        ? r.topRotacion.map(x => `
-            <div class="dm-row-between dm-mb-2" style="gap:12px; align-items:flex-start;">
-                <div style="flex:1; min-width:0;">
-                    <strong style="word-break:break-word;">${App.ui.safe(x.nombre)}</strong><br>
-                    <small class="dm-muted">Salidas 30d: ${App.ui.number(x.salidas30d, 1)} ${App.ui.safe(x.unidad)}</small>
-                </div>
-                <div style="text-align:right; flex:0 0 auto;">
-                    <strong>${x.diasCobertura !== null ? App.ui.number(x.diasCobertura, 1) + ' días' : 'Sin rotación'}</strong><br>
-                    <small class="dm-muted">Stock: ${App.ui.number(x.stock, 1)}</small>
-                </div>
+    const topRotacionHTML = r.topRotacion.length ? r.topRotacion.map(x => `
+        <div class="dm-row-between dm-mb-2" style="gap:12px; align-items:flex-start;">
+            <div style="flex:1; min-width:0;">
+                <strong style="word-break:break-word;">${App.ui.safe(x.nombre)}</strong><br>
+                <small class="dm-muted">Salidas 30d: ${App.ui.number(x.salidas30d, 1)} ${App.ui.safe(x.unidad)}</small>
             </div>
-        `).join("")
-        : `<div class="dm-alert dm-alert-info">Sin movimientos suficientes.</div>`;
+            <div style="text-align:right; flex:0 0 auto;">
+                <strong>${x.diasCobertura !== null ? App.ui.number(x.diasCobertura, 1) + ' días' : 'Sin rotación'}</strong><br>
+                <small class="dm-muted">Stock: ${App.ui.number(x.stock, 1)}</small>
+            </div>
+        </div>
+    `).join("") : `<div class="dm-alert dm-alert-info">Sin movimientos suficientes.</div>`;
 
     return `
         <div class="dm-card dm-mb-4">
@@ -205,73 +166,44 @@ App.views._renderDashboardInventario = function () {
 
 App.views.renderChartInventario = function () {
     if (typeof Chart === 'undefined') return;
-
     const r = App.views._resumenInventario();
     const ctx = document.getElementById('chartInventarioFlujo');
     if (!ctx) return;
-
-    if (App.views._chartInventarioFlujo) {
-        App.views._chartInventarioFlujo.destroy();
-    }
-
+    if (App.views._chartInventarioFlujo) App.views._chartInventarioFlujo.destroy();
     App.views._chartInventarioFlujo = new Chart(ctx, {
         type: 'bar',
-        data: {
-            labels: ['Entradas 30d', 'Salidas 30d'],
-            datasets: [{
-                label: 'Movimientos',
-                data: [r.entradas30d, r.salidas30d]
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false
-        }
+        data: { labels: ['Entradas 30d', 'Salidas 30d'], datasets: [{ label: 'Movimientos', data: [r.entradas30d, r.salidas30d] }] },
+        options: { responsive: true, maintainAspectRatio: false }
     });
 };
 
-// ==========================================
-// INVENTARIO
-// ==========================================
 App.views.inventario = function() {
     const title = document.getElementById('app-header-title');
     const subtitle = document.getElementById('app-header-subtitle');
     const bottomNav = document.getElementById('bottom-nav');
-
     if (title) title.innerText = 'Inventario';
     if (subtitle) subtitle.innerText = 'Control ejecutivo y operativo';
     if (bottomNav) bottomNav.style.display = 'flex';
 
     const inventario = App.state.inventario || [];
-
-    setTimeout(() => {
-        App.views.renderChartInventario();
-    }, 100);
+    setTimeout(() => App.views.renderChartInventario(), 100);
 
     let html = `
         <div class="dm-section" style="padding-bottom:90px;">
             ${App.views._renderDashboardInventario()}
-
             <div class="dm-card dm-mb-4">
                 <div style="display:flex; flex-direction:column; gap:10px;">
                     <div>
                         <h3 class="dm-card-title">Inventario operativo</h3>
                         <p class="dm-muted dm-mb-0" style="margin-top:6px;">Consulta stock físico, apartado y comprometido.</p>
                     </div>
-                    <input
-                        type="text"
-                        id="bus-inv"
-                        class="dm-input"
-                        onkeyup="window.filtrarLista('bus-inv', 'tarj-inv')"
-                        placeholder="🔍 Buscar insumo..."
-                    >
+                    <input type="text" id="bus-inv" class="dm-input" onkeyup="window.filtrarLista('bus-inv', 'tarj-inv')" placeholder="🔍 Buscar insumo...">
                 </div>
             </div>
-
             <div class="dm-list">
     `;
 
-    if (inventario.length === 0) {
+    if (!inventario.length) {
         html += `<div class="dm-alert dm-alert-info">No hay insumos registrados.</div>`;
     } else {
         inventario.forEach(i => {
@@ -292,7 +224,6 @@ App.views.inventario = function() {
                             </div>
                             <div style="flex:0 0 auto;"><span class="dm-badge ${badgeClass}">Libre: ${App.ui.number(libre, 1)} ${App.ui.safe(i.unidad || '')}</span></div>
                         </div>
-
                         <div class="dm-card" style="background:var(--dm-surface-2); padding:10px;">
                             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(90px,1fr)); gap:10px; text-align:center;">
                                 <div><small class="dm-muted">Físico</small><br><strong>${App.ui.number(real, 1)}</strong></div>
@@ -300,9 +231,7 @@ App.views.inventario = function() {
                                 <div><small class="dm-muted">Taller</small><br><strong style="color:var(--dm-primary);">${App.ui.number(comprometido, 1)}</strong></div>
                             </div>
                         </div>
-
                         <div class="dm-text-sm dm-muted">Stock mínimo: <strong>${App.ui.number(minimo, 1)}</strong></div>
-
                         <div class="dm-list-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
                             <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalKardex('${i.id}')">📋 Kardex</button>
                             <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formMaterial('${i.id}')">✏️ Editar</button>
@@ -313,13 +242,7 @@ App.views.inventario = function() {
         });
     }
 
-    html += `
-            </div>
-        </div>
-
-        <button class="dm-fab" onclick="App.views.formMaterial()">+</button>
-    `;
-
+    html += `</div></div><button class="dm-fab" onclick="App.views.formMaterial()">+</button>`;
     return html;
 };
 
@@ -330,14 +253,12 @@ App.views.compras = function() {
     const title = document.getElementById('app-header-title');
     const subtitle = document.getElementById('app-header-subtitle');
     const bottomNav = document.getElementById('bottom-nav');
-
     if (title) title.innerText = 'Compras';
     if (subtitle) subtitle.innerText = 'Proveedores, pagos y reposición';
     if (bottomNav) bottomNav.style.display = 'flex';
 
     const compras = [...(App.state.compras || [])].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
     const proveedores = App.state.proveedores || [];
-
     const totalCompras = compras.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
     const totalPagado = compras.reduce((acc, c) => acc + (parseFloat(c.monto_pagado || 0) || 0), 0);
     const totalPendiente = Math.max(0, totalCompras - totalPagado);
@@ -385,7 +306,6 @@ App.views.compras = function() {
                             </div>
                             <div style="flex:0 0 auto;"><span class="dm-badge ${badgeClass}">${saldo > 0 ? 'Saldo pendiente' : 'Pagada'}</span></div>
                         </div>
-
                         <div class="dm-card" style="background:var(--dm-surface-2); padding:10px;">
                             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(100px,1fr)); gap:10px; text-align:center;">
                                 <div><small class="dm-muted">Total</small><br><strong>${App.ui.money(total)}</strong></div>
@@ -393,7 +313,6 @@ App.views.compras = function() {
                                 <div><small class="dm-muted">Saldo</small><br><strong style="color:${saldo > 0 ? 'var(--dm-danger)' : 'var(--dm-success)'};">${App.ui.money(saldo)}</strong></div>
                             </div>
                         </div>
-
                         <div class="dm-list-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
                             <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verDetallesCompra('${c.id}')">👁️ Ver</button>
                             ${saldo > 0 ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formAbonoCompra('${c.id}')">💳 Abonar</button>` : ''}
@@ -405,35 +324,156 @@ App.views.compras = function() {
         });
     }
 
-    html += `
-            </div>
-        </div>
-
-        <button class="dm-fab" onclick="App.views.formCompra()">+</button>
-    `;
-
+    html += `</div></div><button class="dm-fab" onclick="App.views.formCompra()">+</button>`;
     return html;
 };
 
-App.views.formCompra = function() {
-    const proveedores = App.state.proveedores || [];
-    const inventario = App.state.inventario || [];
-
+App.views._optionsProveedorCompra = function () {
     let htmlProv = '<option value="">-- Proveedor --</option>';
-    proveedores.forEach(p => {
+    (App.state.proveedores || []).forEach(p => {
         htmlProv += `<option value="${p.id}">${App.ui.safe(p.nombre)}</option>`;
     });
+    return htmlProv;
+};
 
-    let htmlMat = '<option value="">-- Material --</option>';
-    inventario.forEach(m => {
+App.views._optionsMaterialCompra = function () {
+    let htmlMat = '<option value="">-- Material / reventa --</option>';
+    (App.state.inventario || []).forEach(m => {
         htmlMat += `<option value="${m.id}">${App.ui.safe(m.nombre)} (${App.ui.safe(m.tipo || '')})</option>`;
     });
+    return htmlMat;
+};
 
+App.views._filaCompraHTML = function () {
+    return `
+        <div class="fila-compra-item dm-card" style="background:var(--dm-surface-2); padding:10px; margin-bottom:10px;">
+            <div style="display:grid; grid-template-columns:1fr; gap:10px;">
+                <select class="dm-select" name="mat_id[]" onchange="App.views.calcularTotalCompraForm()">
+                    ${App.views._optionsMaterialCompra()}
+                </select>
+                <input type="number" step="0.01" class="dm-input" name="cant[]" placeholder="Cantidad" oninput="App.views.calcularTotalCompraForm()">
+                <input type="number" step="0.01" class="dm-input" name="precio_u[]" placeholder="Costo unitario" oninput="App.views.calcularTotalCompraForm()">
+                <button type="button" class="dm-btn dm-btn-danger dm-btn-sm" onclick="this.closest('.fila-compra-item').remove(); App.views.calcularTotalCompraForm();">🗑️ Quitar</button>
+            </div>
+        </div>
+    `;
+};
+
+App.views.agregarFilaCompra = function () {
+    const cont = document.getElementById('cont-filas-compra');
+    if (!cont) return;
+    cont.insertAdjacentHTML('beforeend', App.views._filaCompraHTML());
+};
+
+App.views.calcularTotalCompraForm = function () {
+    const cants = Array.from(document.querySelectorAll('#cont-filas-compra input[name="cant[]"]'));
+    const precios = Array.from(document.querySelectorAll('#cont-filas-compra input[name="precio_u[]"]'));
+    let total = 0;
+    for (let i = 0; i < Math.max(cants.length, precios.length); i++) {
+        const cant = parseFloat(cants[i]?.value || 0) || 0;
+        const precio = parseFloat(precios[i]?.value || 0) || 0;
+        total += cant * precio;
+    }
+    const totalInput = document.querySelector('#dynamic-form input[name="total"]');
+    if (totalInput) totalInput.value = total.toFixed(2);
+};
+
+App.views.formProveedorCompra = function (callback = null) {
+    const formHTML = `
+        <form id="dynamic-form">
+            <div class="dm-form-group">
+                <label class="dm-label">Nombre del proveedor</label>
+                <input type="text" class="dm-input" name="nombre" required>
+            </div>
+            <div class="dm-form-group">
+                <label class="dm-label">Teléfono</label>
+                <input type="text" class="dm-input" name="telefono">
+            </div>
+            <div class="dm-form-group">
+                <label class="dm-label">Correo</label>
+                <input type="email" class="dm-input" name="correo">
+            </div>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Guardar proveedor</button>
+        </form>
+    `;
+
+    App.ui.openSheet('Nuevo proveedor', formHTML, async (data) => {
+        const payload = Object.assign({ activo: 'TRUE' }, data);
+        const res = await App.logic.guardarNuevoGenerico('proveedores', payload, 'PROV', null, callback);
+        setTimeout(() => {
+            const sel = document.getElementById('compra-proveedor-select');
+            const ultimo = (App.state.proveedores || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
+            if (sel && ultimo) sel.value = ultimo.id;
+        }, 250);
+        return res;
+    });
+};
+
+App.views.formMaterialCompra = function (callback = null) {
+    const formHTML = `
+        <form id="dynamic-form">
+            <div class="dm-form-group">
+                <label class="dm-label">Nombre</label>
+                <input type="text" class="dm-input" name="nombre" required>
+            </div>
+            <div class="dm-form-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
+                <div class="dm-form-group">
+                    <label class="dm-label">Tipo</label>
+                    <select class="dm-select" name="tipo">
+                        <option value="hilo">Hilo</option>
+                        <option value="accesorio">Accesorio</option>
+                        <option value="reventa">Reventa</option>
+                    </select>
+                </div>
+                <div class="dm-form-group">
+                    <label class="dm-label">Unidad</label>
+                    <select class="dm-select" name="unidad">
+                        <option value="Tubos">Tubos</option>
+                        <option value="Kg">Kg</option>
+                        <option value="Pzas">Pzas</option>
+                    </select>
+                </div>
+            </div>
+            <div class="dm-form-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
+                <div class="dm-form-group">
+                    <label class="dm-label">Stock inicial</label>
+                    <input type="number" step="0.1" class="dm-input" name="stock_real" value="0">
+                </div>
+                <div class="dm-form-group">
+                    <label class="dm-label">Stock mínimo</label>
+                    <input type="number" step="0.1" class="dm-input" name="stock_minimo" value="0">
+                </div>
+            </div>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Guardar material</button>
+        </form>
+    `;
+
+    App.ui.openSheet('Nuevo material / reventa', formHTML, async (data) => {
+        const payload = Object.assign({ costo_unitario: 0 }, data);
+        const res = await App.logic.guardarNuevoGenerico('materiales', payload, 'MAT', null, callback);
+        setTimeout(() => {
+            const selects = document.querySelectorAll('#cont-filas-compra select[name="mat_id[]"]');
+            const ultimo = (App.state.inventario || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
+            selects.forEach(sel => {
+                if (!sel.value && ultimo) {
+                    sel.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)} (${App.ui.safe(ultimo.tipo || '')})</option>`);
+                    sel.value = ultimo.id;
+                }
+            });
+        }, 250);
+        return res;
+    });
+};
+
+App.views.formCompra = function() {
     const formHTML = `
         <form id="dynamic-form">
             <div class="dm-form-group">
                 <label class="dm-label">Proveedor</label>
-                <select class="dm-select" name="proveedor_id" required>${htmlProv}</select>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <select class="dm-select" id="compra-proveedor-select" name="proveedor_id" required style="flex:1; min-width:180px;">${App.views._optionsProveedorCompra()}</select>
+                    <button type="button" class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formProveedorCompra()">+ Proveedor</button>
+                </div>
             </div>
 
             <div class="dm-form-group">
@@ -442,18 +482,20 @@ App.views.formCompra = function() {
             </div>
 
             <div class="dm-card dm-mb-3" style="background:var(--dm-surface-2);">
-                <div class="dm-card-title dm-mb-2">Detalle de compra</div>
-                <div style="display:grid; grid-template-columns:1fr; gap:10px;">
-                    <select class="dm-select" name="mat_id[]" required>${htmlMat}</select>
-                    <input type="number" step="0.01" class="dm-input" name="cant[]" placeholder="Cantidad" required>
-                    <input type="number" step="0.01" class="dm-input" name="precio_u[]" placeholder="Costo unitario" required>
+                <div class="dm-row-between dm-mb-2" style="align-items:center; gap:8px; flex-wrap:wrap;">
+                    <div class="dm-card-title">Detalle de compra</div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button type="button" class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formMaterialCompra()">+ Material / reventa</button>
+                        <button type="button" class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.agregarFilaCompra()">+ Renglón</button>
+                    </div>
                 </div>
+                <div id="cont-filas-compra">${App.views._filaCompraHTML()}</div>
             </div>
 
             <div class="dm-form-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
                 <div class="dm-form-group">
                     <label class="dm-label">Total</label>
-                    <input type="number" step="0.01" class="dm-input" name="total" required>
+                    <input type="number" step="0.01" class="dm-input" name="total" readonly required>
                 </div>
                 <div class="dm-form-group">
                     <label class="dm-label">Monto pagado</label>
@@ -468,12 +510,13 @@ App.views.formCompra = function() {
     App.ui.openSheet('Nueva Compra', formHTML, async (data) => {
         return App.logic.guardarNuevaCompra(data);
     });
+
+    setTimeout(() => App.views.calcularTotalCompraForm(), 150);
 };
 
 App.views.formAbonoCompra = function(compraId) {
     const compra = (App.state.compras || []).find(c => c.id === compraId);
     if (!compra) return;
-
     const saldo = Math.max(0, (parseFloat(compra.total || 0) || 0) - (parseFloat(compra.monto_pagado || 0) || 0));
 
     const formHTML = `
@@ -488,9 +531,7 @@ App.views.formAbonoCompra = function(compraId) {
         </form>
     `;
 
-    App.ui.openSheet('Abono a compra', formHTML, async (data) => {
-        return App.logic.guardarAbonoCompra(data);
-    });
+    App.ui.openSheet('Abono a compra', formHTML, async (data) => App.logic.guardarAbonoCompra(data));
 };
 
 App.views.verDetallesCompra = function(compraId) {
@@ -498,11 +539,7 @@ App.views.verDetallesCompra = function(compraId) {
     if (!compra) return;
 
     let detalles = [];
-    try {
-        detalles = JSON.parse(compra.detalles || '[]');
-    } catch (e) {
-        detalles = [];
-    }
+    try { detalles = JSON.parse(compra.detalles || '[]'); } catch (e) { detalles = []; }
 
     let html = `<div class="dm-list">`;
     html += `<div class="dm-alert dm-alert-info dm-mb-3">Total: ${App.ui.money(compra.total || 0)} · Pagado: ${App.ui.money(compra.monto_pagado || 0)}</div>`;
@@ -537,7 +574,6 @@ App.views.formMaterial = function(id = null, callback = null) {
                 <label class="dm-label">Nombre</label>
                 <input type="text" class="dm-input" name="nombre" value="${obj ? App.ui.escapeHTML(obj.nombre) : ''}" required>
             </div>
-
             <div class="dm-form-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
                 <div class="dm-form-group">
                     <label class="dm-label">Tipo</label>
@@ -547,7 +583,6 @@ App.views.formMaterial = function(id = null, callback = null) {
                         <option value="reventa" ${obj && obj.tipo === 'reventa' ? 'selected' : ''}>Reventa</option>
                     </select>
                 </div>
-
                 <div class="dm-form-group">
                     <label class="dm-label">Unidad</label>
                     <select class="dm-select" name="unidad">
@@ -557,29 +592,23 @@ App.views.formMaterial = function(id = null, callback = null) {
                     </select>
                 </div>
             </div>
-
             <div class="dm-form-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
                 <div class="dm-form-group">
                     <label class="dm-label">Stock físico</label>
                     <input type="number" step="0.1" class="dm-input" name="stock_real" value="${obj ? obj.stock_real : '0'}" required>
                 </div>
-
                 <div class="dm-form-group">
                     <label class="dm-label">Stock mínimo</label>
                     <input type="number" step="0.1" class="dm-input" name="stock_minimo" value="${obj ? obj.stock_minimo : '0'}" required>
                 </div>
             </div>
-
             <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">${obj ? 'Guardar Cambios' : 'Crear Insumo'}</button>
         </form>
     `;
 
     App.ui.openSheet(obj ? 'Editar Insumo' : 'Nuevo Insumo', formHTML, (data) => {
-        if (obj) {
-            App.logic.actualizarRegistroGenerico('materiales', id, data, 'inventario');
-        } else {
-            App.logic.guardarNuevoGenerico('materiales', data, 'MAT', 'inventario', callback);
-        }
+        if (obj) App.logic.actualizarRegistroGenerico('materiales', id, data, 'inventario');
+        else App.logic.guardarNuevoGenerico('materiales', data, 'MAT', 'inventario', callback);
     });
 };
 
@@ -587,20 +616,12 @@ App.views.formMaterial = function(id = null, callback = null) {
 // KARDEX
 // ==========================================
 App.views.modalKardex = function(matId) {
-    const movs = (App.state.movimientos_inventario || [])
-        .filter(m => m.material_id === matId)
-        .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-
+    const movs = (App.state.movimientos_inventario || []).filter(m => m.material_id === matId).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     let html = `<div class="dm-list">`;
-
-    if (movs.length === 0) {
-        html += `<div class="dm-alert dm-alert-info">No hay movimientos para este insumo.</div>`;
-    }
-
+    if (!movs.length) html += `<div class="dm-alert dm-alert-info">No hay movimientos para este insumo.</div>`;
     movs.forEach(m => {
         const fecha = m.fecha ? String(m.fecha).split('T')[0] : '';
         const esEntrada = m.tipo === 'entrada';
-
         html += `
             <div class="dm-list-card" style="padding:10px;">
                 <div class="dm-row-between" style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
@@ -613,7 +634,6 @@ App.views.modalKardex = function(matId) {
             </div>
         `;
     });
-
     html += `</div>`;
     App.ui.openSheet('Kardex del Insumo', html);
 };
