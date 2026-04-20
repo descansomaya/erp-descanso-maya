@@ -324,6 +324,208 @@ App.views.inventario = function() {
 };
 
 // ==========================================
+// COMPRAS
+// ==========================================
+App.views.compras = function() {
+    const title = document.getElementById('app-header-title');
+    const subtitle = document.getElementById('app-header-subtitle');
+    const bottomNav = document.getElementById('bottom-nav');
+
+    if (title) title.innerText = 'Compras';
+    if (subtitle) subtitle.innerText = 'Proveedores, pagos y reposición';
+    if (bottomNav) bottomNav.style.display = 'flex';
+
+    const compras = [...(App.state.compras || [])].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
+    const proveedores = App.state.proveedores || [];
+
+    const totalCompras = compras.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
+    const totalPagado = compras.reduce((acc, c) => acc + (parseFloat(c.monto_pagado || 0) || 0), 0);
+    const totalPendiente = Math.max(0, totalCompras - totalPagado);
+
+    let html = `
+        <div class="dm-section" style="padding-bottom:90px;">
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(170px,1fr)); gap:12px;">
+                <div class="dm-card"><small class="dm-muted">Compras</small><div class="dm-text-xl dm-fw-bold">${App.ui.money(totalCompras)}</div></div>
+                <div class="dm-card"><small class="dm-muted">Pagado</small><div class="dm-text-xl dm-fw-bold" style="color:var(--dm-success);">${App.ui.money(totalPagado)}</div></div>
+                <div class="dm-card"><small class="dm-muted">Pendiente</small><div class="dm-text-xl dm-fw-bold" style="color:${totalPendiente > 0 ? 'var(--dm-danger)' : 'var(--dm-success)'};">${App.ui.money(totalPendiente)}</div></div>
+            </div>
+
+            <div class="dm-card dm-mb-4">
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <div>
+                        <h3 class="dm-card-title">Compras registradas</h3>
+                        <p class="dm-muted" style="margin-top:6px;">Control de compras a proveedor y abonos.</p>
+                    </div>
+                    <input type="text" id="bus-compras" class="dm-input" onkeyup="window.filtrarLista('bus-compras', 'tarj-compra')" placeholder="🔍 Buscar compra o proveedor...">
+                </div>
+            </div>
+
+            <div class="dm-list">
+    `;
+
+    if (!compras.length) {
+        html += `<div class="dm-alert dm-alert-info">No hay compras registradas.</div>`;
+    } else {
+        compras.forEach(c => {
+            const prov = proveedores.find(p => p.id === c.proveedor_id) || {};
+            const total = parseFloat(c.total || 0) || 0;
+            const pagado = parseFloat(c.monto_pagado || 0) || 0;
+            const saldo = Math.max(0, total - pagado);
+            const fecha = c.fecha ? String(c.fecha).split('T')[0] : '';
+            const badgeClass = saldo > 0 ? 'dm-badge-danger' : 'dm-badge-success';
+
+            html += `
+                <div class="dm-list-card tarj-compra">
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                        <div class="dm-row-between" style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
+                            <div style="flex:1; min-width:0;">
+                                <div class="dm-list-card-title">${App.ui.safe(c.id)}</div>
+                                <div class="dm-list-card-subtitle">${App.ui.safe(prov.nombre || 'Proveedor')}</div>
+                                <div class="dm-text-sm dm-muted">${fecha}</div>
+                            </div>
+                            <div style="flex:0 0 auto;"><span class="dm-badge ${badgeClass}">${saldo > 0 ? 'Saldo pendiente' : 'Pagada'}</span></div>
+                        </div>
+
+                        <div class="dm-card" style="background:var(--dm-surface-2); padding:10px;">
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(100px,1fr)); gap:10px; text-align:center;">
+                                <div><small class="dm-muted">Total</small><br><strong>${App.ui.money(total)}</strong></div>
+                                <div><small class="dm-muted">Pagado</small><br><strong style="color:var(--dm-success);">${App.ui.money(pagado)}</strong></div>
+                                <div><small class="dm-muted">Saldo</small><br><strong style="color:${saldo > 0 ? 'var(--dm-danger)' : 'var(--dm-success)'};">${App.ui.money(saldo)}</strong></div>
+                            </div>
+                        </div>
+
+                        <div class="dm-list-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verDetallesCompra('${c.id}')">👁️ Ver</button>
+                            ${saldo > 0 ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formAbonoCompra('${c.id}')">💳 Abonar</button>` : ''}
+                            <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.logic.eliminarCompra('${c.id}')">🗑️ Eliminar</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    html += `
+            </div>
+        </div>
+
+        <button class="dm-fab" onclick="App.views.formCompra()">+</button>
+    `;
+
+    return html;
+};
+
+App.views.formCompra = function() {
+    const proveedores = App.state.proveedores || [];
+    const inventario = App.state.inventario || [];
+
+    let htmlProv = '<option value="">-- Proveedor --</option>';
+    proveedores.forEach(p => {
+        htmlProv += `<option value="${p.id}">${App.ui.safe(p.nombre)}</option>`;
+    });
+
+    let htmlMat = '<option value="">-- Material --</option>';
+    inventario.forEach(m => {
+        htmlMat += `<option value="${m.id}">${App.ui.safe(m.nombre)} (${App.ui.safe(m.tipo || '')})</option>`;
+    });
+
+    const formHTML = `
+        <form id="dynamic-form">
+            <div class="dm-form-group">
+                <label class="dm-label">Proveedor</label>
+                <select class="dm-select" name="proveedor_id" required>${htmlProv}</select>
+            </div>
+
+            <div class="dm-form-group">
+                <label class="dm-label">Fecha</label>
+                <input type="date" class="dm-input" name="fecha" value="${new Date().toISOString().split('T')[0]}" required>
+            </div>
+
+            <div class="dm-card dm-mb-3" style="background:var(--dm-surface-2);">
+                <div class="dm-card-title dm-mb-2">Detalle de compra</div>
+                <div style="display:grid; grid-template-columns:1fr; gap:10px;">
+                    <select class="dm-select" name="mat_id[]" required>${htmlMat}</select>
+                    <input type="number" step="0.01" class="dm-input" name="cant[]" placeholder="Cantidad" required>
+                    <input type="number" step="0.01" class="dm-input" name="precio_u[]" placeholder="Costo unitario" required>
+                </div>
+            </div>
+
+            <div class="dm-form-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
+                <div class="dm-form-group">
+                    <label class="dm-label">Total</label>
+                    <input type="number" step="0.01" class="dm-input" name="total" required>
+                </div>
+                <div class="dm-form-group">
+                    <label class="dm-label">Monto pagado</label>
+                    <input type="number" step="0.01" class="dm-input" name="monto_pagado" value="0" required>
+                </div>
+            </div>
+
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Registrar compra</button>
+        </form>
+    `;
+
+    App.ui.openSheet('Nueva Compra', formHTML, async (data) => {
+        return App.logic.guardarNuevaCompra(data);
+    });
+};
+
+App.views.formAbonoCompra = function(compraId) {
+    const compra = (App.state.compras || []).find(c => c.id === compraId);
+    if (!compra) return;
+
+    const saldo = Math.max(0, (parseFloat(compra.total || 0) || 0) - (parseFloat(compra.monto_pagado || 0) || 0));
+
+    const formHTML = `
+        <form id="dynamic-form">
+            <input type="hidden" name="compra_id" value="${compraId}">
+            <div class="dm-alert dm-alert-info dm-mb-3">Saldo pendiente: ${App.ui.money(saldo)}</div>
+            <div class="dm-form-group">
+                <label class="dm-label">Monto a abonar</label>
+                <input type="number" step="0.01" class="dm-input" name="monto" max="${saldo}" required>
+            </div>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Registrar abono</button>
+        </form>
+    `;
+
+    App.ui.openSheet('Abono a compra', formHTML, async (data) => {
+        return App.logic.guardarAbonoCompra(data);
+    });
+};
+
+App.views.verDetallesCompra = function(compraId) {
+    const compra = (App.state.compras || []).find(c => c.id === compraId);
+    if (!compra) return;
+
+    let detalles = [];
+    try {
+        detalles = JSON.parse(compra.detalles || '[]');
+    } catch (e) {
+        detalles = [];
+    }
+
+    let html = `<div class="dm-list">`;
+    html += `<div class="dm-alert dm-alert-info dm-mb-3">Total: ${App.ui.money(compra.total || 0)} · Pagado: ${App.ui.money(compra.monto_pagado || 0)}</div>`;
+
+    if (!detalles.length) {
+        html += `<div class="dm-alert dm-alert-warning">Sin detalles de compra.</div>`;
+    } else {
+        detalles.forEach(d => {
+            html += `
+                <div class="dm-list-card" style="padding:10px;">
+                    <div class="dm-fw-bold">${App.ui.safe(d.nombre || d.mat_id || '')}</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Cantidad: <strong>${App.ui.safe(d.cantidad)}</strong></div>
+                    <div class="dm-text-sm dm-muted">Costo unitario: <strong>${App.ui.money(d.costo_unitario || 0)}</strong></div>
+                </div>
+            `;
+        });
+    }
+
+    html += `</div>`;
+    App.ui.openSheet(`Compra ${compraId}`, html);
+};
+
+// ==========================================
 // FORMULARIO DE INSUMO
 // ==========================================
 App.views.formMaterial = function(id = null, callback = null) {
@@ -414,16 +616,4 @@ App.views.modalKardex = function(matId) {
 
     html += `</div>`;
     App.ui.openSheet('Kardex del Insumo', html);
-};
-
-App.views.compras = function() {
-    return `
-        <div class="dm-section">
-            <div class="dm-card">
-                <h3 class="dm-card-title">Compras</h3>
-                <p class="dm-muted">Módulo activo ✅</p>
-                <button class="dm-btn dm-btn-primary" onclick="App.views.formCompra()">Nueva compra</button>
-            </div>
-        </div>
-    `;
 };
