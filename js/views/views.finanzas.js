@@ -260,38 +260,39 @@ App.views.finanzas = function() {
     return `
         <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4" style="background:linear-gradient(135deg, #ffffff 0%, #faf7ff 100%);">
-                <div class="dm-row-between" style="align-items:flex-start; gap:16px; flex-wrap:wrap;">
+                <div style="display:flex; flex-direction:column; gap:14px;">
                     <div>
                         <h3 class="dm-card-title">Dashboard Ejecutivo</h3>
                         <p class="dm-muted dm-mt-2" style="max-width:680px;">
                             Consulta operación, cobranza, caja, pagos pendientes, margen real y planeación financiera.
                         </p>
                     </div>
+
                     <div class="dm-list-card-actions" style="margin-top:0; display:flex; gap:8px; flex-wrap:wrap;">
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('cobranza')" style="border-color:#D69E2E; color:#B7791F;">Cobranza</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('pedidos')" style="border-color:#3182CE; color:#3182CE;">Pedidos</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('inventario')" style="border-color:#2F855A; color:#2F855A;">Inventario</button>
-                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('nomina')" style="border-color:#805AD5; color:#805AD5;">Nómina artesanos</button>
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('nomina')" style="border-color:#805AD5; color:#805AD5;">Nómina</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formGasto()" style="border-color:var(--dm-danger); color:var(--dm-danger);">＋ Gasto</button>
                     </div>
                 </div>
             </div>
 
-            <div class="dm-grid dm-grid-2 dm-mb-4">
-                <div class="dm-card" ${cardAction(`App.router.navigate('cobranza')`)} style="background:#FFFBEA; cursor:pointer;">
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:12px;">
+                <div class="dm-card" ${cardAction(`App.router.navigate('cobranza')`)} style="background:#FFFBEA;">
                     <div class="dm-kpi-label" style="color:#B7791F;">Dinero en la calle</div>
-                    <div class="dm-kpi-value" style="color:#D69E2E; font-size:1.5rem;">$${dineroEnLaCalle.toFixed(2)}</div>
+                    <div class="dm-kpi-value" style="color:#D69E2E; font-size:1.45rem;">$${dineroEnLaCalle.toFixed(2)}</div>
                     <div class="dm-text-sm dm-muted dm-mt-2">Pedidos + reparaciones pendientes por cobrar</div>
                 </div>
 
-                <div class="dm-card" ${cardAction(`App.views.detalleFinanzas('ingresos','mes_actual')`)} style="background:#F0FFF4; cursor:pointer;">
+                <div class="dm-card" ${cardAction(`App.views.detalleFinanzas('ingresos','mes_actual')`)} style="background:#F0FFF4;">
                     <div class="dm-kpi-label" style="color:#2F855A;">Ingresos del mes</div>
-                    <div class="dm-kpi-value" style="color:#38A169; font-size:1.5rem;">$${ingresosMes.toFixed(2)}</div>
+                    <div class="dm-kpi-value" style="color:#38A169; font-size:1.45rem;">$${ingresosMes.toFixed(2)}</div>
                     <div class="dm-text-sm dm-muted dm-mt-2">Anticipos y abonos registrados en el mes</div>
                 </div>
             </div>
 
-            <div class="dm-grid dm-grid-4 dm-mb-4">
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:12px;">
                 <div class="dm-card" ${cardAction(`App.router.navigate('inventario')`)}>
                     <div class="dm-kpi-label">Valor inventario</div>
                     <div class="dm-kpi-value">$${valorInventario.toFixed(2)}</div>
@@ -300,7 +301,9 @@ App.views.finanzas = function() {
 
                 <div class="dm-card" ${cardAction(`App.router.navigate('pedidos')`)}>
                     <div class="dm-kpi-label">Utilidad total estimada</div>
-                    <div class="dm-kpi-value" style="color:${costeo.totalUtilidad >= 0 ? 'var(--dm-success)' : 'var(--dm-danger)'};">$${costeo.totalUtilidad.toFixed(2)}</div>
+                    <div class="dm-kpi-value" style="color:${costeo.totalUtilidad >= 0 ? 'var(--dm-success)' : 'var(--dm-danger)'};">
+                        $${costeo.totalUtilidad.toFixed(2)}
+                    </div>
                     <div class="dm-text-sm dm-muted dm-mt-2">Venta menos costo de materiales y artesanos</div>
                 </div>
 
@@ -312,12 +315,14 @@ App.views.finanzas = function() {
 
                 <div class="dm-card">
                     <div class="dm-kpi-label">Margen promedio</div>
-                    <div class="dm-kpi-value" style="color:${costeo.margenPromedio >= 0 ? 'var(--dm-success)' : 'var(--dm-danger)'};">${costeo.margenPromedio.toFixed(1)}%</div>
+                    <div class="dm-kpi-value" style="color:${costeo.margenPromedio >= 0 ? 'var(--dm-success)' : 'var(--dm-danger)'};">
+                        ${costeo.margenPromedio.toFixed(1)}%
+                    </div>
                     <div class="dm-text-sm dm-muted dm-mt-2">Margen promedio por pedido</div>
                 </div>
             </div>
 
-            <div class="dm-grid dm-grid-3 dm-mb-4">
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:12px;">
                 <div class="dm-card">
                     <div class="dm-card-title">Top pedidos rentables</div>
                     <div class="dm-mt-3">${topRentablesHTML}</div>
@@ -337,7 +342,7 @@ App.views.finanzas = function() {
                 </div>
             </div>
 
-            <div class="dm-grid dm-grid-3 dm-mb-4">
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:12px;">
                 <div class="dm-card" style="background:#F0FFF4;">
                     <div class="dm-kpi-label" style="color:#2F855A;">Entradas esperadas</div>
                     <div class="dm-kpi-value" style="color:#38A169;">$${costeo.entradasEsperadas.toFixed(2)}</div>
@@ -352,12 +357,14 @@ App.views.finanzas = function() {
 
                 <div class="dm-card" style="background:${costeo.saldoProyectado >= 0 ? '#F0FFF4' : '#FFF5F5'};">
                     <div class="dm-kpi-label" style="color:${costeo.saldoProyectado >= 0 ? '#2F855A' : '#C53030'};">Saldo proyectado</div>
-                    <div class="dm-kpi-value" style="color:${costeo.saldoProyectado >= 0 ? '#38A169' : '#E53E3E'};">$${costeo.saldoProyectado.toFixed(2)}</div>
+                    <div class="dm-kpi-value" style="color:${costeo.saldoProyectado >= 0 ? '#38A169' : '#E53E3E'};">
+                        $${costeo.saldoProyectado.toFixed(2)}
+                    </div>
                     <div class="dm-text-sm dm-muted dm-mt-2">Entradas esperadas menos salidas comprometidas</div>
                 </div>
             </div>
 
-            <div class="dm-grid dm-grid-4 dm-mb-4">
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:12px;">
                 <div class="dm-card" ${cardAction(`App.router.navigate('pedidos')`)}>
                     <div class="dm-kpi-label">Pedidos activos</div>
                     <div class="dm-kpi-value">${pedidosActivos}</div>
