@@ -216,67 +216,47 @@ Object.assign(App.logic, {
                 (m.tipo_movimiento === "salida_produccion" || m.motivo === "Envío a taller")
             );
 
-            const recetaLimpia = Array.isArray(recetaArray) ? recetaArray.filter(item =>
-                item &&
-                item.mat_id &&
-                (parseFloat(item.cant || 0) || 0) > 0
-            ) : [];
+            const recetaLimpia = Array.isArray(recetaArray)
+                ? recetaArray.filter(item =>
+                    item &&
+                    item.mat_id &&
+                    (parseFloat(item.cant || 0) || 0) > 0
+                )
+                : [];
 
             const recetaJson = JSON.stringify(recetaLimpia);
             const operaciones = [];
-            const nuevosMovs = [];
+            let resultadoLote = null;
 
-            if (!hilosYaDescontados) {
-                recetaLimpia.forEach((item, idx) => {
-                    const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id);
-                    const cantDeducir = parseFloat(item.cant || 0) || 0;
+            if (!hilosYaDescontados && recetaLimpia.length > 0) {
+                resultadoLote = App.logic.movimientos.crearLoteMovimientos(
+                    recetaLimpia.map(item => {
+                        const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id) || {};
+                        const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
 
-                    if (!mat || cantDeducir <= 0) return;
+                        return {
+                            tipo_movimiento: "salida_produccion",
+                            origen: "pedido",
+                            origen_id: pedidoIdLigar,
+                            ref_tipo: "material",
+                            ref_id: item.mat_id,
+                            material_id: item.mat_id,
+                            tipo: "salida",
+                            cantidad: parseFloat(item.cant || 0) || 0,
+                            costo_unitario: costoUnitario,
+                            motivo: "Envío a taller",
+                            notas: `Envío a taller de pedido ${pedidoIdLigar}`
+                        };
+                    })
+                );
 
-                    const stockActual = parseFloat(mat.stock_real || 0) || 0;
-                    const nuevoStockReal = stockActual - cantDeducir;
-
-                    operaciones.push({
-                        action: "actualizar_fila",
-                        nombreHoja: "materiales",
-                        idFila: mat.id,
-                        datosNuevos: { stock_real: nuevoStockReal }
-                    });
-
-                    const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
-
-                    const mov = {
-                        id: "MOV-" + Date.now() + "-" + idx,
-                        fecha: new Date().toISOString().split("T")[0],
-                        tipo_movimiento: "salida_produccion",
-                        origen: "pedido",
-                        origen_id: pedidoIdLigar,
-                        ref_tipo: "material",
-                        ref_id: item.mat_id,
-                        material_id: item.mat_id,
-                        tipo: "salida",
-                        cantidad: -cantDeducir,
-                        costo_unitario: costoUnitario,
-                        total: -(cantDeducir * costoUnitario),
-                        motivo: "Envío a taller",
-                        notas: `Envío a taller de pedido ${pedidoIdLigar}`
-                    };
-
-                    nuevosMovs.push(mov);
-
-                    operaciones.push({
-                        action: "guardar_fila",
-                        nombreHoja: "movimientos_inventario",
-                        datos: mov
-                    });
-                });
+                operaciones.push(...resultadoLote.operaciones);
             }
 
             const datosOrdenUpdate = {
                 receta_personalizada: recetaJson
             };
 
-            // Si la orden ya tiene tarifa asignada, recalcula el pago automáticamente
             if (orden.tarifa_artesano_id) {
                 const calculoPago = this.calcularPagoArtesanoDesdeTarifa(
                     { ...orden, receta_personalizada: recetaJson },
@@ -303,19 +283,8 @@ Object.assign(App.logic, {
             if (res.status === "success") {
                 Object.assign(orden, datosOrdenUpdate);
 
-                if (!hilosYaDescontados) {
-                    if (!Array.isArray(App.state.movimientos_inventario)) {
-                        App.state.movimientos_inventario = [];
-                    }
-
-                    nuevosMovs.forEach(mov => {
-                        const mat = (App.state?.inventario || []).find(x => x.id === mov.material_id);
-                        if (mat) {
-                            mat.stock_real = (parseFloat(mat.stock_real || 0) || 0) + (parseFloat(mov.cantidad || 0) || 0);
-                        }
-                    });
-
-                    App.state.movimientos_inventario.push(...nuevosMovs);
+                if (!hilosYaDescontados && resultadoLote) {
+                    App.logic.movimientos.aplicarEnEstado(resultadoLote);
                 }
 
                 App.ui.toast(
@@ -574,7 +543,7 @@ async guardarAsignacionMultiArtesano(data) {
 
 async cancelarAsignacionMultiArtesano(asignacionId) {
     try {
-        if (!confirm("¿Cancelar esta asignación?")) return;
+        if (!confirm("¿Cancelar esta asignación?") ) return;
 
         App.ui.showLoader("Cancelando asignación...");
 
