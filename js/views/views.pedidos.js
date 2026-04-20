@@ -250,14 +250,20 @@ window.generarListaPedidos = function(tipo) {
     return html;
 };
 
-App.views.formPedido = function(id = null) {
-    const obj = id ? (App.state.pedidos || []).find(p => p.id === id) : null;
+App.views._formPedidoInterno = function(obj = null, prefill = null) {
+    const dataBase = Object.assign({ cantidad: 1, anticipo: 0 }, prefill || {}, obj || {});
 
     let htmlClientes = '<option value="STOCK_INTERNO">STOCK BODEGA</option>';
-    (App.state.clientes || []).forEach(c => { htmlClientes += `<option value="${c.id}" ${obj && obj.cliente_id === c.id ? 'selected' : ''}>${App.ui.safe(c.nombre)}</option>`; });
+    (App.state.clientes || []).forEach(c => {
+        const selected = dataBase.cliente_id === c.id ? 'selected' : '';
+        htmlClientes += `<option value="${c.id}" ${selected}>${App.ui.safe(c.nombre)}</option>`;
+    });
 
     let htmlProductos = '<option value="">-- Producto --</option>';
-    (App.state.productos || []).forEach(p => { htmlProductos += `<option value="${p.id}" ${obj && obj.producto_id === p.id ? 'selected' : ''}>${App.ui.safe(p.nombre)}</option>`; });
+    (App.state.productos || []).forEach(p => {
+        const selected = dataBase.producto_id === p.id ? 'selected' : '';
+        htmlProductos += `<option value="${p.id}" ${selected}>${App.ui.safe(p.nombre)}</option>`;
+    });
 
     const formHTML = `
         <form id="dynamic-form">
@@ -275,22 +281,22 @@ App.views.formPedido = function(id = null) {
             <div class="dm-form-row">
                 <div class="dm-form-group">
                     <label class="dm-label">Cantidad</label>
-                    <input type="number" class="dm-input" name="cantidad" value="${obj ? obj.cantidad : '1'}" required oninput="window.calcularTotalPedido()">
+                    <input type="number" class="dm-input" name="cantidad" value="${dataBase.cantidad || 1}" required oninput="window.calcularTotalPedido()">
                 </div>
                 <div class="dm-form-group">
                     <label class="dm-label">Fecha de entrega</label>
-                    <input type="date" class="dm-input" name="fecha_entrega" value="${obj ? (obj.fecha_entrega || '') : ''}" required>
+                    <input type="date" class="dm-input" name="fecha_entrega" value="${dataBase.fecha_entrega || ''}" required>
                 </div>
             </div>
 
             <div class="dm-form-row">
                 <div class="dm-form-group">
                     <label class="dm-label">Total ($)</label>
-                    <input type="number" step="0.01" class="dm-input" name="total" value="${obj ? (obj.total || '') : ''}" required>
+                    <input type="number" step="0.01" class="dm-input" name="total" value="${dataBase.total || ''}" required>
                 </div>
                 <div class="dm-form-group">
                     <label class="dm-label">Anticipo ($)</label>
-                    <input type="number" step="0.01" class="dm-input" name="anticipo" value="${obj ? (obj.anticipo || '0') : '0'}" required>
+                    <input type="number" step="0.01" class="dm-input" name="anticipo" value="${dataBase.anticipo || '0'}" required>
                 </div>
             </div>
 
@@ -299,9 +305,12 @@ App.views.formPedido = function(id = null) {
     `;
 
     App.ui.openSheet(obj ? 'Editar Pedido' : 'Nuevo Pedido', formHTML, async (data) => {
-        const action = obj ? () => App.logic.actualizarRegistroGenerico('pedidos', id, data, 'pedidos') : () => App.logic.guardarNuevoPedido(data);
+        const action = obj
+            ? () => App.logic.actualizarRegistroGenerico('pedidos', obj.id, data, 'pedidos')
+            : () => App.logic.guardarNuevoPedido(data);
+
         return App.ui.runSafeAction({
-            lockKey: obj ? `pedido:${id}:editar` : 'pedido:nuevo',
+            lockKey: obj ? `pedido:${obj.id}:editar` : 'pedido:nuevo',
             loadingText: obj ? 'Guardando...' : 'Creando...',
             loaderMessage: obj ? 'Guardando pedido...' : 'Creando pedido...',
             successMessage: obj ? 'Pedido actualizado' : 'Pedido creado',
@@ -311,6 +320,11 @@ App.views.formPedido = function(id = null) {
     });
 
     setTimeout(() => window.calcularTotalPedido(), 150);
+};
+
+App.views.formPedido = function(id = null) {
+    const obj = id ? (App.state.pedidos || []).find(p => p.id === id) : null;
+    return App.views._formPedidoInterno(obj, null);
 };
 
 App.views.modalAbonos = function(pedidoId) {
@@ -445,6 +459,7 @@ App.views.cotizaciones = function() {
                         <div class="dm-list-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
                             <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verCotizacion('${c.id}')">👁️ Ver</button>
                             <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formCotizacion('${c.id}')">✏️ Editar</button>
+                            <button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.convertirCotizacion('${c.id}')">🔁 Convertir</button>
                         </div>
                     </div>
                 </div>
@@ -549,6 +564,73 @@ App.views.verCotizacion = function(cotizacionId) {
     `;
 
     App.ui.openSheet(`Cotización ${cotizacionId}`, html);
+};
+
+App.views.convertirCotizacion = function(cotizacionId) {
+    const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
+    if (!c) return;
+
+    const tipo = String(c.tipo || '').toLowerCase();
+    if (tipo === 'reparacion') {
+        return App.views.formReparacionDesdeCotizacion(cotizacionId);
+    }
+    return App.views.formPedidoDesdeCotizacion(cotizacionId);
+};
+
+App.views.formPedidoDesdeCotizacion = function(cotizacionId) {
+    const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
+    if (!c) return;
+
+    const prefill = {
+        cliente_id: c.cliente_id || '',
+        producto_id: c.producto_id || '',
+        cantidad: c.cantidad || 1,
+        total: c.total || '',
+        anticipo: 0,
+        fecha_entrega: '',
+        notas: c.detalles || '',
+        cliente_nombre: c.cliente_nombre || ''
+    };
+
+    App.views._formPedidoInterno(null, prefill);
+};
+
+App.views.formReparacionDesdeCotizacion = function(cotizacionId) {
+    const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
+    if (!c) return;
+
+    const formHTML = `
+        <form id="dynamic-form">
+            <div class="dm-alert dm-alert-info dm-mb-3">Conversión desde cotización ${App.ui.safe(c.id || '')}</div>
+
+            <div class="dm-form-group">
+                <label class="dm-label">Cliente</label>
+                <input type="text" class="dm-input" name="cliente_nombre" value="${App.ui.escapeHTML(c.cliente_nombre || '')}" required>
+            </div>
+
+            <div class="dm-form-group">
+                <label class="dm-label">Descripción reparación</label>
+                <textarea class="dm-textarea" name="descripcion" required>${App.ui.escapeHTML(c.concepto || c.detalles || '')}</textarea>
+            </div>
+
+            <div class="dm-form-row">
+                <div class="dm-form-group">
+                    <label class="dm-label">Precio</label>
+                    <input type="number" step="0.01" class="dm-input" name="precio" value="${c.total || ''}" required>
+                </div>
+                <div class="dm-form-group">
+                    <label class="dm-label">Anticipo inicial</label>
+                    <input type="number" step="0.01" class="dm-input" name="anticipo_inicial" value="0">
+                </div>
+            </div>
+
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Crear reparación</button>
+        </form>
+    `;
+
+    App.ui.openSheet('Convertir a reparación', formHTML, async (data) => {
+        return App.logic.guardarNuevoGenerico('reparaciones', data, 'REP', 'reparaciones');
+    });
 };
 
 // ==========================================
