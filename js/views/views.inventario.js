@@ -19,7 +19,8 @@ App.views._resumenInventario = function () {
         entradas30d: 0,
         salidas30d: 0,
         topCriticos: [],
-        topValor: []
+        topValor: [],
+        topRotacion: []
     };
 
     const hoy = new Date();
@@ -34,6 +35,16 @@ App.views._resumenInventario = function () {
         const minimo = parseFloat(i.stock_minimo || 0) || 0;
         const costo = parseFloat(i.costo_unitario || 0) || 0;
         const valor = real * costo;
+
+        const salidasItem30d = movimientos
+            .filter(m => m.material_id === i.id)
+            .filter(m => {
+                const fechaMov = m.fecha ? new Date(m.fecha) : null;
+                return fechaMov && !isNaN(fechaMov.getTime()) && fechaMov >= hace30 && String(m.tipo || '').toLowerCase() === 'salida';
+            })
+            .reduce((acc, m) => acc + Math.abs(parseFloat(m.cantidad || 0) || 0), 0);
+
+        const diasCobertura = salidasItem30d > 0 ? (real / salidasItem30d) * 30 : null;
 
         resumen.stockTotal += real;
         resumen.stockLibre += libre;
@@ -59,6 +70,15 @@ App.views._resumenInventario = function () {
             costo,
             unidad: i.unidad || ""
         });
+
+        resumen.topRotacion.push({
+            id: i.id,
+            nombre: i.nombre,
+            salidas30d: salidasItem30d,
+            stock: real,
+            diasCobertura,
+            unidad: i.unidad || ''
+        });
     });
 
     movimientos.forEach(m => {
@@ -77,6 +97,10 @@ App.views._resumenInventario = function () {
 
     resumen.topValor = resumen.topValor
         .sort((a, b) => b.valor - a.valor)
+        .slice(0, 5);
+
+    resumen.topRotacion = resumen.topRotacion
+        .sort((a, b) => b.salidas30d - a.salidas30d)
         .slice(0, 5);
 
     return resumen;
@@ -115,12 +139,27 @@ App.views._renderDashboardInventario = function () {
         `).join("")
         : `<div class="dm-alert dm-alert-info">Sin datos suficientes.</div>`;
 
+    const topRotacionHTML = r.topRotacion.length
+        ? r.topRotacion.map(x => `
+            <div class="dm-row-between dm-mb-2" style="gap:12px; align-items:flex-start;">
+                <div style="flex:1; min-width:0;">
+                    <strong style="word-break:break-word;">${App.ui.safe(x.nombre)}</strong><br>
+                    <small class="dm-muted">Salidas 30d: ${App.ui.number(x.salidas30d, 1)} ${App.ui.safe(x.unidad)}</small>
+                </div>
+                <div style="text-align:right; flex:0 0 auto;">
+                    <strong>${x.diasCobertura !== null ? App.ui.number(x.diasCobertura, 1) + ' días' : 'Sin rotación'}</strong><br>
+                    <small class="dm-muted">Stock: ${App.ui.number(x.stock, 1)}</small>
+                </div>
+            </div>
+        `).join("")
+        : `<div class="dm-alert dm-alert-info">Sin movimientos suficientes.</div>`;
+
     return `
         <div class="dm-card dm-mb-4">
             <div class="dm-row-between" style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
                 <div>
                     <h3 class="dm-card-title">Dashboard de Inventario</h3>
-                    <p class="dm-muted" style="margin-top:6px;">Vista ejecutiva tipo Power BI para control de stock, riesgo y valor.</p>
+                    <p class="dm-muted" style="margin-top:6px;">Vista ejecutiva tipo Power BI para control de stock, riesgo, valor y rotación.</p>
                 </div>
                 <div class="dm-text-sm dm-muted">Últimos 30 días</div>
             </div>
@@ -158,9 +197,12 @@ App.views._renderDashboardInventario = function () {
                         <strong style="color:var(--dm-danger); font-size:18px;">${App.ui.number(r.salidas30d, 1)}</strong>
                     </div>
                 </div>
-                <div class="dm-mt-3" style="height:10px; background:var(--dm-surface-2); border-radius:999px; overflow:hidden; display:flex;">
+                <div class="dm-mt-3" style="height:10px; background:var(--dm-surface-2); border-radius:999px; overflow:hidden; display:flex; margin-bottom:16px;">
                     <div style="width:${(r.entradas30d + r.salidas30d) > 0 ? ((r.entradas30d / (r.entradas30d + r.salidas30d)) * 100) : 50}%; background:var(--dm-success);"></div>
                     <div style="width:${(r.entradas30d + r.salidas30d) > 0 ? ((r.salidas30d / (r.entradas30d + r.salidas30d)) * 100) : 50}%; background:var(--dm-danger);"></div>
+                </div>
+                <div style="position:relative; width:100%; height:220px;">
+                    <canvas id="chartInventarioFlujo"></canvas>
                 </div>
             </div>
 
@@ -179,7 +221,7 @@ App.views._renderDashboardInventario = function () {
             </div>
         </div>
 
-        <div class="dm-grid-2 dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px,1fr)); gap:12px;">
+        <div class="dm-grid-3 dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px,1fr)); gap:12px;">
             <div class="dm-card">
                 <h4 class="dm-card-title">Top materiales críticos</h4>
                 <div class="dm-mt-3">${topCriticosHTML}</div>
@@ -188,8 +230,39 @@ App.views._renderDashboardInventario = function () {
                 <h4 class="dm-card-title">Top valor en inventario</h4>
                 <div class="dm-mt-3">${topValorHTML}</div>
             </div>
+            <div class="dm-card">
+                <h4 class="dm-card-title">Rotación y cobertura</h4>
+                <div class="dm-mt-3">${topRotacionHTML}</div>
+            </div>
         </div>
     `;
+};
+
+App.views.renderChartInventario = function () {
+    if (typeof Chart === 'undefined') return;
+
+    const r = App.views._resumenInventario();
+    const ctx = document.getElementById('chartInventarioFlujo');
+    if (!ctx) return;
+
+    if (App.views._chartInventarioFlujo) {
+        App.views._chartInventarioFlujo.destroy();
+    }
+
+    App.views._chartInventarioFlujo = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Entradas 30d', 'Salidas 30d'],
+            datasets: [{
+                label: 'Movimientos',
+                data: [r.entradas30d, r.salidas30d]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
 };
 
 // ==========================================
@@ -205,6 +278,10 @@ App.views.inventario = function() {
     if (bottomNav) bottomNav.style.display = 'flex';
 
     const inventario = App.state.inventario || [];
+
+    setTimeout(() => {
+        App.views.renderChartInventario();
+    }, 100);
 
     let html = `
         <div class="dm-section" style="padding-bottom:90px;">
