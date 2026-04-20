@@ -415,3 +415,15 @@ App.views.modalKardex = function(matId) {
     html += `</div>`;
     App.ui.openSheet('Kardex del Insumo', html);
 };
+
+App.views.compras = function() {
+    return `
+        <div class="dm-section">
+            <div class="dm-card">
+                <h3 class="dm-card-title">Compras</h3>
+                <p class="dm-muted">Módulo activo ✅</p>
+                <button class="dm-btn dm-btn-primary" onclick="App.views.formCompra()">Nueva compra</button>
+            </div>
+        </div>
+    `;
+};
