@@ -482,7 +482,7 @@ Object.assign(App.logic, {
         }
     },
 
-        async marcarReparacionLista(reparacionId) {
+    async marcarReparacionLista(reparacionId) {
         try {
             const reparacion = (App.state.reparaciones || []).find(r => r.id === reparacionId);
             if (!reparacion) {
@@ -1326,7 +1326,52 @@ Object.assign(App.logic, {
     },
 
     imprimirCotizacion(cotId) {
-        App.ui.toast("Cotizaciones impresas sigue pendiente de activación.", "warning");
+        try {
+            const cot = (App.state.cotizaciones || []).find(c => c.id === cotId);
+            if (!cot) {
+                App.ui.toast("Cotización no encontrada", "danger");
+                return;
+            }
+
+            const cliente = (App.state.clientes || []).find(c => c.id === cot.cliente_id) || null;
+            const nombreCliente = cot.cliente_nombre || cliente?.nombre || "Cliente general";
+            const fecha = String(cot.fecha || cot.fecha_creacion || "").split("T")[0];
+            const cantidad = parseFloat(cot.cantidad || 1) || 1;
+            const total = parseFloat(cot.total || 0) || 0;
+            const unitario = cantidad > 0 ? total / cantidad : total;
+            const producto = (App.state.productos || []).find(p => p.id === cot.producto_id) || null;
+            const concepto = cot.concepto || producto?.nombre || (String(cot.tipo || "").toLowerCase() === "reparacion" ? "Servicio de reparación" : "Cotización");
+            const lineItems = [{
+                nombre: concepto,
+                cantidad,
+                precio: unitario,
+                subtotal: total
+            }];
+
+            const html = this._generarHTMLComprobanteComercial({
+                titulo: "Cotización",
+                subtitulo: "Propuesta comercial",
+                folio: cot.id || "",
+                clienteNombre: nombreCliente,
+                fecha,
+                estado: cot.estado_conversion ? String(cot.estado_conversion).toUpperCase() : "VIGENTE",
+                fechaEntrega: "",
+                lineItems,
+                total,
+                anticipo: 0,
+                abonos: 0,
+                saldo: total,
+                notas: "Precios sujetos a confirmación y disponibilidad.",
+                descripcion: cot.detalles || "",
+                etiquetaSaldo: "Total cotizado",
+                referencia: String(cot.tipo || "").toUpperCase()
+            });
+
+            this._abrirVentanaComprobante(html, "Cotización");
+        } catch (error) {
+            console.error("Error en imprimirCotizacion:", error);
+            App.ui.toast(error.message || "Error al imprimir cotización", "danger");
+        }
     },
 
     enviarWhatsApp(pedidoId, tipoMensaje) {
@@ -1379,9 +1424,6 @@ Object.assign(App.logic, {
         }
     },
 
-    // ==========================================
-    // LEGACY: COTIZACIONES EN LOCALSTORAGE
-    // ==========================================
     guardarCotizacion(datos) {
         datos.id = "COT-" + Date.now();
         datos.fecha_creacion = new Date().toISOString();
