@@ -5,7 +5,39 @@
 window.App = window.App || {};
 App.logic = App.logic || {};
 
+App.logic.MAPA_TABLAS = [
+    { hoja: "materiales", state: "inventario" },
+    { hoja: "clientes", state: "clientes" },
+    { hoja: "productos", state: "productos" },
+    { hoja: "pedidos", state: "pedidos" },
+    { hoja: "pedido_detalle", state: "pedido_detalle" },
+    { hoja: "ordenes_produccion", state: "ordenes_produccion" },
+    { hoja: "ordenes_produccion_artesanos", state: "ordenes_produccion_artesanos" },
+    { hoja: "artesanos", state: "artesanos" },
+    { hoja: "abonos_clientes", state: "abonos" },
+    { hoja: "abonos_reparaciones", state: "abonos_reparaciones" },
+    { hoja: "gastos", state: "gastos" },
+    { hoja: "compras", state: "compras" },
+    { hoja: "proveedores", state: "proveedores" },
+    { hoja: "reparaciones", state: "reparaciones" },
+    { hoja: "cotizaciones", state: "cotizaciones" },
+    { hoja: "tarifas_artesano", state: "tarifas_artesano" },
+    { hoja: "pago_artesanos", state: "pago_artesanos" },
+    { hoja: "movimientos_inventario", state: "movimientos_inventario" },
+    { hoja: "abonos_proveedores", state: "abonos_proveedores" }
+];
+
 Object.assign(App.logic, {
+    getHojasIniciales() {
+        return (App.logic.MAPA_TABLAS || []).map(x => x.hoja);
+    },
+
+    hidratarEstadoDesdeBD(bd = {}) {
+        (App.logic.MAPA_TABLAS || []).forEach(cfg => {
+            App.state[cfg.state] = bd[cfg.hoja] || [];
+        });
+    },
+
     async verificarPIN(pin) {
         App.ui.showLoader("Verificando...");
         const res = await App.api.fetch("login", { pin: pin });
@@ -31,28 +63,7 @@ Object.assign(App.logic, {
                 return;
             }
 
-            const hojas = [
-                "materiales",
-                "clientes",
-                "productos",
-                "pedidos",
-                "pedido_detalle",
-                "ordenes_produccion",
-                "artesanos",
-                "abonos_clientes",
-                "abonos_reparaciones",
-                "gastos",
-                "compras",
-                "proveedores",
-                "reparaciones",
-                "cotizaciones",
-                "tarifas_artesano",
-                "pago_artesanos",
-                "movimientos_inventario",
-                "ordenes_produccion_artesanos",
-                "abonos_proveedores"
-            ];
-
+            const hojas = this.getHojasIniciales();
             const res = await App.api.fetch("leer_todo", { hojas });
 
             if (res.status === "error") {
@@ -60,26 +71,7 @@ Object.assign(App.logic, {
             }
 
             const bd = res.data || {};
-
-            App.state.inventario = bd["materiales"] || [];
-            App.state.clientes = bd["clientes"] || [];
-            App.state.productos = bd["productos"] || [];
-            App.state.pedidos = bd["pedidos"] || [];
-            App.state.pedido_detalle = bd["pedido_detalle"] || [];
-            App.state.ordenes_produccion = bd["ordenes_produccion"] || [];
-            App.state.artesanos = bd["artesanos"] || [];
-            App.state.abonos = bd["abonos_clientes"] || [];
-            App.state.abonos_reparaciones = bd["abonos_reparaciones"] || [];
-            App.state.gastos = bd["gastos"] || [];
-            App.state.compras = bd["compras"] || [];
-            App.state.proveedores = bd["proveedores"] || [];
-            App.state.reparaciones = bd["reparaciones"] || [];
-            App.state.cotizaciones = bd["cotizaciones"] || [];
-            App.state.tarifas_artesano = bd["tarifas_artesano"] || [];
-            App.state.pago_artesanos = bd["pago_artesanos"] || [];
-            App.state.movimientos_inventario = bd["movimientos_inventario"] || [];
-            App.state.ordenes_produccion_artesanos = bd["ordenes_produccion_artesanos"] || [];
-            App.state.abonos_proveedores = bd["abonos_proveedores"] || [];
+            this.hidratarEstadoDesdeBD(bd);
 
             App.ui.hideLoader();
             App.router.init();
@@ -108,33 +100,13 @@ Object.assign(App.logic, {
 
     verDiagnostico() {
         let html = `<table style="width:100%; font-size:0.85rem; border-collapse:collapse;"><tr style="border-bottom:1px solid #ccc; text-align:left;"><th>Tabla (Hoja)</th><th>Estado</th><th>Registros</th></tr>`;
-        const tablas = [
-            { nombre: "materiales", state: "inventario" },
-            { nombre: "clientes", state: "clientes" },
-            { nombre: "productos", state: "productos" },
-            { nombre: "pedidos", state: "pedidos" },
-            { nombre: "pedido_detalle", state: "pedido_detalle" },
-            { nombre: "ordenes_produccion", state: "ordenes_produccion" },
-            { nombre: "ordenes_produccion_artesanos", state: "ordenes_produccion_artesanos" },
-            { nombre: "artesanos", state: "artesanos" },
-            { nombre: "abonos_clientes", state: "abonos" },
-            { nombre: "abonos_reparaciones", state: "abonos_reparaciones" },
-            { nombre: "gastos", state: "gastos" },
-            { nombre: "compras", state: "compras" },
-            { nombre: "proveedores", state: "proveedores" },
-            { nombre: "reparaciones", state: "reparaciones" },
-            { nombre: "cotizaciones", state: "cotizaciones" },
-            { nombre: "tarifas_artesano", state: "tarifas_artesano" },
-            { nombre: "pago_artesanos", state: "pago_artesanos" },
-            { nombre: "movimientos_inventario", state: "movimientos_inventario" },
-            { nombre: "abonos_proveedores", state: "abonos_proveedores" }
-        ];
+        const tablas = App.logic.MAPA_TABLAS || [];
 
         tablas.forEach(t => {
             const arr = App.state[t.state];
             const count = arr ? arr.length : 0;
             const status = arr ? "✅ OK" : "❌ Error";
-            html += `<tr style="border-bottom:1px dashed #eee;"><td style="padding:5px 0;">${t.nombre}</td><td>${status}</td><td>${count}</td></tr>`;
+            html += `<tr style="border-bottom:1px dashed #eee;"><td style="padding:5px 0;">${t.hoja}</td><td>${status}</td><td>${count}</td></tr>`;
         });
 
         html += `</table><button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="App.ui.closeSheet()">Cerrar</button>`;
