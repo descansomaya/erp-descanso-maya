@@ -492,6 +492,109 @@ App.views.cotizaciones = function() {
     return html;
 };
 
+App.views.syncCotizacionCliente = function () {
+    const select = document.querySelector('#dynamic-form select[name="cliente_id"]');
+    const input = document.querySelector('#dynamic-form input[name="cliente_nombre"]');
+    if (!select || !input) return;
+
+    const cliente = (App.state.clientes || []).find(c => c.id === select.value);
+    if (cliente) {
+        input.value = cliente.nombre || '';
+        input.dataset.autofill = 'true';
+    } else {
+        input.dataset.autofill = 'false';
+    }
+};
+
+App.views.toggleCamposCotizacion = function () {
+    const tipoSel = document.querySelector('#dynamic-form select[name="tipo"]');
+    const prodWrap = document.getElementById('cotizacion-producto-wrap');
+    const prodSel = document.querySelector('#dynamic-form select[name="producto_id"]');
+    const conceptoLabel = document.getElementById('cotizacion-concepto-label');
+
+    if (!tipoSel) return;
+    const tipo = String(tipoSel.value || '').toLowerCase();
+    const esReparacion = tipo === 'reparacion';
+
+    if (prodWrap) prodWrap.style.display = esReparacion ? 'none' : '';
+    if (prodSel) {
+        prodSel.required = !esReparacion;
+        if (esReparacion) prodSel.value = '';
+    }
+    if (conceptoLabel) {
+        conceptoLabel.textContent = esReparacion ? 'Servicio / reparación' : 'Concepto';
+    }
+};
+
+App.views.formClienteRapidoDesdeCotizacion = function () {
+    const formHTML = `
+        <form id="dynamic-form">
+            <div class="dm-form-group">
+                <label class="dm-label">Nombre del cliente</label>
+                <input type="text" class="dm-input" name="nombre" required>
+            </div>
+            <div class="dm-form-group">
+                <label class="dm-label">Teléfono</label>
+                <input type="text" class="dm-input" name="telefono">
+            </div>
+            <div class="dm-form-group">
+                <label class="dm-label">Correo</label>
+                <input type="email" class="dm-input" name="correo">
+            </div>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Guardar cliente</button>
+        </form>
+    `;
+
+    App.ui.openSheet('Nuevo cliente', formHTML, async (data) => {
+        const res = await App.logic.guardarNuevoGenerico('clientes', data, 'CLI', null, null);
+        setTimeout(() => {
+            const select = document.querySelector('#dynamic-form select[name="cliente_id"]');
+            const input = document.querySelector('#dynamic-form input[name="cliente_nombre"]');
+            const ultimo = (App.state.clientes || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
+            if (select && ultimo) select.value = ultimo.id;
+            if (input && ultimo) input.value = ultimo.nombre || '';
+        }, 250);
+        return res;
+    });
+};
+
+App.views.formProductoRapidoDesdeCotizacion = function () {
+    const formHTML = `
+        <form id="dynamic-form">
+            <div class="dm-form-group">
+                <label class="dm-label">Nombre del producto</label>
+                <input type="text" class="dm-input" name="nombre" required>
+            </div>
+            <div class="dm-form-group">
+                <label class="dm-label">Categoría</label>
+                <select class="dm-select" name="categoria">
+                    <option value="fabricado">Fabricado</option>
+                    <option value="reventa">Reventa</option>
+                </select>
+            </div>
+            <div class="dm-form-group">
+                <label class="dm-label">Precio sugerido</label>
+                <input type="number" step="0.01" class="dm-input" name="precio_venta" value="0">
+            </div>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Guardar producto</button>
+        </form>
+    `;
+
+    App.ui.openSheet('Nuevo producto', formHTML, async (data) => {
+        const payload = Object.assign({ activo: 'TRUE' }, data);
+        const res = await App.logic.guardarNuevoGenerico('productos', payload, 'PROD', null, null);
+        setTimeout(() => {
+            const select = document.querySelector('#dynamic-form select[name="producto_id"]');
+            const ultimo = (App.state.productos || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
+            if (select && ultimo) {
+                select.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)}</option>`);
+                select.value = ultimo.id;
+            }
+        }, 250);
+        return res;
+    });
+};
+
 App.views.formCotizacion = function(id = null) {
     const obj = id ? (App.state.cotizaciones || []).find(c => c.id === id) : null;
 
@@ -509,7 +612,7 @@ App.views.formCotizacion = function(id = null) {
         <form id="dynamic-form">
             <div class="dm-form-group">
                 <label class="dm-label">Tipo de cotización</label>
-                <select class="dm-select" name="tipo">
+                <select class="dm-select" name="tipo" onchange="App.views.toggleCamposCotizacion()">
                     <option value="fabricado" ${obj && obj.tipo === 'fabricado' ? 'selected' : ''}>Fabricado</option>
                     <option value="reventa" ${obj && obj.tipo === 'reventa' ? 'selected' : ''}>Reventa</option>
                     <option value="reparacion" ${obj && obj.tipo === 'reparacion' ? 'selected' : ''}>Reparación</option>
@@ -518,7 +621,12 @@ App.views.formCotizacion = function(id = null) {
 
             <div class="dm-form-group">
                 <label class="dm-label">Cliente</label>
-                <select class="dm-select" name="cliente_id">${htmlClientes}</select>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <select class="dm-select" name="cliente_id" onchange="App.views.syncCotizacionCliente()" style="flex:1; min-width:180px;">
+                        ${htmlClientes}
+                    </select>
+                    <button type="button" class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formClienteRapidoDesdeCotizacion()">+ Cliente</button>
+                </div>
             </div>
 
             <div class="dm-form-group">
@@ -526,9 +634,14 @@ App.views.formCotizacion = function(id = null) {
                 <input type="text" class="dm-input" name="cliente_nombre" value="${obj ? App.ui.escapeHTML(obj.cliente_nombre || '') : ''}" required>
             </div>
 
-            <div class="dm-form-group">
+            <div class="dm-form-group" id="cotizacion-producto-wrap">
                 <label class="dm-label">Producto / artículo</label>
-                <select class="dm-select" name="producto_id">${htmlProductos}</select>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <select class="dm-select" name="producto_id" style="flex:1; min-width:180px;">
+                        ${htmlProductos}
+                    </select>
+                    <button type="button" class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formProductoRapidoDesdeCotizacion()">+ Producto</button>
+                </div>
             </div>
 
             <div class="dm-form-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
@@ -543,7 +656,7 @@ App.views.formCotizacion = function(id = null) {
             </div>
 
             <div class="dm-form-group">
-                <label class="dm-label">Concepto</label>
+                <label class="dm-label" id="cotizacion-concepto-label">Concepto</label>
                 <input type="text" class="dm-input" name="concepto" value="${obj ? App.ui.escapeHTML(obj.concepto || '') : ''}" required>
             </div>
 
@@ -558,9 +671,25 @@ App.views.formCotizacion = function(id = null) {
     `;
 
     App.ui.openSheet(obj ? 'Editar Cotización' : 'Nueva Cotización', formHTML, async (data) => {
+        const clienteSel = document.querySelector('#dynamic-form select[name="cliente_id"]');
+        const cliente = (App.state.clientes || []).find(c => c.id === (clienteSel?.value || data.cliente_id || ''));
+
+        if ((!data.cliente_nombre || !String(data.cliente_nombre).trim()) && cliente) {
+            data.cliente_nombre = cliente.nombre || '';
+        }
+
+        if (String(data.tipo || '').toLowerCase() === 'reparacion') {
+            data.producto_id = '';
+        }
+
         if (obj) return App.logic.actualizarRegistroGenerico('cotizaciones', id, data, 'cotizaciones');
         return App.logic.guardarNuevoGenerico('cotizaciones', data, 'COT', 'cotizaciones');
     });
+
+    setTimeout(() => {
+        App.views.syncCotizacionCliente();
+        App.views.toggleCamposCotizacion();
+    }, 150);
 };
 
 App.views.verCotizacion = function(cotizacionId) {
