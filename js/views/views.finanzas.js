@@ -1,6 +1,28 @@
 window.App = window.App || {};
 App.views = App.views || {};
 
+App.views.detalleFinanzas = App.views.detalleFinanzas || function(tipo, filtro) {
+    const cont = document.getElementById('finanzas-contenedor');
+    if (!cont) return;
+
+    const labels = {
+        ventas: 'Ventas totales',
+        ingresos: 'Ingresos reales',
+        gastos: 'Gastos pagados',
+        por_cobrar: 'Cuentas por cobrar',
+        por_pagar: 'Cuentas por pagar'
+    };
+
+    const titulo = labels[tipo] || 'Detalle financiero';
+    cont.innerHTML = `
+        <div class="dm-card dm-mb-4">
+            <div class="dm-card-title">${titulo}</div>
+            <div class="dm-muted dm-mt-2">Filtro aplicado: ${filtro || 'actual'}</div>
+            <div class="dm-mt-3">Vista de detalle en construcción. El clic ya no rompe el módulo.</div>
+        </div>
+    `;
+};
+
 App.views.finanzas = function () {
     const title = document.getElementById('app-header-title');
     const subtitle = document.getElementById('app-header-subtitle');
@@ -127,8 +149,8 @@ App.views.finanzas = function () {
             </div>
 
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;" class="dm-mb-4">
-                <div class="dm-card"><div class="dm-kpi-label">Ventas totales</div><div class="dm-kpi-value">${money(totalVentas)}</div></div>
-                <div class="dm-card"><div class="dm-kpi-label">Gastos</div><div class="dm-kpi-value">${money(totalGastos)}</div></div>
+                <div class="dm-card" onclick="App.views.detalleFinanzas('ventas','mes_actual')" style="cursor:pointer;"><div class="dm-kpi-label">Ventas totales</div><div class="dm-kpi-value">${money(totalVentas)}</div></div>
+                <div class="dm-card" onclick="App.views.detalleFinanzas('gastos','mes_actual')" style="cursor:pointer;"><div class="dm-kpi-label">Gastos</div><div class="dm-kpi-value">${money(totalGastos)}</div></div>
                 <div class="dm-card"><div class="dm-kpi-label">Compras</div><div class="dm-kpi-value">${money(totalCompras)}</div></div>
                 <div class="dm-card"><div class="dm-kpi-label">Nómina</div><div class="dm-kpi-value">${money(totalNomina)}</div></div>
             </div>
