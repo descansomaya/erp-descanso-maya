@@ -142,6 +142,7 @@ App.views.finanzas = function() {
     const pagosArtesanos = App.state.pago_artesanos || [];
     const compras = App.state.compras || [];
     const inventario = App.state.inventario || [];
+    const cotizaciones = App.state.cotizaciones || [];
 
     const valorInventario = inventario.reduce((acc, i) => {
         const stock = parseFloat(i.stock_real || 0) || 0;
@@ -163,6 +164,9 @@ App.views.finanzas = function() {
 
     const pedidosListos = pedidos.filter(p => String(p.estado || '').toLowerCase() === 'listo para entregar').length;
     const reparacionesListas = reparaciones.filter(r => String(r.estado || '').toLowerCase() === 'lista').length;
+    const cotPendientes = cotizaciones.filter(c => String(c.estado_conversion || '').toLowerCase() !== 'convertida').length;
+    const cotConvertidas = cotizaciones.filter(c => String(c.estado_conversion || '').toLowerCase() === 'convertida').length;
+    const cotMonto = cotizaciones.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
 
     const porCobrarPedidos = pedidos.reduce((acc, p) => {
         const totalAbonos = abonos
@@ -264,7 +268,7 @@ App.views.finanzas = function() {
                     <div>
                         <h3 class="dm-card-title">Dashboard Ejecutivo</h3>
                         <p class="dm-muted dm-mt-2" style="max-width:680px;">
-                            Consulta operación, cobranza, caja, pagos pendientes, margen real y planeación financiera.
+                            Consulta operación, cobranza, caja, pagos pendientes, margen real, desempeño comercial y planeación financiera.
                         </p>
                     </div>
 
@@ -272,6 +276,7 @@ App.views.finanzas = function() {
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('cobranza')" style="border-color:#D69E2E; color:#B7791F;">Cobranza</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('pedidos')" style="border-color:#3182CE; color:#3182CE;">Pedidos</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('inventario')" style="border-color:#2F855A; color:#2F855A;">Inventario</button>
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('cotizaciones')" style="border-color:#6D28D9; color:#6D28D9;">Cotizaciones</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('nomina')" style="border-color:#805AD5; color:#805AD5;">Nómina</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formGasto()" style="border-color:var(--dm-danger); color:var(--dm-danger);">＋ Gasto</button>
                     </div>
@@ -319,6 +324,42 @@ App.views.finanzas = function() {
                         ${costeo.margenPromedio.toFixed(1)}%
                     </div>
                     <div class="dm-text-sm dm-muted dm-mt-2">Margen promedio por pedido</div>
+                </div>
+            </div>
+
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:12px;">
+                <div class="dm-card" style="background:#FAF5FF;">
+                    <div class="dm-kpi-label" style="color:#6D28D9;">Cotizaciones</div>
+                    <div class="dm-kpi-value" style="color:#6D28D9;">${cotizaciones.length}</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Total registradas</div>
+                </div>
+                <div class="dm-card" style="background:#FFFBEA;">
+                    <div class="dm-kpi-label" style="color:#B7791F;">Pendientes</div>
+                    <div class="dm-kpi-value" style="color:#B7791F;">${cotPendientes}</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Por seguimiento o cierre</div>
+                </div>
+                <div class="dm-card" style="background:#F0FFF4;">
+                    <div class="dm-kpi-label" style="color:#2F855A;">Convertidas</div>
+                    <div class="dm-kpi-value" style="color:#38A169;">${cotConvertidas}</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Ya convertidas a operación</div>
+                </div>
+                <div class="dm-card">
+                    <div class="dm-kpi-label">Monto cotizado</div>
+                    <div class="dm-kpi-value">$${cotMonto.toFixed(2)}</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Potencial comercial total</div>
+                </div>
+            </div>
+
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px,1fr)); gap:12px;">
+                <div class="dm-card">
+                    <div class="dm-card-title">📊 Vista rápida</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Indicadores visuales resumidos del negocio.</div>
+                    <div id="mini-graficas-dashboard" class="dm-mt-3" style="min-height:220px;"></div>
+                </div>
+                <div class="dm-card">
+                    <div class="dm-card-title">📈 Tendencias financieras</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Comportamiento de ingresos, gastos y flujo.</div>
+                    <div id="finanzas-graficas-principales" class="dm-mt-3" style="min-height:220px;"></div>
                 </div>
             </div>
 
