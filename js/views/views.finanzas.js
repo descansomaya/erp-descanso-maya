@@ -1,4 +1,3 @@
-```js id="m3q2nr"
 window.App = window.App || {};
 App.views = App.views || {};
 
@@ -98,4 +97,3 @@ App.views.finanzas = function () {
         </div>
     `;
 };
-```
