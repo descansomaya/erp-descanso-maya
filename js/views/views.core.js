@@ -25,14 +25,37 @@ App.views.inicio = function() {
     const reparaciones = App.state.reparaciones || [];
     const cotizaciones = App.state.cotizaciones || [];
     const inventario = App.state.inventario || [];
+    const clientes = App.state.clientes || [];
+    const abonos = App.state.abonos || [];
+    const abonosReparaciones = App.state.abonos_reparaciones || [];
+
+    const hoy = new Date();
+    const mesActual = hoy.getMonth();
+    const anioActual = hoy.getFullYear();
+    const esMismoMes = (fechaStr) => {
+        if (!fechaStr) return false;
+        const f = new Date(fechaStr);
+        return !isNaN(f.getTime()) && f.getMonth() === mesActual && f.getFullYear() === anioActual;
+    };
 
     const pedidosActivos = pedidos.filter(p => !['entregado', 'pagado'].includes(String(p.estado || '').toLowerCase())).length;
     const produccionActiva = produccion.filter(o => String(o.estado || '').toLowerCase() !== 'listo').length;
     const reparacionesActivas = reparaciones.filter(r => String(r.estado || '').toLowerCase() !== 'entregada').length;
     const cotPendientes = cotizaciones.filter(c => String(c.estado_conversion || '').toLowerCase() !== 'convertida').length;
+    const cotConvertidas = cotizaciones.filter(c => String(c.estado_conversion || '').toLowerCase() === 'convertida').length;
+    const tasaConversion = cotizaciones.length ? (cotConvertidas / cotizaciones.length) * 100 : 0;
 
-    const ventasMes = pedidos.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+    const ventasMes = pedidos.filter(p => esMismoMes(p.fecha_creacion)).reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+    const cobradoMes =
+        pedidos.filter(p => esMismoMes(p.fecha_creacion)).reduce((acc, p) => acc + (parseFloat(p.anticipo || 0) || 0), 0) +
+        abonos.filter(a => esMismoMes(a.fecha)).reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0) +
+        reparaciones.filter(r => esMismoMes(r.fecha_creacion)).reduce((acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0), 0) +
+        abonosReparaciones.filter(a => esMismoMes(a.fecha)).reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0);
+
     const cotizado = cotizaciones.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
+    const montoConvertido = cotizaciones
+        .filter(c => String(c.estado_conversion || '').toLowerCase() === 'convertida')
+        .reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
 
     const stockCritico = inventario.filter(i => {
         const libre = (parseFloat(i.stock_real || 0) || 0) - (parseFloat(i.stock_reservado || 0) || 0) - (parseFloat(i.stock_comprometido || 0) || 0);
@@ -43,6 +66,26 @@ App.views.inicio = function() {
         const estado = String(p.estado || '').toLowerCase();
         return !['entregado', 'pagado'].includes(estado);
     }).length;
+
+    const topClientes = clientes.map(c => {
+        const ventasCliente = pedidos
+            .filter(p => p.cliente_id === c.id)
+            .reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+        const cotCliente = cotizaciones
+            .filter(ct => ct.cliente_id === c.id)
+            .reduce((acc, ct) => acc + (parseFloat(ct.total || 0) || 0), 0);
+        return {
+            nombre: c.nombre || 'Cliente',
+            ventas: ventasCliente,
+            cotizado: cotCliente
+        };
+    }).filter(x => x.ventas > 0 || x.cotizado > 0)
+      .sort((a, b) => (b.ventas + b.cotizado) - (a.ventas + a.cotizado))
+      .slice(0, 5);
+
+    const cotizacionesRecientes = [...cotizaciones]
+        .sort((a, b) => new Date(b.fecha || b.fecha_creacion || 0) - new Date(a.fecha || a.fecha_creacion || 0))
+        .slice(0, 5);
 
     let alertas = '';
     if (stockCritico.length > 0) {
@@ -67,14 +110,73 @@ App.views.inicio = function() {
         `;
     }
 
+    const topClientesHTML = topClientes.length
+        ? topClientes.map(c => `
+            <div class="dm-row-between dm-mb-2" style="gap:10px; align-items:flex-start;">
+                <div style="flex:1; min-width:0;">
+                    <strong>${App.ui.safe(c.nombre)}</strong><br>
+                    <small class="dm-muted">Cotizado: ${App.ui.money(c.cotizado || 0)}</small>
+                </div>
+                <div style="text-align:right;">
+                    <strong>${App.ui.money(c.ventas || 0)}</strong><br>
+                    <small class="dm-muted">Ventas</small>
+                </div>
+            </div>
+        `).join('')
+        : `<div class="dm-alert dm-alert-info">Aún no hay clientes con movimiento suficiente.</div>`;
+
+    const recientesHTML = cotizacionesRecientes.length
+        ? cotizacionesRecientes.map(c => `
+            <div class="dm-row-between dm-mb-2" style="gap:10px; align-items:flex-start;">
+                <div style="flex:1; min-width:0;">
+                    <strong>${App.ui.safe(c.id || '')}</strong><br>
+                    <small class="dm-muted">${App.ui.safe(c.cliente_nombre || 'Cliente')}</small>
+                </div>
+                <div style="text-align:right;">
+                    <strong>${App.ui.money(c.total || 0)}</strong><br>
+                    <small class="dm-muted">${App.ui.safe(String(c.estado_conversion || 'pendiente').toUpperCase())}</small>
+                </div>
+            </div>
+        `).join('')
+        : `<div class="dm-alert dm-alert-info">No hay cotizaciones recientes.</div>`;
+
     return `
         <div class="dm-section" style="padding-bottom:90px;">
-            <div class="dm-mb-4">
-                <h2 class="dm-card-title" style="font-size:1.6rem;">Dashboard ejecutivo</h2>
-                <p class="dm-muted" style="margin-top:6px;">Resumen operativo y comercial de Descanso Maya.</p>
+            <div class="dm-card dm-mb-4" style="background:linear-gradient(135deg, #ffffff 0%, #faf7ff 100%);">
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <div>
+                        <h2 class="dm-card-title" style="font-size:1.7rem;">BI Dashboard PRO</h2>
+                        <p class="dm-muted" style="margin-top:6px; max-width:760px;">Resumen ejecutivo del negocio: operación, ventas, cotizaciones, cobranza y foco comercial en un solo panel.</p>
+                    </div>
+                    <div class="dm-list-card-actions" style="margin-top:0; display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.router.navigate('finanzas')">📊 Finanzas</button>
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('cotizaciones')">📝 Cotizaciones</button>
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('pedidos')">📦 Pedidos</button>
+                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('inventario')">🧶 Inventario</button>
+                    </div>
+                </div>
             </div>
 
             ${alertas}
+
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(190px,1fr)); gap:12px;">
+                <div class="dm-card" onclick="App.router.navigate('pedidos')" style="cursor:pointer;">
+                    <small class="dm-muted">Ventas del mes</small>
+                    <div class="dm-text-xl dm-fw-bold">${App.ui.money(ventasMes)}</div>
+                </div>
+                <div class="dm-card" onclick="App.router.navigate('cobranza')" style="cursor:pointer;">
+                    <small class="dm-muted">Cobrado del mes</small>
+                    <div class="dm-text-xl dm-fw-bold">${App.ui.money(cobradoMes)}</div>
+                </div>
+                <div class="dm-card" onclick="App.router.navigate('cotizaciones')" style="cursor:pointer;">
+                    <small class="dm-muted">Monto cotizado</small>
+                    <div class="dm-text-xl dm-fw-bold">${App.ui.money(cotizado)}</div>
+                </div>
+                <div class="dm-card" onclick="App.router.navigate('cotizaciones')" style="cursor:pointer;">
+                    <small class="dm-muted">Monto convertido</small>
+                    <div class="dm-text-xl dm-fw-bold">${App.ui.money(montoConvertido)}</div>
+                </div>
+            </div>
 
             <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:12px;">
                 <div class="dm-card" onclick="App.router.navigate('pedidos')" style="cursor:pointer;">
@@ -89,24 +191,38 @@ App.views.inicio = function() {
                     <small class="dm-muted">Reparaciones activas</small>
                     <div class="dm-text-xl dm-fw-bold">${reparacionesActivas}</div>
                 </div>
-                <div class="dm-card" onclick="App.router.navigate('cotizaciones')" style="cursor:pointer;">
-                    <small class="dm-muted">Cotizaciones pendientes</small>
-                    <div class="dm-text-xl dm-fw-bold">${cotPendientes}</div>
+                <div class="dm-card" onclick="App.router.navigate('inventario')" style="cursor:pointer;">
+                    <small class="dm-muted">Stock crítico</small>
+                    <div class="dm-text-xl dm-fw-bold">${stockCritico.length}</div>
                 </div>
             </div>
 
             <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:12px;">
+                <div class="dm-card" style="background:#F0FFF4;">
+                    <small class="dm-muted">Cotizaciones convertidas</small>
+                    <div class="dm-text-xl dm-fw-bold" style="color:#2F855A;">${cotConvertidas}</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Total histórico convertido</div>
+                </div>
+                <div class="dm-card" style="background:#FFFBEA;">
+                    <small class="dm-muted">Cotizaciones pendientes</small>
+                    <div class="dm-text-xl dm-fw-bold" style="color:#B7791F;">${cotPendientes}</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Requieren seguimiento</div>
+                </div>
+                <div class="dm-card" style="background:${tasaConversion >= 50 ? '#F0FFF4' : '#FFF5F5'};">
+                    <small class="dm-muted">Tasa de conversión</small>
+                    <div class="dm-text-xl dm-fw-bold" style="color:${tasaConversion >= 50 ? '#2F855A' : '#C53030'};">${tasaConversion.toFixed(1)}%</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">Cotizaciones convertidas / total</div>
+                </div>
+            </div>
+
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px,1fr)); gap:12px;">
                 <div class="dm-card">
-                    <small class="dm-muted">Ventas registradas</small>
-                    <div class="dm-text-xl dm-fw-bold">${App.ui.money ? App.ui.money(ventasMes) : '$' + ventasMes.toFixed(2)}</div>
+                    <h3 class="dm-card-title">Top clientes</h3>
+                    <div class="dm-mt-3">${topClientesHTML}</div>
                 </div>
                 <div class="dm-card">
-                    <small class="dm-muted">Monto cotizado</small>
-                    <div class="dm-text-xl dm-fw-bold">${App.ui.money ? App.ui.money(cotizado) : '$' + cotizado.toFixed(2)}</div>
-                </div>
-                <div class="dm-card">
-                    <small class="dm-muted">Stock crítico</small>
-                    <div class="dm-text-xl dm-fw-bold">${stockCritico.length}</div>
+                    <h3 class="dm-card-title">Cotizaciones recientes</h3>
+                    <div class="dm-mt-3">${recientesHTML}</div>
                 </div>
             </div>
 
