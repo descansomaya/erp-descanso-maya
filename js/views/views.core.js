@@ -216,15 +216,15 @@ App.views.mas = function() {
 
             <h4 class="dm-label dm-mb-3">Pendiente de activación</h4>
             <div class="dm-list dm-mb-5">
-                <div class="dm-list-card" style="padding:15px; opacity:.75; cursor:pointer;" onclick="App.views.moduloNoDisponible('Cotizaciones')">
-                    <div class="dm-row-between">
-                        <div class="dm-row">
-                            <div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">📝</div>
-                            <strong class="dm-text-lg">Cotizaciones</strong>
-                        </div>
-                        <span class="dm-badge dm-badge-warning">Próx.</span>
-                    </div>
-                </div>
+                <div class="dm-list-card" style="padding:15px; cursor:pointer;" onclick="App.router.navigate('cotizaciones')">
+    <div class="dm-row-between">
+        <div class="dm-row">
+            <div class="dm-badge dm-badge-info" style="font-size:1.2rem; padding:10px;">📝</div>
+            <strong class="dm-text-lg">Cotizaciones</strong>
+        </div>
+        <span class="dm-badge dm-badge-success">Activo</span>
+    </div>
+</div>
             </div>
 
             <h4 class="dm-label dm-mb-3">Sistema</h4>
