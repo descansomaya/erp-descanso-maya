@@ -1422,32 +1422,5 @@ Object.assign(App.logic, {
             console.error("Error en enviarWhatsApp:", error);
             App.ui.toast(error.message || "Error al abrir WhatsApp", "danger");
         }
-    },
-
-    guardarCotizacion(datos) {
-        datos.id = "COT-" + Date.now();
-        datos.fecha_creacion = new Date().toISOString();
-
-        if (!Array.isArray(App.state.cotizaciones)) {
-            App.state.cotizaciones = [];
-        }
-
-        App.state.cotizaciones.push(datos);
-        localStorage.setItem("erp_cotizaciones", JSON.stringify(App.state.cotizaciones));
-        App.ui.toast("Cotización generada");
-        App.router.handleRoute();
-
-        if (typeof App.logic.imprimirCotizacion === "function") {
-            App.logic.imprimirCotizacion(datos.id);
-        }
-    },
-
-    eliminarCotizacion(id) {
-        if (!confirm("⚠️ ¿Eliminar cotización?")) return;
-
-        App.state.cotizaciones = (App.state.cotizaciones || []).filter(c => c.id !== id);
-        localStorage.setItem("erp_cotizaciones", JSON.stringify(App.state.cotizaciones));
-        App.ui.toast("Eliminada");
-        App.router.handleRoute();
     }
 });
