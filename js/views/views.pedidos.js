@@ -411,6 +411,10 @@ App.views._resumenConversionCotizaciones = function () {
     return { total, convertidas, pendientes, montoCotizado, montoConvertido, tasa };
 };
 
+App.views._cotizacionPuedeImprimir = function () {
+    return !!(App.logic && (App.logic.imprimirCotizacion || App.logic.imprimirNota || App.logic.imprimirReciboLiquidacion));
+};
+
 App.views.cotizaciones = function() {
     const cotizaciones = [...(App.state.cotizaciones || [])].sort((a, b) => new Date(b.fecha || b.fecha_creacion || 0) - new Date(a.fecha || a.fecha_creacion || 0));
     const resumen = App.views._resumenConversionCotizaciones();
@@ -479,8 +483,10 @@ App.views.cotizaciones = function() {
                         <div class="dm-list-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
                             <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verCotizacion('${c.id}')">👁️ Ver</button>
                             <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formCotizacion('${c.id}')">✏️ Editar</button>
+                            ${App.views._cotizacionPuedeImprimir() ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.imprimirCotizacion('${c.id}')">🖨️ Imprimir</button>` : ''}
                             <button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.convertirCotizacion('${c.id}')">🔁 Convertir</button>
                             ${!yaConvertida ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.autoConvertirCotizacion('${c.id}')">⚡ Directo</button>` : ''}
+                            <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.eliminarCotizacion('${c.id}')">🗑️ Eliminar</button>
                         </div>
                     </div>
                 </div>
@@ -503,6 +509,22 @@ App.views.syncCotizacionCliente = function () {
         input.dataset.autofill = 'true';
     } else {
         input.dataset.autofill = 'false';
+    }
+};
+
+App.views.syncCotizacionProducto = function () {
+    const select = document.querySelector('#dynamic-form select[name="producto_id"]');
+    const concepto = document.querySelector('#dynamic-form input[name="concepto"]');
+    const tipoSel = document.querySelector('#dynamic-form select[name="tipo"]');
+    if (!select || !concepto || !tipoSel) return;
+
+    const tipo = String(tipoSel.value || '').toLowerCase();
+    if (tipo === 'reparacion') return;
+
+    const producto = (App.state.productos || []).find(p => p.id === select.value);
+    if (producto && (!concepto.value || !String(concepto.value).trim() || concepto.dataset.autofill === 'true')) {
+        concepto.value = producto.nombre || '';
+        concepto.dataset.autofill = 'true';
     }
 };
 
@@ -589,6 +611,7 @@ App.views.formProductoRapidoDesdeCotizacion = function () {
             if (select && ultimo) {
                 select.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)}</option>`);
                 select.value = ultimo.id;
+                App.views.syncCotizacionProducto();
             }
         }, 250);
         return res;
@@ -637,7 +660,7 @@ App.views.formCotizacion = function(id = null) {
             <div class="dm-form-group" id="cotizacion-producto-wrap">
                 <label class="dm-label">Producto / artículo</label>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <select class="dm-select" name="producto_id" style="flex:1; min-width:180px;">
+                    <select class="dm-select" name="producto_id" onchange="App.views.syncCotizacionProducto()" style="flex:1; min-width:180px;">
                         ${htmlProductos}
                     </select>
                     <button type="button" class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formProductoRapidoDesdeCotizacion()">+ Producto</button>
@@ -682,14 +705,98 @@ App.views.formCotizacion = function(id = null) {
             data.producto_id = '';
         }
 
-        if (obj) return App.logic.actualizarRegistroGenerico('cotizaciones', id, data, 'cotizaciones');
-        return App.logic.guardarNuevoGenerico('cotizaciones', data, 'COT', 'cotizaciones');
+        const accion = obj
+            ? () => App.logic.actualizarRegistroGenerico('cotizaciones', id, data, 'cotizaciones')
+            : () => App.logic.guardarNuevoGenerico('cotizaciones', data, 'COT', 'cotizaciones');
+
+        return App.ui.runSafeAction({
+            lockKey: obj ? `cotizacion:${id}:editar` : 'cotizacion:nueva',
+            loadingText: obj ? 'Guardando...' : 'Creando...',
+            loaderMessage: obj ? 'Guardando cotización...' : 'Guardando cotización...',
+            successMessage: obj ? 'Cotización actualizada' : 'Cotización guardada',
+            errorTitle: obj ? 'No se pudo actualizar la cotización' : 'No se pudo guardar la cotización',
+            closeSheetOnSuccess: true
+        }, async () => accion());
     });
 
     setTimeout(() => {
         App.views.syncCotizacionCliente();
+        App.views.syncCotizacionProducto();
         App.views.toggleCamposCotizacion();
     }, 150);
+};
+
+App.views.imprimirCotizacion = async function (cotizacionId) {
+    const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
+    if (!c) return;
+
+    if (App.logic?.imprimirCotizacion) {
+        return App.logic.imprimirCotizacion(cotizacionId);
+    }
+
+    const html = `
+        <html>
+        <head>
+            <title>Cotización ${App.ui.safe(c.id || '')}</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 24px; color: #222; }
+                .head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
+                .box { border:1px solid #ddd; border-radius:10px; padding:14px; margin-bottom:14px; }
+                .muted { color:#666; }
+                h1,h2,h3,p { margin:0; }
+                .row { display:flex; justify-content:space-between; gap:12px; margin-top:8px; }
+            </style>
+        </head>
+        <body>
+            <div class="head">
+                <div>
+                    <h1>Descanso Maya</h1>
+                    <p class="muted">Cotización</p>
+                </div>
+                <div style="text-align:right;">
+                    <strong>${App.ui.safe(c.id || '')}</strong><br>
+                    <span class="muted">${String(c.fecha || c.fecha_creacion || '').split('T')[0]}</span>
+                </div>
+            </div>
+            <div class="box">
+                <div class="row"><strong>Cliente</strong><span>${App.ui.safe(c.cliente_nombre || '')}</span></div>
+                <div class="row"><strong>Tipo</strong><span>${App.ui.safe(c.tipo || '')}</span></div>
+                <div class="row"><strong>Concepto</strong><span>${App.ui.safe(c.concepto || '')}</span></div>
+                <div class="row"><strong>Cantidad</strong><span>${App.ui.safe(c.cantidad || 1)}</span></div>
+                <div class="row"><strong>Total</strong><span>${App.ui.money(c.total || 0)}</span></div>
+            </div>
+            <div class="box">
+                <strong>Detalles</strong>
+                <p style="margin-top:8px; white-space:pre-wrap;">${App.ui.safe(c.detalles || '')}</p>
+            </div>
+            <script>window.onload = function(){ window.print(); window.onafterprint = function(){ window.close(); }; };</script>
+        </body>
+        </html>
+    `;
+
+    const w = window.open('', '_blank');
+    if (!w) {
+        App.ui.toast('El navegador bloqueó la ventana de impresión', 'warning');
+        return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+};
+
+App.views.eliminarCotizacion = async function (cotizacionId) {
+    const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
+    if (!c) return;
+    const ok = window.confirm(`¿Eliminar la cotización ${c.id || ''}?`);
+    if (!ok) return;
+
+    return App.ui.runSafeAction({
+        lockKey: `cotizacion:${cotizacionId}:eliminar`,
+        loadingText: 'Eliminando...',
+        loaderMessage: 'Eliminando cotización...',
+        successMessage: 'Cotización eliminada',
+        errorTitle: 'No se pudo eliminar la cotización'
+    }, async () => App.logic.eliminarRegistroGenerico('cotizaciones', cotizacionId, 'cotizaciones'));
 };
 
 App.views.verCotizacion = function(cotizacionId) {
