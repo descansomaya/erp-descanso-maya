@@ -45,6 +45,7 @@ Object.assign(App.logic, {
                 "compras",
                 "proveedores",
                 "reparaciones",
+                "cotizaciones",
                 "tarifas_artesano",
                 "pago_artesanos",
                 "movimientos_inventario",
@@ -73,6 +74,7 @@ Object.assign(App.logic, {
             App.state.compras = bd["compras"] || [];
             App.state.proveedores = bd["proveedores"] || [];
             App.state.reparaciones = bd["reparaciones"] || [];
+            App.state.cotizaciones = bd["cotizaciones"] || [];
             App.state.tarifas_artesano = bd["tarifas_artesano"] || [];
             App.state.pago_artesanos = bd["pago_artesanos"] || [];
             App.state.movimientos_inventario = bd["movimientos_inventario"] || [];
@@ -121,6 +123,7 @@ Object.assign(App.logic, {
             { nombre: "compras", state: "compras" },
             { nombre: "proveedores", state: "proveedores" },
             { nombre: "reparaciones", state: "reparaciones" },
+            { nombre: "cotizaciones", state: "cotizaciones" },
             { nombre: "tarifas_artesano", state: "tarifas_artesano" },
             { nombre: "pago_artesanos", state: "pago_artesanos" },
             { nombre: "movimientos_inventario", state: "movimientos_inventario" },
@@ -273,6 +276,24 @@ Object.assign(App.logic, {
                         <div>
                             <strong style="color:#6D28D9;">${r.id}</strong><br>
                             <small style="color:var(--text-muted);">${App.ui.escapeHTML(r.descripcion || "Reparación")}</small>
+                        </div>
+                    </div>
+                `);
+            }
+        });
+
+        (App.state.cotizaciones || []).forEach(cot => {
+            const idCot = String(cot.id || "").toLowerCase();
+            const nombreCot = String(cot.cliente_nombre || "").toLowerCase();
+            const conceptoCot = String(cot.concepto || "").toLowerCase();
+            if (idCot.includes(q) || nombreCot.includes(q) || conceptoCot.includes(q)) {
+                resultados.push(`
+                    <div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display:flex; align-items:center; gap:10px;"
+                        onclick="App.ui.closeSheet(); App.router.navigate('cotizaciones');">
+                        <span style="font-size:1.5rem;">📝</span>
+                        <div>
+                            <strong style="color:#6D28D9;">${App.ui.escapeHTML(cot.id || "")}</strong><br>
+                            <small style="color:var(--text-muted);">${App.ui.escapeHTML(cot.cliente_nombre || "Cotización")}</small>
                         </div>
                     </div>
                 `);
