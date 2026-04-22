@@ -148,14 +148,6 @@ App.views.inicio = function() {
                         <h2 class="dm-card-title" style="font-size:1.7rem;">Dashboard</h2>
                         <p class="dm-muted" style="margin-top:6px; max-width:760px;">Resumen ejecutivo del negocio: operación, ventas, cotizaciones, cobranza y foco comercial en un solo panel.</p>
                     </div>
-                    <div class="dm-list-card-actions" style="margin-top:0; display:flex; gap:8px; flex-wrap:wrap;">
-                        <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.router.navigate('pedidos')">📦 Pedidos</button>
-                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('produccion')">🔨 Taller</button>
-                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('inventario')">🧶 Inventario</button>
-                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('cotizaciones')">📝 Cotizaciones</button>
-                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('reparaciones')">🪡 Reparaciones</button>
-                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.router.navigate('finanzas')">📊 Finanzas</button>
-                    </div>
                 </div>
             </div>
 
