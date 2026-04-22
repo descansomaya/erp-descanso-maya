@@ -39,24 +39,42 @@ App.views.nomina = function () {
         </div>
     `).join('');
 
-    const detalle = pagos.map(p => {
+    const detalleRows = pagos.map(p => {
         const art = artesanos.find(a => String(a.id) === String(p.artesano_id));
-        const nombre = art?.nombre || p.artesano_id;
+        const nombre = art?.nombre || p.artesano_id || 'Sin artesano';
         return `
             <tr>
                 <td>${nombre}</td>
                 <td>${p.tipo_trabajo || '-'}</td>
                 <td>${p.componente || '-'}</td>
                 <td>${money(p.total)}</td>
-                <td>${p.estado}</td>
+                <td>${p.estado || '-'}</td>
                 <td>${p.fecha || '-'}</td>
                 <td>${p.fecha_pago || '-'}</td>
             </tr>
         `;
     }).join('');
 
+    const detalleCardsMobile = pagos.map(p => {
+        const art = artesanos.find(a => String(a.id) === String(p.artesano_id));
+        const nombre = art?.nombre || p.artesano_id || 'Sin artesano';
+        const estado = norm(p.estado) === 'pagado' ? 'Pagado' : 'Pendiente';
+        const estadoColor = norm(p.estado) === 'pagado' ? 'green' : '#B7791F';
+        return `
+            <div class="dm-card dm-mb-3" style="padding:14px;">
+                <div class="dm-kpi-label">${nombre}</div>
+                <div class="dm-mt-2"><strong>Total:</strong> ${money(p.total)}</div>
+                <div><strong>Tipo:</strong> ${p.tipo_trabajo || '-'}</div>
+                <div><strong>Componente:</strong> ${p.componente || '-'}</div>
+                <div><strong>Estado:</strong> <span style="color:${estadoColor}; font-weight:600;">${estado}</span></div>
+                <div><strong>Fecha:</strong> ${p.fecha || '-'}</div>
+                <div><strong>Fecha pago:</strong> ${p.fecha_pago || '-'}</div>
+            </div>
+        `;
+    }).join('');
+
     return `
-        <div class="dm-section">
+        <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4">
                 <h3 class="dm-card-title">Nómina real</h3>
                 <div>Total pagado: ${money(totalPagado)}</div>
@@ -67,8 +85,8 @@ App.views.nomina = function () {
                 ${cards}
             </div>
 
-            <div class="dm-card">
-                <table class="dm-table" style="width:100%">
+            <div class="dm-card dm-mb-4 hide-mobile" style="overflow:auto;">
+                <table class="dm-table" style="width:100%; min-width:760px;">
                     <thead>
                         <tr>
                             <th>Artesano</th>
@@ -81,10 +99,23 @@ App.views.nomina = function () {
                         </tr>
                     </thead>
                     <tbody>
-                        ${detalle}
+                        ${detalleRows || '<tr><td colspan="7">Sin registros</td></tr>'}
                     </tbody>
                 </table>
             </div>
+
+            <div class="show-mobile">
+                ${detalleCardsMobile || '<div class="dm-muted">Sin registros</div>'}
+            </div>
+
+            <style>
+                .show-mobile { display:none; }
+                .hide-mobile { display:block; }
+                @media (max-width: 768px) {
+                    .show-mobile { display:block; }
+                    .hide-mobile { display:none; }
+                }
+            </style>
         </div>
     `;
 };
