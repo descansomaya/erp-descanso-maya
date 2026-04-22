@@ -30,7 +30,7 @@ App.views.nomina = function () {
         else resumen[nombre].pendiente += total;
     });
 
-    const cards = Object.keys(resumen).map(n => `
+    const cardsResumen = Object.keys(resumen).map(n => `
         <div class="dm-card">
             <div class="dm-kpi-label">${n}</div>
             <div>Total: ${money(resumen[n].total)}</div>
@@ -82,10 +82,11 @@ App.views.nomina = function () {
             </div>
 
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">
-                ${cards}
+                ${cardsResumen}
             </div>
 
             <div class="dm-card dm-mb-4 hide-mobile" style="overflow:auto;">
+                <div class="dm-card-title" style="margin-bottom:12px;">Detalle de pagos</div>
                 <table class="dm-table" style="width:100%; min-width:760px;">
                     <thead>
                         <tr>
@@ -105,6 +106,9 @@ App.views.nomina = function () {
             </div>
 
             <div class="show-mobile">
+                <div class="dm-card dm-mb-4">
+                    <div class="dm-card-title">Detalle de pagos</div>
+                </div>
                 ${detalleCardsMobile || '<div class="dm-muted">Sin registros</div>'}
             </div>
 
