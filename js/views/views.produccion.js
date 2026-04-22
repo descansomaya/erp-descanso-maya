@@ -191,12 +191,21 @@ App.views.accionProduccion = function (button, ordenId, actionName) {
     const actions = {
         iniciar: {
             fn: async () => {
-    await App.logic.cambiarEstadoProduccion(ordenId, 'proceso');
+    // 1. DESCONTAR PRIMERO (estado estable)
     await App.views.descontarMaterialesProduccion(ordenId);
 
-    App.router.handleRoute(); // 🔥 refresco inmediato
+    // 2. LUEGO CAMBIAR ESTADO
+    await App.logic.cambiarEstadoProduccion(ordenId, 'proceso');
+
+    // 3. FORZAR ESTADO LOCAL (evita delay)
+    const orden = App.state?.ordenes_produccion?.find(o => o.id === ordenId);
+    if (orden) orden.estado = 'proceso';
+
+    // 4. REFRESCAR UI
+    App.router.handleRoute();
+
     return true;
-},
+}
             loadingText: 'Iniciando...',
             loaderMessage: 'Moviendo orden a proceso...',
             successMessage: 'Orden iniciada',
