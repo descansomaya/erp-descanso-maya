@@ -67,6 +67,17 @@ App.views.accionPedido = function (button, pedidoId, actionName) {
             loaderMessage: "Preparando mensaje de WhatsApp...",
             successMessage: "Mensaje preparado",
             errorTitle: "No se pudo preparar WhatsApp"
+        },
+        eliminarPedido: {
+            fn: async () => {
+                const ok = window.confirm(`¿Eliminar el pedido ${pedidoId}?`);
+                if (!ok) return false;
+                return App.logic.eliminarRegistroGenerico('pedidos', pedidoId, 'pedidos');
+            },
+            loadingText: "Eliminando...",
+            loaderMessage: "Eliminando pedido...",
+            successMessage: "Pedido eliminado",
+            errorTitle: "No se pudo eliminar el pedido"
         }
     };
 
@@ -167,6 +178,7 @@ App.views.pedidos = function() {
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
                         <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.modalDetallesPedido('${p.id}')">👁️ Ver</button>
                         <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💰 Cobrar</button>
+                        <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'eliminarPedido')">🗑️ Eliminar</button>
                     </div>
                 </div>
             </div>
@@ -241,6 +253,7 @@ window.generarListaPedidos = function(tipo) {
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'imprimirLiquidacion')">✅ Liquidación</button>
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', '${whatsappAction}')">💬 WhatsApp</button>
                     ${accionesOperativas}
+                    <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'eliminarPedido')">🗑️ Eliminar</button>
                 </div>
             </div>
         `;
@@ -981,6 +994,7 @@ App.views.modalDetallesPedido = function(pedidoId) {
             ${estado !== 'listo para entregar' && estado !== 'entregado' && estado !== 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'marcarListo')">📦 Listo</button>` : ''}
             ${estado === 'listo para entregar' || estado === 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'marcarEntregado')">🚚 Entregado</button>` : ''}
             ${saldo <= 0.05 && estado !== 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'cerrarPedido')">🔒 Cerrar</button>` : ''}
+            <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'eliminarPedido')">🗑️ Eliminar</button>
         </div>
     `;
 
