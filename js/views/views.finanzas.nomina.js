@@ -1,6 +1,37 @@
 window.App = window.App || {};
 App.views = App.views || {};
 
+App.views.marcarPagoArtesanoPagado = async function (pagoId) {
+    try {
+        const fechaPago = new Date().toISOString();
+        const res = await App.api.fetch('actualizar_fila', {
+            nombreHoja: 'pago_artesanos',
+            idFila: pagoId,
+            datosNuevos: {
+                estado: 'pagado',
+                fecha_pago: fechaPago
+            }
+        });
+
+        if (res.status !== 'success') {
+            App.ui.toast(res.message || 'No se pudo actualizar el pago', 'danger');
+            return;
+        }
+
+        const arr = App.state.pago_artesanos || [];
+        const idx = arr.findIndex(x => String(x.id) === String(pagoId));
+        if (idx >= 0) {
+            arr[idx].estado = 'pagado';
+            arr[idx].fecha_pago = fechaPago;
+        }
+
+        App.ui.toast('Pago marcado como pagado');
+        App.router.handleRoute();
+    } catch (err) {
+        App.ui.toast(String(err), 'danger');
+    }
+};
+
 App.views.nomina = function () {
     const pagos = App.state.pago_artesanos || [];
     const artesanos = App.state.artesanos || [];
@@ -42,6 +73,7 @@ App.views.nomina = function () {
     const detalleRows = pagos.map(p => {
         const art = artesanos.find(a => String(a.id) === String(p.artesano_id));
         const nombre = art?.nombre || p.artesano_id || 'Sin artesano';
+        const esPendiente = norm(p.estado) !== 'pagado';
         return `
             <tr>
                 <td>${nombre}</td>
@@ -51,6 +83,7 @@ App.views.nomina = function () {
                 <td>${p.estado || '-'}</td>
                 <td>${p.fecha || '-'}</td>
                 <td>${p.fecha_pago || '-'}</td>
+                <td>${esPendiente ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.marcarPagoArtesanoPagado('${p.id}')">Marcar pagado</button>` : '<span style="color:green;font-weight:600;">Pagado</span>'}</td>
             </tr>
         `;
     }).join('');
@@ -60,6 +93,9 @@ App.views.nomina = function () {
         const nombre = art?.nombre || p.artesano_id || 'Sin artesano';
         const estado = norm(p.estado) === 'pagado' ? 'Pagado' : 'Pendiente';
         const estadoColor = norm(p.estado) === 'pagado' ? 'green' : '#B7791F';
+        const accion = norm(p.estado) === 'pagado'
+            ? '<span style="color:green; font-weight:600;">Pagado</span>'
+            : `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.marcarPagoArtesanoPagado('${p.id}')">Marcar pagado</button>`;
         return `
             <div class="dm-card dm-mb-3" style="padding:14px;">
                 <div class="dm-kpi-label">${nombre}</div>
@@ -69,6 +105,7 @@ App.views.nomina = function () {
                 <div><strong>Estado:</strong> <span style="color:${estadoColor}; font-weight:600;">${estado}</span></div>
                 <div><strong>Fecha:</strong> ${p.fecha || '-'}</div>
                 <div><strong>Fecha pago:</strong> ${p.fecha_pago || '-'}</div>
+                <div class="dm-mt-3">${accion}</div>
             </div>
         `;
     }).join('');
@@ -87,7 +124,7 @@ App.views.nomina = function () {
 
             <div class="dm-card dm-mb-4 hide-mobile" style="overflow:auto;">
                 <div class="dm-card-title" style="margin-bottom:12px;">Detalle de pagos</div>
-                <table class="dm-table" style="width:100%; min-width:760px;">
+                <table class="dm-table" style="width:100%; min-width:900px;">
                     <thead>
                         <tr>
                             <th>Artesano</th>
@@ -97,10 +134,11 @@ App.views.nomina = function () {
                             <th>Estado</th>
                             <th>Fecha</th>
                             <th>Fecha pago</th>
+                            <th>Acción</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${detalleRows || '<tr><td colspan="7">Sin registros</td></tr>'}
+                        ${detalleRows || '<tr><td colspan="8">Sin registros</td></tr>'}
                     </tbody>
                 </table>
             </div>
