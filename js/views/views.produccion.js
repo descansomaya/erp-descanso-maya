@@ -118,14 +118,85 @@ App.views.runProduccionAction = async function (button, lockKey, actionFn, optio
     }, async () => actionFn());
 };
 
+App.views.descontarMaterialesProduccion = async function (ordenId) {
+    const orden = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
+    if (!orden) throw new Error('Orden no encontrada');
+
+    if (orden.materiales_descontados) return true;
+
+    let receta = [];
+    try {
+        receta = JSON.parse(orden.receta_personalizada || '[]');
+    } catch (e) {}
+
+    if (!receta.length) return true;
+
+    const operaciones = [];
+    const ahora = new Date().toISOString();
+    const movBase = Date.now();
+
+    receta.forEach((item, i) => {
+        const mat = App.state.inventario.find(m => m.id === item.mat_id);
+        if (!mat) return;
+
+        const cant = parseFloat(item.cant || 0);
+        if (cant <= 0) return;
+
+        const nuevo = (parseFloat(mat.stock_real || 0)) - cant;
+
+        if (nuevo < 0) throw new Error(`Stock insuficiente: ${mat.nombre}`);
+
+        operaciones.push({
+            action: 'actualizar_fila',
+            nombreHoja: 'materiales',
+            idFila: mat.id,
+            datosNuevos: { stock_real: nuevo }
+        });
+
+        operaciones.push({
+            action: 'guardar_fila',
+            nombreHoja: 'movimientos_inventario',
+            datos: {
+                id: `SAL-${movBase}-${i}`,
+                material_id: mat.id,
+                tipo: 'salida',
+                cantidad: cant,
+                motivo: `Producción ${ordenId}`,
+                fecha: ahora
+            }
+        });
+
+        // actualizar UI inmediato
+        mat.stock_real = nuevo;
+    });
+
+    operaciones.push({
+        action: 'actualizar_fila',
+        nombreHoja: 'ordenes_produccion',
+        idFila: ordenId,
+        datosNuevos: {
+            materiales_descontados: true,
+            materiales_revertidos: false
+        }
+    });
+
+    await App.api.fetch('ejecutar_lote', { operaciones });
+
+    orden.materiales_descontados = true;
+
+    return true;
+};
+
 App.views.accionProduccion = function (button, ordenId, actionName) {
     const actions = {
         iniciar: {
             fn: async () => {
-                const orden = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
-                if (orden) orden.materiales_revertidos = false;
-                return App.logic.cambiarEstadoProduccion(ordenId, 'proceso');
-            },
+    await App.logic.cambiarEstadoProduccion(ordenId, 'proceso');
+    await App.views.descontarMaterialesProduccion(ordenId);
+
+    App.router.handleRoute(); // 🔥 refresco inmediato
+    return true;
+},
             loadingText: 'Iniciando...',
             loaderMessage: 'Moviendo orden a proceso...',
             successMessage: 'Orden iniciada',
