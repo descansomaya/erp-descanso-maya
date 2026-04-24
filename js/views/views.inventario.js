@@ -45,10 +45,13 @@ App.views._resumenInventario = function () {
         const valor = real * costo;
 
         const salidasItem30d = movimientos
-            .filter(m => m.material_id === i.id)
+         .filter(m => m.ref_id === i.id || m.material_id === i.id)
             .filter(m => {
                 const fechaMov = m.fecha ? new Date(m.fecha) : null;
-                return fechaMov && !isNaN(fechaMov.getTime()) && fechaMov >= hace30 && String(m.tipo || '').toLowerCase() === 'salida';
+                return fechaMov && !isNaN(fechaMov.getTime()) && fechaMov >= hace30 && (() => {
+    const tipo = String(m.tipo_movimiento || m.tipo || '').toLowerCase();
+    return tipo.includes('salida');
+})()
             })
             .reduce((acc, m) => acc + Math.abs(parseFloat(m.cantidad || 0) || 0), 0);
 
@@ -70,8 +73,9 @@ App.views._resumenInventario = function () {
         const fechaMov = m.fecha ? new Date(m.fecha) : null;
         if (!fechaMov || isNaN(fechaMov.getTime()) || fechaMov < hace30) return;
         const cantidad = Math.abs(parseFloat(m.cantidad || 0) || 0);
-        if (String(m.tipo || '').toLowerCase() === 'entrada') resumen.entradas30d += cantidad;
-        if (String(m.tipo || '').toLowerCase() === 'salida') resumen.salidas30d += cantidad;
+        const tipo = String(m.tipo_movimiento || m.tipo || '').toLowerCase();
+if (tipo.includes('entrada') || tipo.includes('reversa')) resumen.entradas30d += cantidad;
+if (tipo.includes('salida')) resumen.salidas30d += cantidad;
     });
 
     resumen.topCriticos = resumen.topCriticos.filter(x => x.minimo > 0).sort((a, b) => (a.libre - a.minimo) - (b.libre - b.minimo)).slice(0, 5);
@@ -537,7 +541,7 @@ App.views.modalKardex = function(matId) {
     if (!movs.length) html += `<div class="dm-alert dm-alert-info">No hay movimientos para este insumo.</div>`;
     movs.forEach(m => {
         const fecha = m.fecha ? String(m.fecha).split('T')[0] : '';
-        const tipoMovimiento = String(m.tipo_movimiento || m.tipo || '').toLowerCase();
+const tipoMovimiento = String(m.tipo_movimiento || m.tipo || '').toLowerCase();
 const esEntrada = tipoMovimiento.includes('entrada') || tipoMovimiento.includes('reversa');
         html += `
             <div class="dm-list-card" style="padding:10px;">
