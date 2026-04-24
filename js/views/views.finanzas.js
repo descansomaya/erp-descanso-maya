@@ -387,18 +387,38 @@ App.views.finanzas = function () {
                 <div class="dm-card"><div class="dm-kpi-label">Registros de gastos</div><div class="dm-kpi-value">${registrosGastos}</div></div>
             </div>
 
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;" class="dm-mb-4">
-                <div class="dm-card">
-                    <div class="dm-card-title">Vista rápida</div>
-                    <div class="dm-muted dm-mt-2">Mini gráficas del estado del negocio.</div>
-                    <div id="mini-graficas-dashboard" class="dm-mt-3" style="min-height:220px;"></div>
-                </div>
-                <div class="dm-card">
-                    <div class="dm-card-title">Tendencias financieras</div>
-                    <div class="dm-muted dm-mt-2">Gráficas ejecutivas con datos reales.</div>
-                    <div id="finanzas-graficas-principales" class="dm-mt-3" style="min-height:220px;"></div>
-                </div>
+           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;" class="dm-mb-4">
+    <div class="dm-card">
+        <div class="dm-card-title">Vista rápida</div>
+        <div class="dm-muted dm-mt-2">Mini gráficas del estado del negocio.</div>
+
+        <div class="dm-mt-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+            <div style="height:220px;">
+                <canvas id="miniGraficaIngresosGastos"></canvas>
             </div>
+            <div style="height:220px;">
+                <canvas id="miniGraficaCobrarPagar"></canvas>
+            </div>
+            <div style="height:220px;">
+                <canvas id="miniGraficaOperacion"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="dm-card">
+        <div class="dm-card-title">Tendencias financieras</div>
+        <div class="dm-muted dm-mt-2">Gráficas ejecutivas con datos reales.</div>
+
+        <div class="dm-mt-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
+            <div style="height:240px;">
+                <canvas id="graficaFinanzasIngresosGastos"></canvas>
+            </div>
+            <div style="height:240px;">
+                <canvas id="graficaFinanzasFlujo"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
 
             <div class="dm-card dm-mb-4">
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
