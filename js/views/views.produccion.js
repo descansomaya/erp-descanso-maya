@@ -66,10 +66,11 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
         nombreHoja: 'ordenes_produccion',
         idFila: ordenId,
         datosNuevos: {
-            estado: 'pendiente',
-            materiales_revertidos: true,
-            fecha_reversa_materiales: ahora
-        }
+    estado: 'pendiente',
+    materiales_revertidos: true,
+    materiales_descontados: false,
+    fecha_reversa_materiales: ahora
+}
     });
 
     const res = await App.api.fetch('ejecutar_lote', { operaciones });
@@ -89,7 +90,7 @@ if (ordState) {
     ordState.fecha_reversa_materiales = ahora;
 }
 
-if (App.router?.handleRoute) App.router.handleRoute();
+
 
     if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
     receta.forEach((item, i) => {
@@ -107,6 +108,8 @@ if (App.router?.handleRoute) App.router.handleRoute();
     });
 
     return true;
+if (App.router?.handleRoute) App.router.handleRoute();
+    
 };
 
 App.views.runProduccionAction = async function (button, lockKey, actionFn, options = {}) {
@@ -213,7 +216,7 @@ App.views.accionProduccion = function (button, ordenId, actionName) {
 
         return true;
     },
-    loadingText: 'Iniciando...',
+ 
             loadingText: 'Iniciando...',
             loaderMessage: 'Moviendo orden a proceso...',
             successMessage: 'Orden iniciada',
