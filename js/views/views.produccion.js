@@ -46,19 +46,26 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
             datosNuevos: { stock_real: nuevo }
         });
 
-        operaciones.push({
-            action: 'guardar_fila',
-            nombreHoja: 'movimientos_inventario',
-            datos: {
-                id: `REV-${movBase}-${i}`,
-                material_id: mat.id,
-                tipo: 'entrada',
-                cantidad: cant,
-                motivo: `Reversa orden ${ordenId}`,
-                referencia_id: ordenId,
-                fecha: ahora
-            }
-        });
+        const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
+const totalMovimiento = cant * costoUnitario;
+
+operaciones.push({
+    action: 'guardar_fila',
+    nombreHoja: 'movimientos_inventario',
+    datos: {
+        id: `REV-${movBase}-${i}`,
+        fecha: ahora,
+        tipo_movimiento: 'reversa_produccion',
+        origen: 'orden',
+        origen_id: ordenId,
+        ref_tipo: 'material',
+        ref_id: mat.id,
+        cantidad: cant,
+        costo_unitario: costoUnitario,
+        total: totalMovimiento,
+        notas: `Reversa por regresar orden ${ordenId} a pendiente`
+    }
+});
     });
 
     operaciones.push({
@@ -99,18 +106,21 @@ if (ordState) {
     const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id);
 const costoUnitario = parseFloat(mat?.costo_unitario || 0) || 0;
 
+const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id);
+const costoUnitario = parseFloat(mat?.costo_unitario || 0) || 0;
+
 App.state.movimientos_inventario.push({
-    id: `SAL-${movBase}-${i}`,
+    id: `REV-${movBase}-${i}`,
     fecha: ahora,
-    tipo_movimiento: 'salida_produccion',
+    tipo_movimiento: 'reversa_produccion',
     origen: 'orden',
     origen_id: ordenId,
     ref_tipo: 'material',
     ref_id: item.mat_id,
-    cantidad: -cant,
+    cantidad: cant,
     costo_unitario: costoUnitario,
-    total: -(cant * costoUnitario),
-    notas: `Envío a taller de orden ${ordenId}`
+    total: cant * costoUnitario,
+    notas: `Reversa por regresar orden ${ordenId} a pendiente`
 });
     });
 
@@ -185,6 +195,30 @@ operaciones.push({
         total: totalMovimiento,
         notas: `Envío a taller de orden ${ordenId}`
     }
+});
+
+if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
+
+receta.forEach((item, i) => {
+    const cant = parseFloat(item.cant || 0) || 0;
+    if (!item.mat_id || cant <= 0) return;
+
+    const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id);
+    const costoUnitario = parseFloat(mat?.costo_unitario || 0) || 0;
+
+    App.state.movimientos_inventario.push({
+        id: `SAL-${movBase}-${i}`,
+        fecha: ahora,
+        tipo_movimiento: 'salida_produccion',
+        origen: 'orden',
+        origen_id: ordenId,
+        ref_tipo: 'material',
+        ref_id: item.mat_id,
+        cantidad: -cant,
+        costo_unitario: costoUnitario,
+        total: -(cant * costoUnitario),
+        notas: `Envío a taller de orden ${ordenId}`
+    });
 });
 
         // actualizar UI inmediato
