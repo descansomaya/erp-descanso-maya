@@ -530,18 +530,21 @@ App.views.formMaterial = function(id = null, callback = null) {
 };
 
 App.views.modalKardex = function(matId) {
-    const movs = (App.state.movimientos_inventario || []).filter(m => m.material_id === matId).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    const movs = (App.state.movimientos_inventario || [])
+    .filter(m => m.ref_id === matId || m.material_id === matId)
+    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     let html = `<div class="dm-list">`;
     if (!movs.length) html += `<div class="dm-alert dm-alert-info">No hay movimientos para este insumo.</div>`;
     movs.forEach(m => {
         const fecha = m.fecha ? String(m.fecha).split('T')[0] : '';
-        const esEntrada = m.tipo === 'entrada';
+        const tipoMovimiento = String(m.tipo_movimiento || m.tipo || '').toLowerCase();
+const esEntrada = tipoMovimiento.includes('entrada') || tipoMovimiento.includes('reversa');
         html += `
             <div class="dm-list-card" style="padding:10px;">
                 <div class="dm-row-between" style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
                     <div style="flex:1; min-width:0;">
                         <strong style="color:${esEntrada ? 'var(--dm-success)' : 'var(--dm-danger)'};">${esEntrada ? '+' : '-'} ${App.ui.safe(m.cantidad)}</strong><br>
-                        <small class="dm-muted">${App.ui.safe(m.motivo || '')}</small>
+                        <small class="dm-muted">${App.ui.safe(m.notas || m.motivo || '')}</small>
                     </div>
                     <div style="text-align:right;"><small class="dm-muted">${fecha}</small></div>
                 </div>
