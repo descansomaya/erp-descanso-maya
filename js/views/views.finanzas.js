@@ -237,7 +237,7 @@ App.views.finanzas = function () {
             </div>
 
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;" class="dm-mb-4">
-                <<div class="dm-card" onclick="App.views.detalleFinanzas('ventas', '${filtro}')" style="cursor:pointer;"><div class="dm-kpi-label">Ventas totales</div><div class="dm-kpi-value">${money(totalVentas)}</div></div>
+                <div class="dm-card" onclick="App.views.detalleFinanzas('ventas', '${filtro}')" style="cursor:pointer;"><div class="dm-kpi-label">Ventas totales</div><div class="dm-kpi-value">${money(totalVentas)}</div></div>
 <div class="dm-card" onclick="App.views.detalleFinanzas('gastos', '${filtro}')" style="cursor:pointer;"><div class="dm-kpi-label">Gastos</div><div class="dm-kpi-value">${money(totalGastos)}</div></div>
                 <div class="dm-card"><div class="dm-kpi-label">Compras</div><div class="dm-kpi-value">${money(totalCompras)}</div></div>
                 <div class="dm-card"><div class="dm-kpi-label">Nómina</div><div class="dm-kpi-value">${money(totalNomina)}</div></div>
