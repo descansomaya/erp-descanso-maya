@@ -107,9 +107,9 @@ if (ordState) {
         });
     });
 
+  if (App.router?.handleRoute) App.router.handleRoute();
+
     return true;
-if (App.router?.handleRoute) App.router.handleRoute();
-    
 };
 
 App.views.runProduccionAction = async function (button, lockKey, actionFn, options = {}) {
