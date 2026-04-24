@@ -2,24 +2,161 @@ window.App = window.App || {};
 App.views = App.views || {};
 App.state = App.state || {};
 
-App.views.detalleFinanzas = App.views.detalleFinanzas || function(tipo, filtro) {
+App.views.detalleFinanzas = function(tipo, filtro) {
     const cont = document.getElementById('finanzas-contenedor');
     if (!cont) return;
 
-    const labels = {
-        ventas: 'Ventas totales',
-        ingresos: 'Ingresos reales',
-        gastos: 'Gastos pagados',
-        por_cobrar: 'Cuentas por cobrar',
-        por_pagar: 'Cuentas por pagar'
+    const money = (n) => '$' + ((parseFloat(n || 0) || 0).toFixed(2));
+
+    const hoy = new Date();
+    const mesActual = hoy.getMonth();
+    const anioActual = hoy.getFullYear();
+
+    const entraEnFiltro = (fechaStr) => {
+        if (!fechaStr) return filtro === 'todo';
+
+        const f = new Date(fechaStr);
+        if (isNaN(f.getTime())) return false;
+
+        if (filtro === 'todo') return true;
+
+        if (filtro === 'custom') {
+            const desde = App.state.finanzasFechaDesde || '';
+            const hasta = App.state.finanzasFechaHasta || '';
+            if (!desde || !hasta) return true;
+
+            const d1 = new Date(desde + 'T00:00:00');
+            const d2 = new Date(hasta + 'T23:59:59');
+            return f >= d1 && f <= d2;
+        }
+
+        if (filtro === 'mes_actual') {
+            return f.getMonth() === mesActual && f.getFullYear() === anioActual;
+        }
+
+        if (filtro === 'trimestre_actual') {
+            const trimHoy = Math.floor(mesActual / 3);
+            const trimFecha = Math.floor(f.getMonth() / 3);
+            return f.getFullYear() === anioActual && trimFecha === trimHoy;
+        }
+
+        if (filtro === 'anio_actual') {
+            return f.getFullYear() === anioActual;
+        }
+
+        return true;
     };
 
-    const titulo = labels[tipo] || 'Detalle financiero';
+    const renderTabla = (headers, rows) => {
+        if (!rows.length) {
+            return `<div class="dm-alert dm-alert-info">No hay registros para este filtro.</div>`;
+        }
+
+        return `
+            <div style="overflow:auto;">
+                <table class="dm-table" style="width:100%; min-width:760px;">
+                    <thead>
+                        <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
+                    </thead>
+                    <tbody>
+                        ${rows.join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    };
+
+    let titulo = 'Detalle financiero';
+    let resumen = '';
+    let tabla = '';
+
+    if (tipo === 'ventas') {
+        titulo = 'Ventas totales';
+
+        const pedidos = (App.state.pedidos || []).filter(p => entraEnFiltro(p.fecha_creacion));
+        const total = pedidos.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+
+        resumen = `
+            <div class="dm-mb-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+                <div class="dm-card" style="background:var(--dm-surface-2);">
+                    <div class="dm-kpi-label">Registros</div>
+                    <div class="dm-kpi-value">${pedidos.length}</div>
+                </div>
+                <div class="dm-card" style="background:var(--dm-surface-2);">
+                    <div class="dm-kpi-label">Total ventas</div>
+                    <div class="dm-kpi-value">${money(total)}</div>
+                </div>
+            </div>
+        `;
+
+        const rows = pedidos.map(p => {
+            const cliente = (App.state.clientes || []).find(c => c.id === p.cliente_id);
+            const fecha = String(p.fecha_creacion || p.fecha || '').split('T')[0];
+
+            return `
+                <tr>
+                    <td>${App.ui.safe(p.id || '')}</td>
+                    <td>${App.ui.safe(fecha)}</td>
+                    <td>${App.ui.safe(cliente?.nombre || p.cliente_nombre || p.cliente_id || '')}</td>
+                    <td>${App.ui.safe(p.estado || '')}</td>
+                    <td style="text-align:right;">${money(p.total || 0)}</td>
+                </tr>
+            `;
+        });
+
+        tabla = renderTabla(['Pedido', 'Fecha', 'Cliente', 'Estado', 'Total'], rows);
+    }
+
+    if (tipo === 'gastos') {
+        titulo = 'Gastos';
+
+        const gastos = (App.state.gastos || []).filter(g => entraEnFiltro(g.fecha));
+        const total = gastos.reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
+
+        resumen = `
+            <div class="dm-mb-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+                <div class="dm-card" style="background:var(--dm-surface-2);">
+                    <div class="dm-kpi-label">Registros</div>
+                    <div class="dm-kpi-value">${gastos.length}</div>
+                </div>
+                <div class="dm-card" style="background:var(--dm-surface-2);">
+                    <div class="dm-kpi-label">Total gastos</div>
+                    <div class="dm-kpi-value">${money(total)}</div>
+                </div>
+            </div>
+        `;
+
+        const rows = gastos.map(g => {
+            const fecha = String(g.fecha || '').split('T')[0];
+
+            return `
+                <tr>
+                    <td>${App.ui.safe(g.id || '')}</td>
+                    <td>${App.ui.safe(fecha)}</td>
+                    <td>${App.ui.safe(g.categoria || g.tipo || '')}</td>
+                    <td>${App.ui.safe(g.descripcion || g.concepto || '')}</td>
+                    <td style="text-align:right;">${money(g.monto || 0)}</td>
+                </tr>
+            `;
+        });
+
+        tabla = renderTabla(['ID', 'Fecha', 'Categoría', 'Concepto', 'Monto'], rows);
+    }
+
     cont.innerHTML = `
         <div class="dm-card dm-mb-4">
-            <div class="dm-card-title">${titulo}</div>
-            <div class="dm-muted dm-mt-2">Filtro aplicado: ${filtro || 'actual'}</div>
-            <div class="dm-mt-3">Vista de detalle en construcción. El clic ya no rompe el módulo.</div>
+            <div class="dm-row-between" style="gap:12px;align-items:flex-start;flex-wrap:wrap;">
+                <div>
+                    <div class="dm-card-title">${titulo}</div>
+                    <div class="dm-muted dm-mt-2">Filtro aplicado: ${App.ui.safe(filtro || 'actual')}</div>
+                </div>
+                <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="document.getElementById('finanzas-contenedor').innerHTML=''">Cerrar</button>
+            </div>
+
+            <div class="dm-mt-3">
+                ${resumen}
+                ${tabla}
+            </div>
         </div>
     `;
 };
