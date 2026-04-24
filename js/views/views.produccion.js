@@ -81,12 +81,15 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
         if (mat && cant > 0) mat.stock_real = (parseFloat(mat.stock_real || 0) || 0) + cant;
     });
 
-    const ordState = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
-    if (ordState) {
-        ordState.estado = 'pendiente';
-        ordState.materiales_revertidos = true;
-        ordState.fecha_reversa_materiales = ahora;
-    }
+const ordState = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
+if (ordState) {
+    ordState.estado = 'pendiente';
+    ordState.materiales_revertidos = true;
+    ordState.materiales_descontados = false;
+    ordState.fecha_reversa_materiales = ahora;
+}
+
+if (App.router?.handleRoute) App.router.handleRoute();
 
     if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
     receta.forEach((item, i) => {
@@ -189,23 +192,28 @@ App.views.descontarMaterialesProduccion = async function (ordenId) {
 
 App.views.accionProduccion = function (button, ordenId, actionName) {
     const actions = {
-        iniciar: {
-            fn: async () => {
-    // 1. DESCONTAR PRIMERO (estado estable)
-    await App.views.descontarMaterialesProduccion(ordenId);
+    iniciar: {
+    fn: async () => {
+        // 1. Descontar primero, con el estado todavía estable
+        await App.views.descontarMaterialesProduccion(ordenId);
 
-    // 2. LUEGO CAMBIAR ESTADO
-    await App.logic.cambiarEstadoProduccion(ordenId, 'proceso');
+        // 2. Luego cambiar estado a proceso
+        await App.logic.cambiarEstadoProduccion(ordenId, 'proceso');
 
-    // 3. FORZAR ESTADO LOCAL (evita delay)
-    const orden = App.state?.ordenes_produccion?.find(o => o.id === ordenId);
-    if (orden) orden.estado = 'proceso';
+        // 3. Forzar estado local para que se vea de inmediato
+        const orden = App.state?.ordenes_produccion?.find(o => o.id === ordenId);
+        if (orden) {
+            orden.estado = 'proceso';
+            orden.materiales_descontados = true;
+            orden.materiales_revertidos = false;
+        }
 
-    // 4. REFRESCAR UI
-    App.router.handleRoute();
+        // 4. Refrescar UI
+        if (App.router?.handleRoute) App.router.handleRoute();
 
-    return true;
-}
+        return true;
+    },
+    loadingText: 'Iniciando...',
             loadingText: 'Iniciando...',
             loaderMessage: 'Moviendo orden a proceso...',
             successMessage: 'Orden iniciada',
