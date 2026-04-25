@@ -6,12 +6,15 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
     if (!orden) throw new Error('Orden no encontrada');
 
     const estadoActual = String(orden.estado || '').toLowerCase();
-    const yaRevertida = String(orden.materiales_revertidos || '').toLowerCase() === 'true' || orden.materiales_revertidos === true;
+    const yaRevertida =
+        String(orden.materiales_revertidos || '').toLowerCase() === 'true' ||
+        orden.materiales_revertidos === true;
 
     if (estadoActual === 'pendiente') {
         App.ui.toast('La orden ya está en pendiente', 'warning');
         return false;
     }
+
     if (yaRevertida) {
         App.ui.toast('Esta orden ya tuvo reversa de materiales', 'warning');
         return false;
@@ -33,39 +36,44 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
     const movBase = Date.now();
 
     receta.forEach((item, i) => {
-        const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id);
-        if (!mat) return;
+        const matId = item.mat_id;
         const cant = parseFloat(item.cant || 0) || 0;
-        if (cant <= 0) return;
-        const nuevo = (parseFloat(mat.stock_real || 0) || 0) + cant;
+        if (!matId || cant <= 0) return;
+
+        const mat = (App.state?.inventario || []).find(m => m.id === matId);
+        if (!mat) return;
+
+        const stockActual = parseFloat(mat.stock_real || 0) || 0;
+        const nuevoStock = stockActual + cant;
+        const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
+        const totalMovimiento = cant * costoUnitario;
 
         operaciones.push({
             action: 'actualizar_fila',
             nombreHoja: 'materiales',
-            idFila: mat.id,
-            datosNuevos: { stock_real: nuevo }
+            idFila: matId,
+            datosNuevos: {
+                stock_real: nuevoStock
+            }
         });
 
-        const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
-const totalMovimiento = cant * costoUnitario;
-
-operaciones.push({
-    action: 'guardar_fila',
-    nombreHoja: 'movimientos_inventario',
-    datos: {
-        id: `REV-${movBase}-${i}`,
-        fecha: ahora,
-        tipo_movimiento: 'reversa_produccion',
-        origen: 'orden',
-        origen_id: ordenId,
-        ref_tipo: 'material',
-        ref_id: mat.id,
-        cantidad: cant,
-        costo_unitario: costoUnitario,
-        total: totalMovimiento,
-        notas: `Reversa por regresar orden ${ordenId} a pendiente`
-    }
-});
+        operaciones.push({
+            action: 'guardar_fila',
+            nombreHoja: 'movimientos_inventario',
+            datos: {
+                id: `REV-${movBase}-${i}`,
+                fecha: ahora,
+                tipo_movimiento: 'reversa_produccion',
+                origen: 'orden',
+                origen_id: ordenId,
+                ref_tipo: 'material',
+                ref_id: matId,
+                cantidad: cant,
+                costo_unitario: costoUnitario,
+                total: totalMovimiento,
+                notas: `Reversa por regresar orden ${ordenId} a pendiente`
+            }
+        });
     });
 
     operaciones.push({
@@ -73,58 +81,65 @@ operaciones.push({
         nombreHoja: 'ordenes_produccion',
         idFila: ordenId,
         datosNuevos: {
-    estado: 'pendiente',
-    materiales_revertidos: true,
-    materiales_descontados: false,
-    fecha_reversa_materiales: ahora
-}
+            estado: 'pendiente',
+            materiales_revertidos: true,
+            materiales_descontados: false,
+            fecha_reversa_materiales: ahora
+        }
     });
 
     const res = await App.api.fetch('ejecutar_lote', { operaciones });
-    if (res.status !== 'success') throw new Error(res.message || 'No se pudo ejecutar la reversa');
+    if (res.status !== 'success') {
+        throw new Error(res.message || 'No se pudo ejecutar la reversa');
+    }
 
-    receta.forEach((item, i) => {
-        const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id);
+    receta.forEach((item) => {
+        const matId = item.mat_id;
         const cant = parseFloat(item.cant || 0) || 0;
-        if (mat && cant > 0) mat.stock_real = (parseFloat(mat.stock_real || 0) || 0) + cant;
+        if (!matId || cant <= 0) return;
+
+        const mat = (App.state?.inventario || []).find(m => m.id === matId);
+        if (mat) {
+            mat.stock_real = (parseFloat(mat.stock_real || 0) || 0) + cant;
+        }
     });
 
-const ordState = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
-if (ordState) {
-    ordState.estado = 'pendiente';
-    ordState.materiales_revertidos = true;
-    ordState.materiales_descontados = false;
-    ordState.fecha_reversa_materiales = ahora;
-}
+    const ordState = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
+    if (ordState) {
+        ordState.estado = 'pendiente';
+        ordState.materiales_revertidos = true;
+        ordState.materiales_descontados = false;
+        ordState.fecha_reversa_materiales = ahora;
+    }
 
+    if (!Array.isArray(App.state.movimientos_inventario)) {
+        App.state.movimientos_inventario = [];
+    }
 
-
-    if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
     receta.forEach((item, i) => {
+        const matId = item.mat_id;
         const cant = parseFloat(item.cant || 0) || 0;
-        if (!item.mat_id || cant <= 0) return;
-    const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id);
-const costoUnitario = parseFloat(mat?.costo_unitario || 0) || 0;
+        if (!matId || cant <= 0) return;
 
-const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id);
-const costoUnitario = parseFloat(mat?.costo_unitario || 0) || 0;
+        const mat = (App.state?.inventario || []).find(m => m.id === matId);
+        const costoUnitario = parseFloat(mat?.costo_unitario || 0) || 0;
 
-App.state.movimientos_inventario.push({
-    id: `REV-${movBase}-${i}`,
-    fecha: ahora,
-    tipo_movimiento: 'reversa_produccion',
-    origen: 'orden',
-    origen_id: ordenId,
-    ref_tipo: 'material',
-    ref_id: item.mat_id,
-    cantidad: cant,
-    costo_unitario: costoUnitario,
-    total: cant * costoUnitario,
-    notas: `Reversa por regresar orden ${ordenId} a pendiente`
-});
+        App.state.movimientos_inventario.push({
+            id: `REV-${movBase}-${i}`,
+            fecha: ahora,
+            tipo_movimiento: 'reversa_produccion',
+            origen: 'orden',
+            origen_id: ordenId,
+            ref_tipo: 'material',
+            ref_id: matId,
+            cantidad: cant,
+            costo_unitario: costoUnitario,
+            total: cant * costoUnitario,
+            notas: `Reversa por regresar orden ${ordenId} a pendiente`
+        });
     });
 
-  if (App.router?.handleRoute) App.router.handleRoute();
+    if (App.router?.handleRoute) App.router.handleRoute();
 
     return true;
 };
@@ -145,12 +160,19 @@ App.views.descontarMaterialesProduccion = async function (ordenId) {
     const orden = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
     if (!orden) throw new Error('Orden no encontrada');
 
-    if (orden.materiales_descontados) return true;
+    const yaDescontada =
+        String(orden.materiales_descontados || '').toLowerCase() === 'true' ||
+        orden.materiales_descontados === true;
+
+    if (yaDescontada) return true;
 
     let receta = [];
     try {
         receta = JSON.parse(orden.receta_personalizada || '[]');
-    } catch (e) {}
+        if (!Array.isArray(receta)) receta = [];
+    } catch (e) {
+        receta = [];
+    }
 
     if (!receta.length) return true;
 
@@ -159,70 +181,49 @@ App.views.descontarMaterialesProduccion = async function (ordenId) {
     const movBase = Date.now();
 
     receta.forEach((item, i) => {
-        const mat = App.state.inventario.find(m => m.id === item.mat_id);
+        const matId = item.mat_id;
+        const cant = parseFloat(item.cant || 0) || 0;
+        if (!matId || cant <= 0) return;
+
+        const mat = (App.state?.inventario || []).find(m => m.id === matId);
         if (!mat) return;
 
-        const cant = parseFloat(item.cant || 0);
-        if (cant <= 0) return;
+        const stockActual = parseFloat(mat.stock_real || 0) || 0;
+        const nuevoStock = stockActual - cant;
 
-        const nuevo = (parseFloat(mat.stock_real || 0)) - cant;
+        if (nuevoStock < 0) {
+            throw new Error(`Stock insuficiente: ${mat.nombre || matId}`);
+        }
 
-        if (nuevo < 0) throw new Error(`Stock insuficiente: ${mat.nombre}`);
+        const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
+        const totalMovimiento = -(cant * costoUnitario);
 
         operaciones.push({
             action: 'actualizar_fila',
             nombreHoja: 'materiales',
-            idFila: mat.id,
-            datosNuevos: { stock_real: nuevo }
+            idFila: matId,
+            datosNuevos: {
+                stock_real: nuevoStock
+            }
         });
 
-const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
-const totalMovimiento = -(cant * costoUnitario);
-
-operaciones.push({
-    action: 'guardar_fila',
-    nombreHoja: 'movimientos_inventario',
-    datos: {
-        id: `SAL-${movBase}-${i}`,
-        fecha: ahora,
-        tipo_movimiento: 'salida_produccion',
-        origen: 'orden',
-        origen_id: ordenId,
-        ref_tipo: 'material',
-        ref_id: mat.id,
-        cantidad: -cant,
-        costo_unitario: costoUnitario,
-        total: totalMovimiento,
-        notas: `Envío a taller de orden ${ordenId}`
-    }
-});
-
-if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
-
-receta.forEach((item, i) => {
-    const cant = parseFloat(item.cant || 0) || 0;
-    if (!item.mat_id || cant <= 0) return;
-
-    const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id);
-    const costoUnitario = parseFloat(mat?.costo_unitario || 0) || 0;
-
-    App.state.movimientos_inventario.push({
-        id: `SAL-${movBase}-${i}`,
-        fecha: ahora,
-        tipo_movimiento: 'salida_produccion',
-        origen: 'orden',
-        origen_id: ordenId,
-        ref_tipo: 'material',
-        ref_id: item.mat_id,
-        cantidad: -cant,
-        costo_unitario: costoUnitario,
-        total: -(cant * costoUnitario),
-        notas: `Envío a taller de orden ${ordenId}`
-    });
-});
-
-        // actualizar UI inmediato
-        mat.stock_real = nuevo;
+        operaciones.push({
+            action: 'guardar_fila',
+            nombreHoja: 'movimientos_inventario',
+            datos: {
+                id: `SAL-${movBase}-${i}`,
+                fecha: ahora,
+                tipo_movimiento: 'salida_produccion',
+                origen: 'orden',
+                origen_id: ordenId,
+                ref_tipo: 'material',
+                ref_id: matId,
+                cantidad: -cant,
+                costo_unitario: costoUnitario,
+                total: totalMovimiento,
+                notas: `Envío a taller de orden ${ordenId}`
+            }
+        });
     });
 
     operaciones.push({
@@ -231,13 +232,57 @@ receta.forEach((item, i) => {
         idFila: ordenId,
         datosNuevos: {
             materiales_descontados: true,
-            materiales_revertidos: false
+            materiales_revertidos: false,
+            fecha_descuento_materiales: ahora
         }
     });
 
-    await App.api.fetch('ejecutar_lote', { operaciones });
+    const res = await App.api.fetch('ejecutar_lote', { operaciones });
+    if (res.status !== 'success') {
+        throw new Error(res.message || 'No se pudieron descontar materiales');
+    }
+
+    receta.forEach((item) => {
+        const matId = item.mat_id;
+        const cant = parseFloat(item.cant || 0) || 0;
+        if (!matId || cant <= 0) return;
+
+        const mat = (App.state?.inventario || []).find(m => m.id === matId);
+        if (mat) {
+            mat.stock_real = (parseFloat(mat.stock_real || 0) || 0) - cant;
+        }
+    });
 
     orden.materiales_descontados = true;
+    orden.materiales_revertidos = false;
+    orden.fecha_descuento_materiales = ahora;
+
+    if (!Array.isArray(App.state.movimientos_inventario)) {
+        App.state.movimientos_inventario = [];
+    }
+
+    receta.forEach((item, i) => {
+        const matId = item.mat_id;
+        const cant = parseFloat(item.cant || 0) || 0;
+        if (!matId || cant <= 0) return;
+
+        const mat = (App.state?.inventario || []).find(m => m.id === matId);
+        const costoUnitario = parseFloat(mat?.costo_unitario || 0) || 0;
+
+        App.state.movimientos_inventario.push({
+            id: `SAL-${movBase}-${i}`,
+            fecha: ahora,
+            tipo_movimiento: 'salida_produccion',
+            origen: 'orden',
+            origen_id: ordenId,
+            ref_tipo: 'material',
+            ref_id: matId,
+            cantidad: -cant,
+            costo_unitario: costoUnitario,
+            total: -(cant * costoUnitario),
+            notas: `Envío a taller de orden ${ordenId}`
+        });
+    });
 
     return true;
 };
