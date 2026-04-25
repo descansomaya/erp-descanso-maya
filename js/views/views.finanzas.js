@@ -14,53 +14,34 @@ App.views.detalleFinanzas = function(tipo, filtro) {
 
     const entraEnFiltro = (fechaStr) => {
         if (!fechaStr) return filtro === 'todo';
-
         const f = new Date(fechaStr);
         if (isNaN(f.getTime())) return false;
-
         if (filtro === 'todo') return true;
-
         if (filtro === 'custom') {
             const desde = App.state.finanzasFechaDesde || '';
             const hasta = App.state.finanzasFechaHasta || '';
             if (!desde || !hasta) return true;
-
             const d1 = new Date(desde + 'T00:00:00');
             const d2 = new Date(hasta + 'T23:59:59');
             return f >= d1 && f <= d2;
         }
-
-        if (filtro === 'mes_actual') {
-            return f.getMonth() === mesActual && f.getFullYear() === anioActual;
-        }
-
+        if (filtro === 'mes_actual') return f.getMonth() === mesActual && f.getFullYear() === anioActual;
         if (filtro === 'trimestre_actual') {
             const trimHoy = Math.floor(mesActual / 3);
             const trimFecha = Math.floor(f.getMonth() / 3);
             return f.getFullYear() === anioActual && trimFecha === trimHoy;
         }
-
-        if (filtro === 'anio_actual') {
-            return f.getFullYear() === anioActual;
-        }
-
+        if (filtro === 'anio_actual') return f.getFullYear() === anioActual;
         return true;
     };
 
     const renderTabla = (headers, rows) => {
-        if (!rows.length) {
-            return `<div class="dm-alert dm-alert-info">No hay registros para este filtro.</div>`;
-        }
-
+        if (!rows.length) return `<div class="dm-alert dm-alert-info">No hay registros para este filtro.</div>`;
         return `
             <div style="overflow:auto;">
                 <table class="dm-table" style="width:100%; min-width:760px;">
-                    <thead>
-                        <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
-                    </thead>
-                    <tbody>
-                        ${rows.join('')}
-                    </tbody>
+                    <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+                    <tbody>${rows.join('')}</tbody>
                 </table>
             </div>
         `;
@@ -72,93 +53,45 @@ App.views.detalleFinanzas = function(tipo, filtro) {
 
     if (tipo === 'ventas') {
         titulo = 'Ventas totales';
-
-        const pedidos = (App.state.pedidos || []).filter(p => entraEnFiltro(p.fecha_creacion));
+        const pedidos = (App.state.pedidos || []).filter(p => entraEnFiltro(p.fecha_creacion || p.fecha));
         const total = pedidos.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
-
         resumen = `
             <div class="dm-mb-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-                <div class="dm-card" style="background:var(--dm-surface-2);">
-                    <div class="dm-kpi-label">Registros</div>
-                    <div class="dm-kpi-value">${pedidos.length}</div>
-                </div>
-                <div class="dm-card" style="background:var(--dm-surface-2);">
-                    <div class="dm-kpi-label">Total ventas</div>
-                    <div class="dm-kpi-value">${money(total)}</div>
-                </div>
-            </div>
-        `;
-
+                <div class="dm-card" style="background:var(--dm-surface-2);"><div class="dm-kpi-label">Registros</div><div class="dm-kpi-value">${pedidos.length}</div></div>
+                <div class="dm-card" style="background:var(--dm-surface-2);"><div class="dm-kpi-label">Total ventas</div><div class="dm-kpi-value">${money(total)}</div></div>
+            </div>`;
         const rows = pedidos.map(p => {
             const cliente = (App.state.clientes || []).find(c => c.id === p.cliente_id);
             const fecha = String(p.fecha_creacion || p.fecha || '').split('T')[0];
-
-            return `
-                <tr>
-                    <td>${App.ui.safe(p.id || '')}</td>
-                    <td>${App.ui.safe(fecha)}</td>
-                    <td>${App.ui.safe(cliente?.nombre || p.cliente_nombre || p.cliente_id || '')}</td>
-                    <td>${App.ui.safe(p.estado || '')}</td>
-                    <td style="text-align:right;">${money(p.total || 0)}</td>
-                </tr>
-            `;
+            return `<tr><td>${App.ui.safe(p.id || '')}</td><td>${App.ui.safe(fecha)}</td><td>${App.ui.safe(cliente?.nombre || p.cliente_nombre || p.cliente_id || '')}</td><td>${App.ui.safe(p.estado || '')}</td><td style="text-align:right;">${money(p.total || 0)}</td></tr>`;
         });
-
         tabla = renderTabla(['Pedido', 'Fecha', 'Cliente', 'Estado', 'Total'], rows);
     }
 
     if (tipo === 'gastos') {
         titulo = 'Gastos';
-
         const gastos = (App.state.gastos || []).filter(g => entraEnFiltro(g.fecha));
         const total = gastos.reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
-
         resumen = `
             <div class="dm-mb-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-                <div class="dm-card" style="background:var(--dm-surface-2);">
-                    <div class="dm-kpi-label">Registros</div>
-                    <div class="dm-kpi-value">${gastos.length}</div>
-                </div>
-                <div class="dm-card" style="background:var(--dm-surface-2);">
-                    <div class="dm-kpi-label">Total gastos</div>
-                    <div class="dm-kpi-value">${money(total)}</div>
-                </div>
-            </div>
-        `;
-
+                <div class="dm-card" style="background:var(--dm-surface-2);"><div class="dm-kpi-label">Registros</div><div class="dm-kpi-value">${gastos.length}</div></div>
+                <div class="dm-card" style="background:var(--dm-surface-2);"><div class="dm-kpi-label">Total gastos</div><div class="dm-kpi-value">${money(total)}</div></div>
+            </div>`;
         const rows = gastos.map(g => {
             const fecha = String(g.fecha || '').split('T')[0];
-
-            return `
-                <tr>
-                    <td>${App.ui.safe(g.id || '')}</td>
-                    <td>${App.ui.safe(fecha)}</td>
-                    <td>${App.ui.safe(g.categoria || g.tipo || '')}</td>
-                    <td>${App.ui.safe(g.descripcion || g.concepto || '')}</td>
-                    <td style="text-align:right;">${money(g.monto || 0)}</td>
-                </tr>
-            `;
+            return `<tr><td>${App.ui.safe(g.id || '')}</td><td>${App.ui.safe(fecha)}</td><td>${App.ui.safe(g.categoria || g.tipo || '')}</td><td>${App.ui.safe(g.descripcion || g.concepto || '')}</td><td style="text-align:right;">${money(g.monto || 0)}</td></tr>`;
         });
-
         tabla = renderTabla(['ID', 'Fecha', 'Categoría', 'Concepto', 'Monto'], rows);
     }
 
     cont.innerHTML = `
         <div class="dm-card dm-mb-4">
             <div class="dm-row-between" style="gap:12px;align-items:flex-start;flex-wrap:wrap;">
-                <div>
-                    <div class="dm-card-title">${titulo}</div>
-                    <div class="dm-muted dm-mt-2">Filtro aplicado: ${App.ui.safe(filtro || 'actual')}</div>
-                </div>
+                <div><div class="dm-card-title">${titulo}</div><div class="dm-muted dm-mt-2">Filtro aplicado: ${App.ui.safe(filtro || 'actual')}</div></div>
                 <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="document.getElementById('finanzas-contenedor').innerHTML=''">Cerrar</button>
             </div>
-
-            <div class="dm-mt-3">
-                ${resumen}
-                ${tabla}
-            </div>
-        </div>
-    `;
+            <div class="dm-mt-3">${resumen}${tabla}</div>
+        </div>`;
 };
 
 App.views.aplicarFiltroFinanzas = function(filtro) {
@@ -167,11 +100,14 @@ App.views.aplicarFiltroFinanzas = function(filtro) {
 };
 
 App.views.aplicarFiltroFinanzasCustom = function() {
-    const desde = document.getElementById('finanzas-fecha-desde')?.value || '';
-    const hasta = document.getElementById('finanzas-fecha-hasta')?.value || '';
-    App.state.finanzasFechaDesde = desde;
-    App.state.finanzasFechaHasta = hasta;
+    App.state.finanzasFechaDesde = document.getElementById('finanzas-fecha-desde')?.value || '';
+    App.state.finanzasFechaHasta = document.getElementById('finanzas-fecha-hasta')?.value || '';
     App.state.finanzasFiltro = 'custom';
+    App.router.handleRoute();
+};
+
+App.views.setFinanzasTab = function(tab) {
+    App.state.finanzasTab = tab || 'resumen';
     App.router.handleRoute();
 };
 
@@ -181,10 +117,11 @@ App.views.finanzas = function () {
     const bottomNav = document.getElementById('bottom-nav');
 
     if (title) title.innerText = 'Finanzas';
-    if (subtitle) subtitle.innerText = 'Flujo de efectivo, KPIs y BI Dashboard PRO';
+    if (subtitle) subtitle.innerText = 'Dashboard ejecutivo y flujo de caja';
     if (bottomNav) bottomNav.style.display = 'flex';
 
     const filtro = App.state.finanzasFiltro || 'mes_actual';
+    const tab = App.state.finanzasTab || 'resumen';
     const fechaDesde = App.state.finanzasFechaDesde || '';
     const fechaHasta = App.state.finanzasFechaHasta || '';
 
@@ -198,7 +135,6 @@ App.views.finanzas = function () {
     const cotizaciones = App.state.cotizaciones || [];
 
     const money = (n) => '$' + ((parseFloat(n || 0) || 0).toFixed(2));
-
     const hoy = new Date();
     const mesActual = hoy.getMonth();
     const anioActual = hoy.getFullYear();
@@ -207,35 +143,25 @@ App.views.finanzas = function () {
         if (!fechaStr) return filtro === 'todo';
         const f = new Date(fechaStr);
         if (isNaN(f.getTime())) return false;
-
         if (filtro === 'todo') return true;
-
         if (filtro === 'custom') {
             if (!fechaDesde || !fechaHasta) return true;
             const d1 = new Date(fechaDesde + 'T00:00:00');
             const d2 = new Date(fechaHasta + 'T23:59:59');
             return f >= d1 && f <= d2;
         }
-
-        if (filtro === 'mes_actual') {
-            return f.getMonth() === mesActual && f.getFullYear() === anioActual;
-        }
-
+        if (filtro === 'mes_actual') return f.getMonth() === mesActual && f.getFullYear() === anioActual;
         if (filtro === 'trimestre_actual') {
             const trimHoy = Math.floor(mesActual / 3);
             const trimFecha = Math.floor(f.getMonth() / 3);
             return f.getFullYear() === anioActual && trimFecha === trimHoy;
         }
-
-        if (filtro === 'anio_actual') {
-            return f.getFullYear() === anioActual;
-        }
-
+        if (filtro === 'anio_actual') return f.getFullYear() === anioActual;
         return true;
     };
 
-    const pedidosFil = pedidos.filter(p => entraEnFiltro(p.fecha_creacion));
-    const reparacionesFil = reparaciones.filter(r => entraEnFiltro(r.fecha_creacion));
+    const pedidosFil = pedidos.filter(p => entraEnFiltro(p.fecha_creacion || p.fecha));
+    const reparacionesFil = reparaciones.filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
     const gastosFil = gastos.filter(g => entraEnFiltro(g.fecha));
     const abonosFil = abonos.filter(a => entraEnFiltro(a.fecha));
     const abonosRepFil = abonosReparaciones.filter(a => entraEnFiltro(a.fecha));
@@ -266,7 +192,6 @@ App.views.finanzas = function () {
     }, 0);
 
     const dineroEnLaCalle = porCobrarPedidos + porCobrarReparaciones;
-
     const porPagarCompras = comprasFil.reduce((acc, c) => {
         const total = parseFloat(c.total || 0) || 0;
         const pagado = c.monto_pagado !== undefined && c.monto_pagado !== '' ? parseFloat(c.monto_pagado || 0) : total;
@@ -274,17 +199,13 @@ App.views.finanzas = function () {
         return acc + (deuda > 0 ? deuda : 0);
     }, 0);
 
-    const porPagarNomina = pagosArtesanos
-        .filter(p => String(p.estado || '').toLowerCase() === 'pendiente')
-        .reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
-
+    const porPagarNomina = pagosArtesanos.filter(p => String(p.estado || '').toLowerCase() === 'pendiente').reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
     const totalPorPagar = porPagarCompras + porPagarNomina;
     const utilidad = totalCobrado - totalGastos;
     const flujoOperativo = totalCobrado - totalGastos - totalCompras - totalNomina;
     const saldoProyectado = dineroEnLaCalle - totalPorPagar;
     const salud = flujoOperativo >= 0 && saldoProyectado >= 0 ? 'Sana' : (flujoOperativo < 0 && saldoProyectado < 0 ? 'Crítica' : 'En observación');
     const saludColor = salud === 'Sana' ? 'green' : (salud === 'Crítica' ? 'red' : '#B7791F');
-
     const pedidosPendientes = pedidosFil.filter(p => !['pagado', 'entregado'].includes(String(p.estado || '').toLowerCase())).length;
     const reparacionesPendientes = reparacionesFil.filter(r => !['entregada'].includes(String(r.estado || '').toLowerCase())).length;
     const cotPendientes = cotizacionesFil.filter(c => String(c.estado_conversion || '').toLowerCase() !== 'convertida').length;
@@ -295,140 +216,113 @@ App.views.finanzas = function () {
         if (App.logic && App.logic.renderGraficasFinanzas) App.logic.renderGraficasFinanzas(filtro);
     }, 120);
 
-    const active = (x) => App.state.finanzasFiltro === x ? 'dm-btn-primary' : 'dm-btn-secondary';
+    const activeFiltro = (x) => filtro === x ? 'dm-btn-primary' : 'dm-btn-secondary';
+    const activeTab = (x) => tab === x ? 'dm-btn-primary' : 'dm-btn-secondary';
+
+    const kpi = (label, value, color = '') => `<div class="dm-card"><div class="dm-kpi-label">${label}</div><div class="dm-kpi-value" ${color ? `style="color:${color};"` : ''}>${value}</div></div>`;
+
+    const filtrosHTML = `
+        <div class="dm-card dm-mb-4">
+            <div class="dm-card-title">Filtros de fecha</div>
+            <div class="dm-mt-3" style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="dm-btn ${activeFiltro('mes_actual')}" onclick="App.views.aplicarFiltroFinanzas('mes_actual')">Mes actual</button>
+                <button class="dm-btn ${activeFiltro('trimestre_actual')}" onclick="App.views.aplicarFiltroFinanzas('trimestre_actual')">Trimestre</button>
+                <button class="dm-btn ${activeFiltro('anio_actual')}" onclick="App.views.aplicarFiltroFinanzas('anio_actual')">Año</button>
+                <button class="dm-btn ${activeFiltro('todo')}" onclick="App.views.aplicarFiltroFinanzas('todo')">Todo</button>
+            </div>
+            <div class="dm-mt-3" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; align-items:end;">
+                <div class="dm-form-group"><label class="dm-label">Desde</label><input type="date" id="finanzas-fecha-desde" class="dm-input" value="${fechaDesde}"></div>
+                <div class="dm-form-group"><label class="dm-label">Hasta</label><input type="date" id="finanzas-fecha-hasta" class="dm-input" value="${fechaHasta}"></div>
+                <div><button class="dm-btn dm-btn-primary" onclick="App.views.aplicarFiltroFinanzasCustom()">Aplicar rango</button></div>
+            </div>
+        </div>`;
+
+    const tabsHTML = `
+        <div class="dm-card dm-mb-4">
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="dm-btn ${activeTab('resumen')}" onclick="App.views.setFinanzasTab('resumen')">📊 Resumen</button>
+                <button class="dm-btn ${activeTab('cobranza')}" onclick="App.views.setFinanzasTab('cobranza')">💰 Cobranza</button>
+                <button class="dm-btn ${activeTab('egresos')}" onclick="App.views.setFinanzasTab('egresos')">💸 Egresos</button>
+                <button class="dm-btn ${activeTab('nomina')}" onclick="App.views.setFinanzasTab('nomina')">👷 Nómina</button>
+                <button class="dm-btn ${activeTab('reportes')}" onclick="App.views.setFinanzasTab('reportes')">📈 Reportes</button>
+            </div>
+        </div>`;
+
+    const resumenHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">
+            ${kpi('Cobrado total', money(totalCobrado))}
+            ${kpi('Dinero en la calle', money(dineroEnLaCalle))}
+            ${kpi('Total por pagar', money(totalPorPagar))}
+            ${kpi('Saldo proyectado', money(saldoProyectado), saldoProyectado >= 0 ? 'green' : 'red')}
+            ${kpi('Flujo operativo', money(flujoOperativo), flujoOperativo >= 0 ? 'green' : 'red')}
+            ${kpi('Utilidad simple', money(utilidad), utilidad >= 0 ? 'green' : 'red')}
+            ${kpi('Salud financiera', salud, saludColor)}
+        </div>`;
+
+    const cobranzaHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">
+            ${kpi('Por cobrar pedidos', money(porCobrarPedidos))}
+            ${kpi('Por cobrar reparaciones', money(porCobrarReparaciones))}
+            ${kpi('Pedidos pendientes', pedidosPendientes)}
+            ${kpi('Reparaciones pendientes', reparacionesPendientes)}
+            ${kpi('Ventas totales', money(totalVentas))}
+            ${kpi('Cotizado', money(totalCotizado))}
+            ${kpi('Cotizaciones pendientes', cotPendientes)}
+        </div>
+        <div class="dm-card dm-mb-4"><button class="dm-btn dm-btn-primary" onclick="App.views.detalleFinanzas('ventas', '${filtro}')">Ver detalle de ventas</button></div>`;
+
+    const egresosHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">
+            ${kpi('Gastos', money(totalGastos))}
+            ${kpi('Compras', money(totalCompras))}
+            ${kpi('Por pagar compras', money(porPagarCompras))}
+            ${kpi('Registros de gastos', registrosGastos)}
+        </div>
+        <div class="dm-card dm-mb-4" style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="dm-btn dm-btn-danger" onclick="App.views.formGasto()">+ Nuevo gasto</button>
+            <button class="dm-btn dm-btn-secondary" onclick="App.views.detalleFinanzas('gastos', '${filtro}')">Ver detalle de gastos</button>
+            <button class="dm-btn dm-btn-secondary" onclick="App.router.navigate('compras')">Ver compras</button>
+        </div>`;
+
+    const nominaHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">
+            ${kpi('Nómina filtrada', money(totalNomina))}
+            ${kpi('Por pagar nómina', money(porPagarNomina))}
+        </div>
+        <div class="dm-card dm-mb-4"><button class="dm-btn dm-btn-primary" onclick="App.router.navigate('nomina')">Ver nómina completa</button></div>`;
+
+    const reportesHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;" class="dm-mb-4">
+            <div class="dm-card">
+                <div class="dm-card-title">Vista rápida</div>
+                <div class="dm-muted dm-mt-2">Mini gráficas del estado del negocio.</div>
+                <div class="dm-mt-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+                    <div style="height:220px;"><canvas id="miniGraficaIngresosGastos"></canvas></div>
+                    <div style="height:220px;"><canvas id="miniGraficaCobrarPagar"></canvas></div>
+                    <div style="height:220px;"><canvas id="miniGraficaOperacion"></canvas></div>
+                </div>
+            </div>
+            <div class="dm-card">
+                <div class="dm-card-title">Tendencias financieras</div>
+                <div class="dm-muted dm-mt-2">Gráficas ejecutivas con datos reales.</div>
+                <div class="dm-mt-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
+                    <div style="height:240px;"><canvas id="graficaFinanzasIngresosGastos"></canvas></div>
+                    <div style="height:240px;"><canvas id="graficaFinanzasFlujo"></canvas></div>
+                </div>
+            </div>
+        </div>`;
+
+    const body = tab === 'cobranza' ? cobranzaHTML : tab === 'egresos' ? egresosHTML : tab === 'nomina' ? nominaHTML : tab === 'reportes' ? reportesHTML : resumenHTML;
 
     return `
         <div class="dm-section" style="padding-bottom:90px;">
-
             <div class="dm-card dm-mb-4" style="background:linear-gradient(135deg, #ffffff 0%, #faf7ff 100%);">
-                <h3 class="dm-card-title">Finanzas Híbrido PRO</h3>
-                <p class="dm-muted dm-mt-2">Combina visibilidad financiera operativa con dashboard BI y gráficas reales.</p>
+                <h3 class="dm-card-title">Finanzas por pestañas PRO</h3>
+                <p class="dm-muted dm-mt-2">Vista ejecutiva organizada por resumen, cobranza, egresos, nómina y reportes.</p>
             </div>
-
-            <div class="dm-card dm-mb-4">
-                <div class="dm-card-title">Filtros de fecha PRO</div>
-                <div class="dm-mt-3" style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <button class="dm-btn ${active('mes_actual')}" onclick="App.views.aplicarFiltroFinanzas('mes_actual')">Mes actual</button>
-                    <button class="dm-btn ${active('trimestre_actual')}" onclick="App.views.aplicarFiltroFinanzas('trimestre_actual')">Trimestre</button>
-                    <button class="dm-btn ${active('anio_actual')}" onclick="App.views.aplicarFiltroFinanzas('anio_actual')">Año</button>
-                    <button class="dm-btn ${active('todo')}" onclick="App.views.aplicarFiltroFinanzas('todo')">Todo</button>
-                </div>
-                <div class="dm-mt-3" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; align-items:end;">
-                    <div class="dm-form-group">
-                        <label class="dm-label">Desde</label>
-                        <input type="date" id="finanzas-fecha-desde" class="dm-input" value="${fechaDesde}">
-                    </div>
-                    <div class="dm-form-group">
-                        <label class="dm-label">Hasta</label>
-                        <input type="date" id="finanzas-fecha-hasta" class="dm-input" value="${fechaHasta}">
-                    </div>
-                    <div>
-                        <button class="dm-btn dm-btn-primary" onclick="App.views.aplicarFiltroFinanzasCustom()">Aplicar rango</button>
-                    </div>
-                </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">
-                <div class="dm-card">
-                    <div class="dm-kpi-label">Cobrado total</div>
-                    <div class="dm-kpi-value">${money(totalCobrado)}</div>
-                </div>
-                <div class="dm-card">
-                    <div class="dm-kpi-label">Dinero en la calle</div>
-                    <div class="dm-kpi-value">${money(dineroEnLaCalle)}</div>
-                </div>
-                <div class="dm-card">
-                    <div class="dm-kpi-label">Total por pagar</div>
-                    <div class="dm-kpi-value">${money(totalPorPagar)}</div>
-                </div>
-                <div class="dm-card">
-                    <div class="dm-kpi-label">Saldo proyectado</div>
-                    <div class="dm-kpi-value" style="color:${saldoProyectado >= 0 ? 'green' : 'red'}">${money(saldoProyectado)}</div>
-                </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">
-                <div class="dm-card">
-                    <div class="dm-kpi-label">Flujo operativo</div>
-                    <div class="dm-kpi-value" style="color:${flujoOperativo >= 0 ? 'green' : 'red'}">${money(flujoOperativo)}</div>
-                </div>
-                <div class="dm-card">
-                    <div class="dm-kpi-label">Utilidad simple</div>
-                    <div class="dm-kpi-value" style="color:${utilidad >= 0 ? 'green' : 'red'}">${money(utilidad)}</div>
-                </div>
-                <div class="dm-card">
-                    <div class="dm-kpi-label">Salud financiera</div>
-                    <div class="dm-kpi-value" style="color:${saludColor}">${salud}</div>
-                </div>
-                <div class="dm-card">
-                    <div class="dm-kpi-label">Cotizado</div>
-                    <div class="dm-kpi-value">${money(totalCotizado)}</div>
-                </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">
-                <div class="dm-card"><div class="dm-kpi-label">Por cobrar pedidos</div><div class="dm-kpi-value">${money(porCobrarPedidos)}</div></div>
-                <div class="dm-card"><div class="dm-kpi-label">Por cobrar reparaciones</div><div class="dm-kpi-value">${money(porCobrarReparaciones)}</div></div>
-                <div class="dm-card"><div class="dm-kpi-label">Por pagar compras</div><div class="dm-kpi-value">${money(porPagarCompras)}</div></div>
-                <div class="dm-card"><div class="dm-kpi-label">Por pagar nómina</div><div class="dm-kpi-value">${money(porPagarNomina)}</div></div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;" class="dm-mb-4">
-                <div class="dm-card" onclick="App.views.detalleFinanzas('ventas', '${filtro}')" style="cursor:pointer;"><div class="dm-kpi-label">Ventas totales</div><div class="dm-kpi-value">${money(totalVentas)}</div></div>
-<div class="dm-card" onclick="App.views.detalleFinanzas('gastos', '${filtro}')" style="cursor:pointer;"><div class="dm-kpi-label">Gastos</div><div class="dm-kpi-value">${money(totalGastos)}</div></div>
-                <div class="dm-card"><div class="dm-kpi-label">Compras</div><div class="dm-kpi-value">${money(totalCompras)}</div></div>
-                <div class="dm-card"><div class="dm-kpi-label">Nómina</div><div class="dm-kpi-value">${money(totalNomina)}</div></div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;" class="dm-mb-4">
-                <div class="dm-card"><div class="dm-kpi-label">Pedidos pendientes</div><div class="dm-kpi-value">${pedidosPendientes}</div></div>
-                <div class="dm-card"><div class="dm-kpi-label">Reparaciones pendientes</div><div class="dm-kpi-value">${reparacionesPendientes}</div></div>
-                <div class="dm-card"><div class="dm-kpi-label">Cotizaciones pendientes</div><div class="dm-kpi-value">${cotPendientes}</div></div>
-                <div class="dm-card"><div class="dm-kpi-label">Registros de gastos</div><div class="dm-kpi-value">${registrosGastos}</div></div>
-            </div>
-
-           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;" class="dm-mb-4">
-    <div class="dm-card">
-        <div class="dm-card-title">Vista rápida</div>
-        <div class="dm-muted dm-mt-2">Mini gráficas del estado del negocio.</div>
-
-        <div class="dm-mt-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
-            <div style="height:220px;">
-                <canvas id="miniGraficaIngresosGastos"></canvas>
-            </div>
-            <div style="height:220px;">
-                <canvas id="miniGraficaCobrarPagar"></canvas>
-            </div>
-            <div style="height:220px;">
-                <canvas id="miniGraficaOperacion"></canvas>
-            </div>
-        </div>
-    </div>
-
-    <div class="dm-card">
-        <div class="dm-card-title">Tendencias financieras</div>
-        <div class="dm-muted dm-mt-2">Gráficas ejecutivas con datos reales.</div>
-
-        <div class="dm-mt-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
-            <div style="height:240px;">
-                <canvas id="graficaFinanzasIngresosGastos"></canvas>
-            </div>
-            <div style="height:240px;">
-                <canvas id="graficaFinanzasFlujo"></canvas>
-            </div>
-        </div>
-    </div>
-</div>
-
-            <div class="dm-card dm-mb-4">
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <button class="dm-btn dm-btn-danger" onclick="App.views.formGasto()">+ Nuevo gasto</button>
-                    <button class="dm-btn dm-btn-secondary" onclick="App.router.navigate('nomina')">Ver nómina</button>
-                </div>
-            </div>
-
+            ${filtrosHTML}
+            ${tabsHTML}
+            ${body}
             <div id="finanzas-contenedor"></div>
-
-        </div>
-    `;
+        </div>`;
 };
