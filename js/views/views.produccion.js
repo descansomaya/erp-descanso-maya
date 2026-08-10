@@ -561,6 +561,29 @@ App.views.verDetallesProduccion = function (ordenId) {
                 </div>
             `;
         }).join('') + `</div>`;
+        // Extraer y construir la lista de hilos asignados
+    let receta = [];
+    try { receta = JSON.parse(o.receta_personalizada || '[]'); } catch (e) { receta = []; }
+
+    let hilosHtml = '';
+    if (!receta.length) {
+        hilosHtml = `<div class="dm-alert dm-alert-warning" style="background:#fff;">No se han asignado hilos a esta orden.</div>`;
+    } else {
+        hilosHtml = `<div class="dm-list dm-mb-3">`;
+        receta.forEach(r => {
+            const mat = (App.state?.inventario || []).find(m => m.id === r.mat_id);
+            const nombreMat = mat ? mat.nombre : 'Hilo / Insumo';
+            hilosHtml += `
+                <div class="dm-list-card" style="padding:10px; min-height: auto;">
+                    <div class="dm-row-between">
+                        <div><strong>${App.ui.safe(r.cant)}</strong> x ${App.ui.escapeHTML(nombreMat)}</div>
+                        <span class="dm-badge dm-badge-info">${App.ui.safe(r.uso)}</span>
+                    </div>
+                </div>
+            `;
+        });
+        hilosHtml += `</div>`;
+    }
     }
 
     const html = `
@@ -580,6 +603,17 @@ App.views.verDetallesProduccion = function (ordenId) {
             <div class="dm-alert dm-alert-warning" style="background:#fff;">
                 ${p.notas ? App.ui.escapeHTML(p.notas) : '<i>Sin instrucciones especiales.</i>'}
             </div>
+        </div>
+
+        <div class="dm-mb-3">
+            <h4 class="dm-label dm-mb-2">Hilos / Materiales asignados</h4>
+            ${hilosHtml}
+        </div>
+        <!-- FIN -->
+
+        <div class="dm-mb-3">
+            <h4 class="dm-label dm-mb-2">Asignaciones registradas</h4>
+            ${asignacionesHtml}
         </div>
 
         <div class="dm-mb-3">
