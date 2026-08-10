@@ -32,9 +32,9 @@ Object.assign(App.logic, {
 
             let estadoCalculado = "nuevo";
 
-if (datosFormulario.tipo_pedido === "interno") {
-    // Si es interno, salta el pago y pasa directo a taller
-    estadoCalculado = "taller"; // o "produccion", según como lo manejes
+if (datosFormulario.cliente_id === "STOCK_INTERNO") {
+    // Si es interno, salta las reglas de pago y entra directo a taller
+    estadoCalculado = "taller"; 
 } else if (todosReventa) {
     estadoCalculado = anticipoNum >= totalNum ? "pagado" : "listo para entregar";
 }
