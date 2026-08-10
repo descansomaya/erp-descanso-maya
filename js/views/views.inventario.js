@@ -394,7 +394,7 @@ App.views.formProveedorCompra = function (callback = null) {
 
     App.ui.openSheet('Nuevo proveedor', formHTML, async (data) => {
         const payload = Object.assign({ activo: 'TRUE' }, data);
-        const res = await App.logic.guardarNuevoGenerico('proveedores', payload, 'PROV', null, callback);
+        const res = await App.logic.guardarNuevoGenerico('proveedores', payload, 'PROV', 'proveedores', callback);
         setTimeout(() => {
             const sel = document.getElementById('compra-proveedor-select');
             const ultimo = (App.state.proveedores || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
