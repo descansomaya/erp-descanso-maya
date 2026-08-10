@@ -257,19 +257,42 @@ Object.assign(App.logic, {
                 receta_personalizada: recetaJson
             };
 
-            if (orden.tarifa_artesano_id) {
-                const calculoPago = this.calcularPagoArtesanoDesdeTarifa(
-                    { ...orden, receta_personalizada: recetaJson },
-                    orden.tarifa_artesano_id
-                );
+            // Recalcular pagos para todos los artesanos asignados
+            const asignaciones = (App.state?.ordenes_produccion_artesanos || []).filter(a => a.orden_id === ordenId);
+            const asignacionesActualizadas = [];
 
-                datosOrdenUpdate.pago_estimado = calculoPago.total;
-                datosOrdenUpdate.monto_unitario_artesano = calculoPago.monto_unitario;
-                datosOrdenUpdate.base_calculo_artesano = calculoPago.base_calculo;
-                datosOrdenUpdate.modo_calculo_artesano = calculoPago.modo_calculo;
-                datosOrdenUpdate.aplica_a_artesano = calculoPago.aplica_a;
-            }
+            asignaciones.forEach(asig => {
+                if (asig.esquema_pago === "por_unidad") {
+                    let factor = 1;
+                    const componente = String(asig.componente || "total").toLowerCase();
 
+                    if (componente === "total") {
+                        factor = recetaLimpia.reduce((acc, item) => acc + (parseFloat(item.cant || 0) || 0), 0);
+                    } else {
+                        factor = recetaLimpia
+                            .filter(item => String(item.uso || "").toLowerCase() === componente)
+                            .reduce((acc, item) => acc + (parseFloat(item.cant || 0) || 0), 0);
+                    }
+
+                    const nuevoPago = (parseFloat(asig.monto_tarifa_apl || 0) || 0) * factor;
+
+                    asignacionesActualizadas.push({
+                        id: asig.id,
+                        factor_participac: factor,
+                        pago_estimado: nuevoPago
+                    });
+
+                    operaciones.push({
+                        action: "actualizar_fila",
+                        nombreHoja: "ordenes_produccion_artesanos",
+                        idFila: asig.id,
+                        datosNuevos: {
+                            factor_participac: factor,
+                            pago_estimado: nuevoPago
+                        }
+                    });
+                }
+            });
             operaciones.push({
                 action: "actualizar_fila",
                 nombreHoja: "ordenes_produccion",
@@ -282,6 +305,14 @@ Object.assign(App.logic, {
 
             if (res.status === "success") {
                 Object.assign(orden, datosOrdenUpdate);
+
+                asignacionesActualizadas.forEach(act => {
+                    const asigMemoria = (App.state?.ordenes_produccion_artesanos || []).find(a => a.id === act.id);
+                    if (asigMemoria) {
+                        asigMemoria.factor_participac = act.factor_participac;
+                        asigMemoria.pago_estimado = act.pago_estimado;
+                    }
+                });
 
                 if (!hilosYaDescontados && resultadoLote) {
                     App.logic.movimientos.aplicarEnEstado(resultadoLote);
