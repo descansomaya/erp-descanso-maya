@@ -142,6 +142,12 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
                 App.state.pedido_detalle.push(...nuevosDetallesMemoria);
                 App.state.movimientos_inventario.push(...nuevosMovs);
 
+
+    if (datosPedido.estado === "taller") {
+        await App.logic.generarOrdenesDesdePedido(nuevosDetallesMemoria);
+    }
+
+
                 App.ui.toast(todosReventa ? "Pedido guardado y stock apartado" : "Pedido guardado");
                 App.router.handleRoute();
                 App.logic.revisarAlertasStock();
