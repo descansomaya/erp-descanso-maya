@@ -611,10 +611,6 @@ App.views.verDetallesProduccion = function (ordenId) {
         </div>
         <!-- FIN -->
 
-        <div class="dm-mb-3">
-            <h4 class="dm-label dm-mb-2">Asignaciones registradas</h4>
-            ${asignacionesHtml}
-        </div>
 
         <div class="dm-mb-3">
             <h4 class="dm-label dm-mb-2">Asignaciones registradas</h4>
