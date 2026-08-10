@@ -30,8 +30,14 @@ Object.assign(App.logic, {
                 return p && p.categoria === "reventa";
             });
 
-            let estadoCalculado = todosReventa ? "listo para entregar" : "nuevo";
-            if (todosReventa && anticipoNum >= totalNum) estadoCalculado = "pagado";
+            let estadoCalculado = "nuevo";
+
+if (datosFormulario.tipo_pedido === "interno") {
+    // Si es interno, salta el pago y pasa directo a taller
+    estadoCalculado = "taller"; // o "produccion", según como lo manejes
+} else if (todosReventa) {
+    estadoCalculado = anticipoNum >= totalNum ? "pagado" : "listo para entregar";
+}
 
             const datosPedido = {
                 id: pedidoId,
