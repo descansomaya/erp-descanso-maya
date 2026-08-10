@@ -1,0 +1,29 @@
+name: Fase 1 - JavaScript Syntax
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/*.js'
+      - '**/*.html'
+  push:
+    branches:
+      - fix/fase-1-pedidos-produccion
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate JavaScript syntax
+        shell: bash
+        run: |
+          set -e
+          find . -type f -name '*.js' -not -path './node_modules/*' -print0 | while IFS= read -r -d '' file; do
+            node --check "$file"
+          done
