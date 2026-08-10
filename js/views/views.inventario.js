@@ -422,7 +422,7 @@ App.views.formMaterialCompra = function (callback = null) {
 
     App.ui.openSheet('Nuevo material / reventa', formHTML, async (data) => {
         const payload = Object.assign({ costo_unitario: 0 }, data);
-        const res = await App.logic.guardarNuevoGenerico('materiales', payload, 'MAT', null, callback);
+       const res = await App.logic.guardarNuevoGenerico('materiales', payload, 'MAT', 'inventario', callback);
         setTimeout(() => {
             const selects = document.querySelectorAll('#cont-filas-compra select[name="mat_id[]"]');
             const ultimo = (App.state.inventario || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
