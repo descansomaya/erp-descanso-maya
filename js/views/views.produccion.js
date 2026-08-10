@@ -530,6 +530,7 @@ App.views.verDetallesProduccion = function (ordenId) {
     const prod = (App.state?.productos || []).find(x => x.id === pedDet.producto_id) || {};
     const nomCliente = p.cliente_id === 'STOCK_INTERNO' ? 'STOCK BODEGA' : (cliente.nombre || 'Desconocido');
 
+    // 1. BLOQUE DE ARTESANOS
     const asignaciones = App.views._getAsignacionesOrden(o.id);
     let asignacionesHtml = '';
     if (!asignaciones.length) {
@@ -561,7 +562,9 @@ App.views.verDetallesProduccion = function (ordenId) {
                 </div>
             `;
         }).join('') + `</div>`;
-        // Extraer y construir la lista de hilos asignados
+    } // <-- Aquí termina correctamente el bloque de artesanos
+
+    // 2. BLOQUE DE HILOS (Ahora está afuera y es visible)
     let receta = [];
     try { receta = JSON.parse(o.receta_personalizada || '[]'); } catch (e) { receta = []; }
 
@@ -584,8 +587,8 @@ App.views.verDetallesProduccion = function (ordenId) {
         });
         hilosHtml += `</div>`;
     }
-    }
 
+    // 3. RENDERIZADO VISUAL
     const html = `
         <div class="dm-list-card dm-mb-4" style="background:var(--dm-surface-2); padding:15px; border:none;">
             <div class="dm-row-between dm-mb-2">
@@ -609,8 +612,6 @@ App.views.verDetallesProduccion = function (ordenId) {
             <h4 class="dm-label dm-mb-2">Hilos / Materiales asignados</h4>
             ${hilosHtml}
         </div>
-        <!-- FIN -->
-
 
         <div class="dm-mb-3">
             <h4 class="dm-label dm-mb-2">Asignaciones registradas</h4>
