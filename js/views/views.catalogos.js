@@ -486,23 +486,34 @@ App.views.formProducto = function(id = null, callback = null) {
     `;
 
     App.ui.openSheet(obj ? 'Editar Producto' : 'Nuevo Producto', formHTML, (data) => {
-        if (data.mat_id && Array.isArray(data.mat_id)) {
-            for (let i = 0; i < data.mat_id.length; i++) {
-                data[`mat_${i + 1}`] = data.mat_id[i];
-                data[`cant_${i + 1}`] = data.cant[i];
-                data[`uso_${i + 1}`] = data.uso[i];
-            }
-            delete data.mat_id;
-            delete data.cant;
-            delete data.uso;
-        } else if (data.mat_id) {
-            data.mat_1 = data.mat_id;
-            data.cant_1 = data.cant;
-            data.uso_1 = data.uso;
-            delete data.mat_id;
-            delete data.cant;
-            delete data.uso;
+        
+        // 1. Limpiar cualquier rastro previo de columnas de receta (para que no queden datos fantasma si quitaste hilos)
+        for (let i = 1; i <= 20; i++) {
+            data[`mat_${i}`] = "";
+            data[`cant_${i}`] = "";
+            data[`uso_${i}`] = "";
         }
+
+        // 2. Extraer los arreglos capturados por el formulario (los corchetes en el name del input)
+        const arrMats = data['mat_id[]'] ? (Array.isArray(data['mat_id[]']) ? data['mat_id[]'] : [data['mat_id[]']]) : [];
+        const arrCants = data['cant[]'] ? (Array.isArray(data['cant[]']) ? data['cant[]'] : [data['cant[]']]) : [];
+        const arrUsos = data['uso[]'] ? (Array.isArray(data['uso[]']) ? data['uso[]'] : [data['uso[]']]) : [];
+
+        // 3. Aplanar en las 20 columnas reales de la base de datos
+        let contadorAplanado = 1;
+        for (let i = 0; i < arrMats.length; i++) {
+            if (arrMats[i] && contadorAplanado <= 20) {
+                data[`mat_${contadorAplanado}`] = arrMats[i];
+                data[`cant_${contadorAplanado}`] = arrCants[i] || "0";
+                data[`uso_${contadorAplanado}`] = arrUsos[i] || "Cuerpo";
+                contadorAplanado++;
+            }
+        }
+
+        // 4. Limpiar los arreglos temporales para no mandarlos a la base de datos
+        delete data['mat_id[]'];
+        delete data['cant[]'];
+        delete data['uso[]'];
 
         if (obj) App.logic.actualizarRegistroGenerico('productos', id, data, 'productos');
         else App.logic.guardarNuevoGenerico('productos', data, 'PROD', 'productos', callback);
