@@ -282,7 +282,7 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
         <form id="dynamic-form">
             <div class="dm-form-group">
                 <label class="dm-label">Cliente</label>
-                <select class="dm-select" name="cliente_id">${htmlClientes}</select>
+                <select class="dm-select" name="cliente_id" onchange="window.verificarStockInterno()">${htmlClientes}</select>
             </div>
 
            <div class="dm-form-group">
@@ -334,7 +334,10 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
         }, async () => action());
     });
 
-    setTimeout(() => window.calcularTotalPedido(), 150);
+    setTimeout(() => {
+    window.calcularTotalPedido();
+    if(typeof window.verificarStockInterno === 'function') window.verificarStockInterno();
+}, 150);
 };
 
 App.views.formPedido = function(id = null) {
@@ -1004,4 +1007,20 @@ App.views.modalDetallesPedido = function(pedidoId) {
     `;
 
     App.ui.openSheet(`Detalles del Pedido: ${pedidoId}`, html, () => App.ui.closeSheet());
+};
+
+window.verificarStockInterno = function() {
+    const clienteSel = document.querySelector('#dynamic-form select[name="cliente_id"]');
+    const totalInp = document.querySelector('#dynamic-form input[name="total"]');
+    const antInp = document.querySelector('#dynamic-form input[name="anticipo"]');
+    
+    if (clienteSel && clienteSel.value === 'STOCK_INTERNO') {
+        // Si es stock, forzamos a 0 y bloqueamos la edición
+        if (totalInp) { totalInp.value = 0; totalInp.readOnly = true; }
+        if (antInp) { antInp.value = 0; antInp.readOnly = true; }
+    } else {
+        // Si es un cliente normal, desbloqueamos y recalculamos
+        if (totalInp) { totalInp.readOnly = false; window.calcularTotalPedido(); }
+        if (antInp) { antInp.readOnly = false; }
+    }
 };
