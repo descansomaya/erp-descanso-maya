@@ -253,9 +253,15 @@ Object.assign(App.logic, {
                 operaciones.push(...resultadoLote.operaciones);
             }
 
-            const datosOrdenUpdate = {
+          const datosOrdenUpdate = {
                 receta_personalizada: recetaJson
             };
+
+            // NUEVO: Poner la bandera para que el botón "Iniciar" sepa que ya se descontaron
+            if (!hilosYaDescontados && recetaLimpia.length > 0) {
+                datosOrdenUpdate.materiales_descontados = true;
+                datosOrdenUpdate.fecha_descuento_materiales = ahora;
+            }
 
             // Recalcular pagos para todos los artesanos asignados
             const asignaciones = (App.state?.ordenes_produccion_artesanos || []).filter(a => a.orden_id === ordenId);
