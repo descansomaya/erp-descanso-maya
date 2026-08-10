@@ -285,11 +285,16 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
                 <select class="dm-select" name="cliente_id">${htmlClientes}</select>
             </div>
 
-            <div class="dm-form-group">
-                <label class="dm-label">Producto</label>
-                <select class="dm-select" name="producto_id" required onchange="window.calcularTotalPedido()">${htmlProductos}</select>
-                <div id="info-extra-prod" class="dm-mt-2"></div>
-            </div>
+           <div class="dm-form-group">
+    <label class="dm-label">Producto</label>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <select class="dm-select" name="producto_id" required onchange="window.calcularTotalPedido()" style="flex:1; min-width:180px;">
+            ${htmlProductos}
+        </select>
+        <button type="button" class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formProductoRapidoDesdeCotizacion()">+ Producto</button>
+    </div>
+    <div id="info-extra-prod" class="dm-mt-2"></div>
+</div>
 
             <div class="dm-form-row">
                 <div class="dm-form-group">
