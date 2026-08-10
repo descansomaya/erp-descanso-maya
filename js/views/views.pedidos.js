@@ -1015,12 +1015,35 @@ window.verificarStockInterno = function() {
     const antInp = document.querySelector('#dynamic-form input[name="anticipo"]');
     
     if (clienteSel && clienteSel.value === 'STOCK_INTERNO') {
-        // Si es stock, forzamos a 0 y bloqueamos la edición
-        if (totalInp) { totalInp.value = 0; totalInp.readOnly = true; }
-        if (antInp) { antInp.value = 0; antInp.readOnly = true; }
+        // Si es stock: forzamos a 0, bloqueamos lectura y aplicamos estilo gris/deshabilitado
+        if (totalInp) { 
+            totalInp.value = 0; 
+            totalInp.readOnly = true; 
+            totalInp.style.backgroundColor = '#e5e7eb'; // Gris claro
+            totalInp.style.color = '#6b7280'; // Texto gris oscuro
+            totalInp.style.cursor = 'not-allowed'; // Cursor de prohibido
+        }
+        if (antInp) { 
+            antInp.value = 0; 
+            antInp.readOnly = true; 
+            antInp.style.backgroundColor = '#e5e7eb';
+            antInp.style.color = '#6b7280';
+            antInp.style.cursor = 'not-allowed';
+        }
     } else {
-        // Si es un cliente normal, desbloqueamos y recalculamos
-        if (totalInp) { totalInp.readOnly = false; window.calcularTotalPedido(); }
-        if (antInp) { antInp.readOnly = false; }
+        // Si es cliente normal: quitamos el bloqueo, limpiamos los estilos y recalculamos
+        if (totalInp) { 
+            totalInp.readOnly = false; 
+            totalInp.style.backgroundColor = ''; 
+            totalInp.style.color = ''; 
+            totalInp.style.cursor = ''; 
+            window.calcularTotalPedido(); 
+        }
+        if (antInp) { 
+            antInp.readOnly = false; 
+            antInp.style.backgroundColor = '';
+            antInp.style.color = '';
+            antInp.style.cursor = '';
+        }
     }
 };
