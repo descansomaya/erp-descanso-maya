@@ -459,7 +459,7 @@ App.views._buildOrdenCard = function (o) {
                     ${o.estado === 'pendiente' ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'iniciar')">▶️ Iniciar</button>` : ''}
                     ${o.estado === 'proceso' ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'terminar')">✅ Terminar</button>` : ''}
                     ${o.estado !== 'pendiente' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'regresarPendiente')">↩️ Pendiente</button>` : ''}
-                    <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'eliminar')">🗑️</button>
+                    ${o.estado === 'pendiente' ? `<button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'eliminar')">🗑️</button>` : ''}
                 </div>
             </div>
         </div>
