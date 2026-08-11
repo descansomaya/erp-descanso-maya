@@ -817,27 +817,34 @@ App.views.modalMateriaPrima = function (ordenId) {
         `;
     };
 
+    // 1. Creamos un identificador único basado en la hora para esta ventana exacta
+    const uniqueId = Date.now();
     let htmlFilas = '';
+    
     if (receta.length > 0) {
         receta.forEach(r => { htmlFilas += window._generarFilaHiloModal(r.mat_id, r.cant, r.uso); });
     } else {
         htmlFilas += window._generarFilaHiloModal();
     }
 
-    // El secreto: Pasamos el 'event' para saber exactamente qué botón se presionó
+    // 2. Usamos id="dynamic-form" para conectar con tu sistema base
     let html = `
-        <form class="form-hilos-dinamico" onsubmit="event.preventDefault(); window._guardarHilosSeguro(event, '${ordenId}');">
-            <div class="cont-hilos-wrapper">
+        <form id="dynamic-form">
+            <input type="hidden" name="orden_id" value="${ordenId}">
+            <div id="hilos-wrapper-${uniqueId}">
                 ${htmlFilas}
             </div>
-            <button type="button" class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="this.previousElementSibling.insertAdjacentHTML('beforeend', window._generarFilaHiloModal())">+ Añadir otro hilo</button>
+            <button type="button" class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="document.getElementById('hilos-wrapper-${uniqueId}').insertAdjacentHTML('beforeend', window._generarFilaHiloModal())">+ Añadir otro hilo</button>
             <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">💾 Guardar y Descontar Inventario</button>
         </form>
     `;
 
-    window._guardarHilosSeguro = async function(e, oId) {
-        const form = e.target;
-        const filas = form.querySelectorAll('.fila-hilo'); // Solo lee las filas de ESTE formulario
+    App.ui.openSheet('Hilos Utilizados', html, async (data) => {
+        // 3. Leemos directamente la caja única que creamos
+        const wrapper = document.getElementById(`hilos-wrapper-${uniqueId}`);
+        if (!wrapper) return;
+
+        const filas = wrapper.querySelectorAll('.fila-hilo');
         const recetaFinal = [];
 
         filas.forEach(fila => {
@@ -852,18 +859,17 @@ App.views.modalMateriaPrima = function (ordenId) {
 
         if (recetaFinal.length === 0) {
             App.ui.toast("Debes agregar al menos un hilo válido mayor a 0", "warning");
-            return;
+            throw new Error("Formulario incompleto"); // Evita que la ventana se cierre si hay error
         }
 
-        App.ui.runSafeAction({
-            lockKey: `produccion:${oId}:receta:guardar`,
+        // 4. Se lo mandamos a logic.produccion (la cual ya programaste perfecta con el modelo Delta)
+        return App.ui.runSafeAction({
+            lockKey: `produccion:${ordenId}:receta:guardar`,
             loadingText: 'Guardando...',
             loaderMessage: 'Descontando inventario y recalculando...',
             successMessage: 'Hilos asignados y descontados correctamente',
             errorTitle: 'Error al guardar los hilos',
             closeSheetOnSuccess: true
-        }, async () => App.logic.guardarRecetaProduccion(oId, recetaFinal));
-    };
-
-    App.ui.openSheet('Hilos Utilizados', html);
+        }, async () => App.logic.guardarRecetaProduccion(ordenId, recetaFinal));
+    });
 };
