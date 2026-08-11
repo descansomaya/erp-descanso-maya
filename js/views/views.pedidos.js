@@ -362,11 +362,11 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
                 <textarea class="dm-textarea" name="notas">${App.ui.escapeHTML(dataBase.notas || '')}</textarea>
             </div>
 
-            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">${obj ? 'Guardar Cambios Generales' : 'Confirmar Pedido Múltiple'}</button>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">${obj ? 'Guardar Cambios Generales' : 'Confirmar Pedido '}</button>
         </form>
     `;
 
-    App.ui.openSheet(obj ? 'Editar Pedido' : 'Nuevo Pedido (Multi-artículo)', formHTML, async (data) => {
+    App.ui.openSheet(obj ? 'Editar Pedido' : 'Nuevo Pedido ', formHTML, async (data) => {
         if (!obj) {
             if (window._carritoTemp.length === 0) {
                 App.ui.toast("Debes agregar al menos un artículo a la lista", "warning");
