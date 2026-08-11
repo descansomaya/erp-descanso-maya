@@ -197,7 +197,7 @@ Object.assign(App.logic, {
     // ==========================================
     // 2. GUARDAR RECETA Y DESCONTAR INVENTARIO
     // ==========================================
-    async guardarRecetaProduccion(ordenId, recetaArray) {
+  async guardarRecetaProduccion(ordenId, recetaArray) {
         try {
             App.ui.showLoader("Procesando taller...");
 
@@ -211,59 +211,97 @@ Object.assign(App.logic, {
             const detalle = this.obtenerDetalleDeOrden(orden);
             const pedidoIdLigar = detalle ? detalle.pedido_id : ordenId;
 
+            // Revisamos si la orden ya había iniciado
+            const recetaAnterior = this.obtenerRecetaOrden(orden);
             const hilosYaDescontados = (App.state?.movimientos_inventario || []).some(m =>
                 (m.origen_id === ordenId || m.origen_id === pedidoIdLigar) &&
                 (m.tipo_movimiento === "salida_produccion" || m.motivo === "Envío a taller")
-            );
+            ) || orden.materiales_descontados === true || String(orden.materiales_descontados).toLowerCase() === 'true';
 
             const recetaLimpia = Array.isArray(recetaArray)
-                ? recetaArray.filter(item =>
-                    item &&
-                    item.mat_id &&
-                    (parseFloat(item.cant || 0) || 0) > 0
-                )
+                ? recetaArray.filter(item => item && item.mat_id && (parseFloat(item.cant || 0) || 0) > 0)
                 : [];
 
             const recetaJson = JSON.stringify(recetaLimpia);
             const operaciones = [];
-            let resultadoLote = null;
+            const ahora = new Date().toISOString();
+            const movBase = Date.now();
+            const movsMemoria = [];
 
-            if (!hilosYaDescontados && recetaLimpia.length > 0) {
-                resultadoLote = App.logic.movimientos.crearLoteMovimientos(
-                    recetaLimpia.map(item => {
-                        const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id) || {};
-                        const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
-
-                        return {
-                            tipo_movimiento: "salida_produccion",
-                            origen: "pedido",
-                            origen_id: pedidoIdLigar,
-                            ref_tipo: "material",
-                            ref_id: item.mat_id,
-                            material_id: item.mat_id,
-                            tipo: "salida",
-                            cantidad: parseFloat(item.cant || 0) || 0,
-                            costo_unitario: costoUnitario,
-                            motivo: "Envío a taller",
-                            notas: `Envío a taller de pedido ${pedidoIdLigar}`
-                        };
-                    })
-                );
-
-                operaciones.push(...resultadoLote.operaciones);
+            // ==========================================
+            // LÓGICA DELTA: Solo descontar/devolver la diferencia
+            // ==========================================
+            const mapaAnterior = {};
+            if (hilosYaDescontados) {
+                recetaAnterior.forEach(r => {
+                    mapaAnterior[r.mat_id] = (mapaAnterior[r.mat_id] || 0) + parseFloat(r.cant || 0);
+                });
             }
 
-          const datosOrdenUpdate = {
-                receta_personalizada: recetaJson
-            };
+            const mapaNuevo = {};
+            recetaLimpia.forEach(r => {
+                mapaNuevo[r.mat_id] = (mapaNuevo[r.mat_id] || 0) + parseFloat(r.cant || 0);
+            });
 
-            // NUEVO: Poner la bandera para que el botón "Iniciar" sepa que ya se descontaron
-            if (!hilosYaDescontados && recetaLimpia.length > 0) {
+            const diferencias = [];
+            for (const mat_id in mapaNuevo) {
+                const cantNueva = mapaNuevo[mat_id];
+                const cantAnterior = mapaAnterior[mat_id] || 0;
+                const delta = cantNueva - cantAnterior;
+                if (delta !== 0) diferencias.push({ mat_id, delta });
+            }
+            for (const mat_id in mapaAnterior) {
+                if (!mapaNuevo[mat_id]) diferencias.push({ mat_id, delta: -mapaAnterior[mat_id] });
+            }
+
+            let idxMov = 0;
+            diferencias.forEach(diff => {
+                const mat = (App.state?.inventario || []).find(m => m.id === diff.mat_id);
+                if (!mat) return;
+
+                const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
+                const nuevoStock = (parseFloat(mat.stock_real || 0) || 0) - diff.delta; // Si delta es positivo, restamos stock
+
+                operaciones.push({
+                    action: 'actualizar_fila',
+                    nombreHoja: 'materiales',
+                    idFila: mat.id,
+                    datosNuevos: { stock_real: nuevoStock }
+                });
+
+                const movData = {
+                    id: `SAL-${movBase}-${idxMov++}`,
+                    fecha: ahora,
+                    tipo_movimiento: diff.delta > 0 ? 'salida_produccion' : 'reversa_produccion',
+                    origen: 'orden',
+                    origen_id: ordenId,
+                    ref_tipo: 'material',
+                    ref_id: mat.id,
+                    cantidad: -diff.delta, // Negativo si sale, positivo si regresa
+                    costo_unitario: costoUnitario,
+                    total: -(diff.delta * costoUnitario),
+                    notas: diff.delta > 0 ? `Adición de hilo extra (Orden ${ordenId})` : `Devolución de hilo (Orden ${ordenId})`
+                };
+
+                operaciones.push({
+                    action: 'guardar_fila',
+                    nombreHoja: 'movimientos_inventario',
+                    datos: movData
+                });
+
+                movsMemoria.push({ mat, cantDeducida: diff.delta, movData });
+            });
+
+            // ==========================================
+            // ACTUALIZACIÓN DE ORDEN Y ARTESANOS
+            // ==========================================
+            const datosOrdenUpdate = { receta_personalizada: recetaJson };
+
+            if ((!hilosYaDescontados && recetaLimpia.length > 0) || diferencias.length > 0) {
                 datosOrdenUpdate.materiales_descontados = true;
                 datosOrdenUpdate.fecha_descuento_materiales = ahora;
             }
 
-            // Recalcular pagos para todos los artesanos asignados
             const asignaciones = (App.state?.ordenes_produccion_artesanos || []).filter(a => a.orden_id === ordenId);
             const asignacionesActualizadas = [];
 
@@ -299,6 +337,7 @@ Object.assign(App.logic, {
                     });
                 }
             });
+
             operaciones.push({
                 action: "actualizar_fila",
                 nombreHoja: "ordenes_produccion",
@@ -312,6 +351,16 @@ Object.assign(App.logic, {
             if (res.status === "success") {
                 Object.assign(orden, datosOrdenUpdate);
 
+                // Reflejar inventario en memoria al instante
+                if (movsMemoria.length > 0) {
+                    movsMemoria.forEach(m => {
+                        m.mat.stock_real = (parseFloat(m.mat.stock_real || 0) || 0) - m.cantDeducida;
+                        if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
+                        App.state.movimientos_inventario.push(m.movData);
+                    });
+                }
+
+                // Reflejar cobro de artesano en memoria al instante
                 asignacionesActualizadas.forEach(act => {
                     const asigMemoria = (App.state?.ordenes_produccion_artesanos || []).find(a => a.id === act.id);
                     if (asigMemoria) {
@@ -320,16 +369,7 @@ Object.assign(App.logic, {
                     }
                 });
 
-                if (!hilosYaDescontados && resultadoLote) {
-                    App.logic.movimientos.aplicarEnEstado(resultadoLote);
-                }
-
-                App.ui.toast(
-                    hilosYaDescontados
-                        ? "Receta guardada (sin doble descuento)"
-                        : "Inventario descontado y receta guardada"
-                );
-
+                App.ui.toast(diferencias.length > 0 ? "Hilos y tarifas actualizados con éxito" : "Receta confirmada");
                 App.ui.closeSheet();
                 App.router.handleRoute();
                 App.logic.revisarAlertasStock();
@@ -341,7 +381,7 @@ Object.assign(App.logic, {
             App.ui.hideLoader();
             App.ui.toast(error.message || "Error al guardar receta", "danger");
         }
-    },
+    }
 
     // ==========================================
     // 3. ACTUALIZAR ASIGNACIÓN DE ARTESANO Y TARIFA
