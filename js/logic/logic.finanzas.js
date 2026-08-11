@@ -859,6 +859,8 @@ Object.assign(App.logic, {
     const totalGastos = gastosFil.reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
     const totalCompras = comprasFil.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
     const totalNomina = pagosArtesanosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+    
+    // Mantenemos el egreso total para el gráfico de dona, pero separamos las barras claramente
     const egresos = totalGastos + totalCompras + totalNomina;
     const flujoNeto = ingresos - egresos;
 
@@ -867,13 +869,15 @@ Object.assign(App.logic, {
             window.graficaFinanzasIngresosGastos.destroy();
         }
 
+        // SEPARAMOS LAS BARRAS PARA EVITAR CONFUSIONES Y MOSTRAR EL DESGLOSE REAL
         window.graficaFinanzasIngresosGastos = new Chart(ctxIngresosGastos, {
             type: "bar",
             data: {
-                labels: ["Ventas", "Ingresos", "Egresos"],
+                labels: ["Ventas", "Ingresos", "Gastos", "Compras", "Nómina"],
                 datasets: [{
-                    label: "Monto",
-                    data: [ventas, ingresos, egresos],
+                    label: "Monto ($)",
+                    data: [ventas, ingresos, totalGastos, totalCompras, totalNomina],
+                    backgroundColor: ["#3182CE", "#38A169", "#E53E3E", "#D69E2E", "#805AD5"],
                     borderRadius: 8
                 }]
             },
@@ -898,13 +902,14 @@ Object.assign(App.logic, {
         window.graficaFinanzasFlujo = new Chart(ctxFlujo, {
             type: "doughnut",
             data: {
-                labels: ["Ingresos", "Egresos", "Flujo neto"],
+                labels: ["Ingresos", "Egresos totales", "Flujo neto"],
                 datasets: [{
                     data: [
                         Math.max(ingresos, 0),
                         Math.max(egresos, 0),
                         Math.max(flujoNeto, 0)
-                    ]
+                    ],
+                    backgroundColor: ["#38A169", "#E53E3E", "#3182CE"]
                 }]
             },
             options: {
@@ -920,4 +925,3 @@ Object.assign(App.logic, {
         });
     }
 },
-});
