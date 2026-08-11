@@ -856,11 +856,18 @@ Object.assign(App.logic, {
             + abonosRepFil.reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0)
             + reparacionesFil.reduce((acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0), 0);
 
-        const totalGastos = gastosFil.reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
         const totalCompras = comprasFil.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
         const totalNomina = pagosArtesanosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
         
-        const egresos = totalGastos + totalCompras + totalNomina;
+        // Filtramos los gastos operativos puros para que no dupliquen lo que ya registras en compras
+        const gastosOperativosPuros = gastosFil
+            .filter(g => {
+                const desc = String(g.concepto || g.descripcion || '').toLowerCase();
+                return !desc.includes('compra') && !desc.includes('materiales y insumos') && !desc.includes('hilo');
+            })
+            .reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
+        
+        const egresos = gastosOperativosPuros + totalCompras + totalNomina;
         const flujoNeto = ingresos - egresos;
 
         if (ctxIngresosGastos) {
@@ -871,10 +878,10 @@ Object.assign(App.logic, {
             window.graficaFinanzasIngresosGastos = new Chart(ctxIngresosGastos, {
                 type: "bar",
                 data: {
-                    labels: ["Ventas", "Ingresos", "Gastos", "Compras", "Nómina"],
+                    labels: ["Ventas", "Ingresos", "Gastos Op.", "Compras", "Nómina"],
                     datasets: [{
                         label: "Monto ($)",
-                        data: [ventas, ingresos, totalGastos, totalCompras, totalNomina],
+                        data: [ventas, ingresos, gastosOperativosPuros, totalCompras, totalNomina],
                         backgroundColor: ["#3182CE", "#38A169", "#E53E3E", "#D69E2E", "#805AD5"],
                         borderRadius: 8
                     }]
