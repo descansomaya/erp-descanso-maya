@@ -784,51 +784,88 @@ App.views.modalMateriaPrima = function (ordenId) {
     let receta = [];
     try { receta = JSON.parse(ord.receta_personalizada || '[]'); } catch (e) { receta = []; }
 
-    let html = `
-        <form id="dynamic-form">
-            <input type="hidden" name="orden_id" value="${ordenId}">
-            <div id="cont-receta-prod">
-    `;
+    // 1. Generador de filas independiente y seguro
+    window._generarFilaHiloModal = function(matId = '', cant = '', uso = 'Cuerpo') {
+        const opcionesMat = (App.state?.inventario || [])
+            .map(m => `<option value="${m.id}" ${matId === m.id ? 'selected' : ''}>${App.ui.escapeHTML(m.nombre)}</option>`)
+            .join('');
 
-    if (receta.length > 0) receta.forEach(r => { html += window.generarFilaRecetaProd(r.mat_id, r.cant, r.uso); });
-    else html += window.generarFilaRecetaProd('', '', 'Cuerpo');
-
-    html += `
+        return `
+            <div class="fila-hilo dm-card dm-mb-2" style="padding:10px; background:var(--dm-surface-2);">
+                <div class="dm-form-group dm-mb-2">
+                    <label class="dm-label">Insumo</label>
+                    <select class="dm-select mat-select" required>
+                        <option value="">-- Seleccionar hilo --</option>
+                        ${opcionesMat}
+                    </select>
+                </div>
+                <div class="dm-form-row">
+                    <div class="dm-form-group">
+                        <label class="dm-label">Cantidad</label>
+                        <input type="number" step="0.1" class="dm-input cant-input" value="${cant}" required>
+                    </div>
+                    <div class="dm-form-group">
+                        <label class="dm-label">Uso</label>
+                        <select class="dm-select uso-select" required>
+                            <option value="Cuerpo" ${uso === 'Cuerpo' ? 'selected' : ''}>Cuerpo</option>
+                            <option value="Brazos" ${uso === 'Brazos' ? 'selected' : ''}>Brazos</option>
+                            <option value="Adicional" ${uso === 'Adicional' ? 'selected' : ''}>Adicional</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="button" class="dm-btn dm-btn-danger dm-btn-block" onclick="this.parentElement.remove()">Quitar hilo</button>
             </div>
-            <button type="button" class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="window.agregarFilaRecetaProd()">+ Añadir hilo</button>
+        `;
+    };
+
+    let htmlFilas = '';
+    if (receta.length > 0) {
+        receta.forEach(r => { htmlFilas += window._generarFilaHiloModal(r.mat_id, r.cant, r.uso); });
+    } else {
+        htmlFilas += window._generarFilaHiloModal();
+    }
+
+    // 2. Le cambiamos el ID al form (form-hilos-seguro) para evitar que el recolector base lo secuestre
+    let html = `
+        <form id="form-hilos-seguro" onsubmit="event.preventDefault(); window._guardarHilosSeguro('${ordenId}');">
+            <div id="cont-hilos-modal">
+                ${htmlFilas}
+            </div>
+            <button type="button" class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="document.getElementById('cont-hilos-modal').insertAdjacentHTML('beforeend', window._generarFilaHiloModal())">+ Añadir otro hilo</button>
             <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">💾 Guardar y Descontar Inventario</button>
         </form>
     `;
 
-    App.ui.openSheet('Hilos Utilizados', html, async (data) => {
-        // CORRECCIÓN: Tu sistema quita los [] automáticamente, así que buscamos "data.mat_id" directo
-        const arrMats = data.mat_id ? (Array.isArray(data.mat_id) ? data.mat_id : [data.mat_id]) : [];
-        const arrCants = data.cant ? (Array.isArray(data.cant) ? data.cant : [data.cant]) : [];
-        const arrUsos = data.uso ? (Array.isArray(data.uso) ? data.uso : [data.uso]) : [];
-        
+    // 3. Función exclusiva para recolectar, validar y enviar los datos extraídos directo del DOM
+    window._guardarHilosSeguro = async function(oId) {
+        const filas = document.querySelectorAll('#cont-hilos-modal .fila-hilo');
         const recetaFinal = [];
-        for (let i = 0; i < arrMats.length; i++) {
-            const mId = arrMats[i];
-            const c = parseFloat(arrCants[i] || 0);
-            const u = arrUsos[i] || 'Cuerpo';
-            
+
+        filas.forEach(fila => {
+            const mId = fila.querySelector('.mat-select').value;
+            const c = parseFloat(fila.querySelector('.cant-input').value || 0);
+            const u = fila.querySelector('.uso-select').value;
+
             if (mId && c > 0) {
                 recetaFinal.push({ mat_id: mId, cant: c, uso: u });
             }
-        }
+        });
 
         if (recetaFinal.length === 0) {
             App.ui.toast("Debes agregar al menos un hilo válido mayor a 0", "warning");
             return;
         }
 
-        return App.ui.runSafeAction({
-            lockKey: `produccion:${ordenId}:receta:guardar`,
+        App.ui.runSafeAction({
+            lockKey: `produccion:${oId}:receta:guardar`,
             loadingText: 'Guardando...',
-            loaderMessage: 'Guardando receta y descontando inventario...',
-            successMessage: 'Hilos asignados correctamente',
-            errorTitle: 'No se pudieron guardar los hilos',
+            loaderMessage: 'Descontando inventario y recalculando...',
+            successMessage: 'Hilos asignados y descontados correctamente',
+            errorTitle: 'Error al guardar los hilos',
             closeSheetOnSuccess: true
-        }, async () => App.logic.guardarRecetaProduccion(ordenId, recetaFinal));
-    });
+        }, async () => App.logic.guardarRecetaProduccion(oId, recetaFinal));
+    };
+
+    // Solo abrimos la ventana, sin usar el recolector automático de App.ui
+    App.ui.openSheet('Hilos Utilizados', html);
 };
