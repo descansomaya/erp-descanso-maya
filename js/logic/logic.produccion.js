@@ -233,9 +233,9 @@ Object.assign(App.logic, {
     // ==========================================
     // 2. GUARDAR RECETA Y DESCONTAR INVENTARIO
     // ==========================================
-    async guardarRecetaProduccion(ordenId, recetaArray) {
+   async guardarRecetaProduccion(ordenId, recetaArray) {
         try {
-            App.ui.showLoader("Procesando taller...");
+            App.ui.showLoader("Guardando receta...");
 
             const orden = this.obtenerOrdenProduccion(ordenId);
             if (!orden) {
@@ -244,95 +244,59 @@ Object.assign(App.logic, {
                 return;
             }
 
-            const detalle = this.obtenerDetalleDeOrden(orden);
-            const pedidoIdLigar = detalle ? detalle.pedido_id : ordenId;
-
-            const recetaAnterior = this.obtenerRecetaOrden(orden);
-            const hilosYaDescontados = (App.state?.movimientos_inventario || []).some(m =>
-                (m.origen_id === ordenId || m.origen_id === pedidoIdLigar) &&
-                (m.tipo_movimiento === "salida_produccion" || m.motivo === "Envío a taller")
-            ) || orden.materiales_descontados === true || String(orden.materiales_descontados).toLowerCase() === 'true';
-
             const recetaLimpia = Array.isArray(recetaArray)
                 ? recetaArray.filter(item => item && item.mat_id && (parseFloat(item.cant || 0) || 0) > 0)
                 : [];
-
             const recetaJson = JSON.stringify(recetaLimpia);
             const operaciones = [];
             const ahora = new Date().toISOString();
             const movBase = Date.now();
             const movsMemoria = [];
 
-            // LÓGICA DELTA
-            const mapaAnterior = {};
-            if (hilosYaDescontados) {
-                recetaAnterior.forEach(r => {
-                    mapaAnterior[r.mat_id] = (mapaAnterior[r.mat_id] || 0) + parseFloat(r.cant || 0);
-                });
-            }
-
-            const mapaNuevo = {};
-            recetaLimpia.forEach(r => {
-                mapaNuevo[r.mat_id] = (mapaNuevo[r.mat_id] || 0) + parseFloat(r.cant || 0);
-            });
-
+            // ¿El taller ya inició la hamaca?
+            const hilosYaDescontados = String(orden.materiales_descontados).toLowerCase() === 'true';
             const diferencias = [];
-            for (const mat_id in mapaNuevo) {
-                const cantNueva = mapaNuevo[mat_id];
-                const cantAnterior = mapaAnterior[mat_id] || 0;
-                const delta = cantNueva - cantAnterior;
-                if (delta !== 0) diferencias.push({ mat_id, delta });
-            }
-            for (const mat_id in mapaAnterior) {
-                if (!mapaNuevo[mat_id]) diferencias.push({ mat_id, delta: -mapaAnterior[mat_id] });
-            }
+            
+            // SOLO hacemos descuento físico (Lógica Delta) si la orden YA había iniciado
+            if (hilosYaDescontados) {
+                const recetaAnterior = this.obtenerRecetaOrden(orden);
+                const mapaAnterior = {};
+                recetaAnterior.forEach(r => { mapaAnterior[r.mat_id] = (mapaAnterior[r.mat_id] || 0) + parseFloat(r.cant || 0); });
+                const mapaNuevo = {};
+                recetaLimpia.forEach(r => { mapaNuevo[r.mat_id] = (mapaNuevo[r.mat_id] || 0) + parseFloat(r.cant || 0); });
 
-            let idxMov = 0;
-            diferencias.forEach(diff => {
-                const mat = (App.state?.inventario || []).find(m => m.id === diff.mat_id);
-                if (!mat) return;
+                for (const mat_id in mapaNuevo) {
+                    const cantNueva = mapaNuevo[mat_id];
+                    const cantAnterior = mapaAnterior[mat_id] || 0;
+                    const delta = cantNueva - cantAnterior;
+                    if (delta !== 0) diferencias.push({ mat_id, delta });
+                }
+                for (const mat_id in mapaAnterior) {
+                    if (!mapaNuevo[mat_id]) diferencias.push({ mat_id, delta: -mapaAnterior[mat_id] });
+                }
 
-                const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
-                const nuevoStock = (parseFloat(mat.stock_real || 0) || 0) - diff.delta;
+                let idxMov = 0;
+                diferencias.forEach(diff => {
+                    const mat = (App.state?.inventario || []).find(m => m.id === diff.mat_id);
+                    if (!mat) return;
 
-                operaciones.push({
-                    action: 'actualizar_fila',
-                    nombreHoja: 'materiales',
-                    idFila: mat.id,
-                    datosNuevos: { stock_real: nuevoStock }
+                    const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
+                    const nuevoStock = (parseFloat(mat.stock_real || 0) || 0) - diff.delta; 
+
+                    operaciones.push({ action: 'actualizar_fila', nombreHoja: 'materiales', idFila: mat.id, datosNuevos: { stock_real: nuevoStock } });
+
+                    const movData = {
+                        id: `SAL-${movBase}-${idxMov++}`, fecha: ahora, tipo_movimiento: diff.delta > 0 ? 'salida_produccion' : 'reversa_produccion',
+                        origen: 'orden', origen_id: ordenId, ref_tipo: 'material', ref_id: mat.id, cantidad: -diff.delta, 
+                        costo_unitario: costoUnitario, total: -(diff.delta * costoUnitario), notas: diff.delta > 0 ? `Adición de hilo extra (Orden ${ordenId})` : `Devolución de hilo (Orden ${ordenId})`
+                    };
+                    operaciones.push({ action: 'guardar_fila', nombreHoja: 'movimientos_inventario', datos: movData });
+                    movsMemoria.push({ mat, cantDeducida: diff.delta, movData });
                 });
+            }
 
-                const movData = {
-                    id: `SAL-${movBase}-${idxMov++}`,
-                    fecha: ahora,
-                    tipo_movimiento: diff.delta > 0 ? 'salida_produccion' : 'reversa_produccion',
-                    origen: 'orden',
-                    origen_id: ordenId,
-                    ref_tipo: 'material',
-                    ref_id: mat.id,
-                    cantidad: -diff.delta,
-                    costo_unitario: costoUnitario,
-                    total: -(diff.delta * costoUnitario),
-                    notas: diff.delta > 0 ? `Adición de hilo (Orden ${ordenId})` : `Devolución de hilo (Orden ${ordenId})`
-                };
-
-                operaciones.push({
-                    action: 'guardar_fila',
-                    nombreHoja: 'movimientos_inventario',
-                    datos: movData
-                });
-
-                movsMemoria.push({ mat, cantDeducida: diff.delta, movData });
-            });
-
-            // ACTUALIZACIÓN ORDEN Y ARTESANOS
+            // ACTUALIZACIÓN DE ORDEN Y ARTESANOS (Esto sí se guarda siempre)
             const datosOrdenUpdate = { receta_personalizada: recetaJson };
-
-            if ((!hilosYaDescontados && recetaLimpia.length > 0) || diferencias.length > 0) {
-                datosOrdenUpdate.materiales_descontados = true;
-                datosOrdenUpdate.fecha_descuento_materiales = ahora;
-            }
-
             const asignaciones = (App.state?.ordenes_produccion_artesanos || []).filter(a => a.orden_id === ordenId);
             const asignacionesActualizadas = [];
 
@@ -340,43 +304,24 @@ Object.assign(App.logic, {
                 if (asig.esquema_pago === "por_unidad") {
                     let factor = 1;
                     const componente = String(asig.componente || "total").toLowerCase();
-
                     if (componente === "total") {
                         factor = recetaLimpia.reduce((acc, item) => acc + (parseFloat(item.cant || 0) || 0), 0);
                     } else {
-                        factor = recetaLimpia
-                            .filter(item => String(item.uso || "").toLowerCase() === componente)
-                            .reduce((acc, item) => acc + (parseFloat(item.cant || 0) || 0), 0);
+                        factor = recetaLimpia.filter(item => String(item.uso || "").toLowerCase() === componente).reduce((acc, item) => acc + (parseFloat(item.cant || 0) || 0), 0);
                     }
-
                     const nuevoPago = (parseFloat(asig.monto_tarifa_apl || 0) || 0) * factor;
-
-                    asignacionesActualizadas.push({
-                        id: asig.id, factor_participac: factor, pago_estimado: nuevoPago
-                    });
-
-                    operaciones.push({
-                        action: "actualizar_fila",
-                        nombreHoja: "ordenes_produccion_artesanos",
-                        idFila: asig.id,
-                        datosNuevos: { factor_participac: factor, pago_estimado: nuevoPago }
-                    });
+                    asignacionesActualizadas.push({ id: asig.id, factor_participac: factor, pago_estimado: nuevoPago });
+                    operaciones.push({ action: "actualizar_fila", nombreHoja: "ordenes_produccion_artesanos", idFila: asig.id, datosNuevos: { factor_participac: factor, pago_estimado: nuevoPago } });
                 }
             });
 
-            operaciones.push({
-                action: "actualizar_fila",
-                nombreHoja: "ordenes_produccion",
-                idFila: ordenId,
-                datosNuevos: datosOrdenUpdate
-            });
+            operaciones.push({ action: "actualizar_fila", nombreHoja: "ordenes_produccion", idFila: ordenId, datosNuevos: datosOrdenUpdate });
 
             const res = await App.api.fetch("ejecutar_lote", { operaciones });
             App.ui.hideLoader();
 
             if (res.status === "success") {
                 Object.assign(orden, datosOrdenUpdate);
-
                 if (movsMemoria.length > 0) {
                     movsMemoria.forEach(m => {
                         m.mat.stock_real = (parseFloat(m.mat.stock_real || 0) || 0) - m.cantDeducida;
@@ -384,7 +329,6 @@ Object.assign(App.logic, {
                         App.state.movimientos_inventario.push(m.movData);
                     });
                 }
-
                 asignacionesActualizadas.forEach(act => {
                     const asigMemoria = (App.state?.ordenes_produccion_artesanos || []).find(a => a.id === act.id);
                     if (asigMemoria) {
@@ -393,10 +337,9 @@ Object.assign(App.logic, {
                     }
                 });
 
-                App.ui.toast(diferencias.length > 0 ? "Hilos y tarifas actualizados con éxito" : "Receta confirmada");
+                App.ui.toast(hilosYaDescontados && diferencias.length > 0 ? "Hilos extras descontados" : "Receta guardada en la orden");
                 App.ui.closeSheet();
                 App.router.handleRoute();
-                App.logic.revisarAlertasStock();
             } else {
                 App.ui.toast(res.message || "Error al guardar receta", "danger");
             }
