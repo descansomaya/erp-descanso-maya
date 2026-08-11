@@ -801,20 +801,25 @@ App.views.modalMateriaPrima = function (ordenId) {
     `;
 
     App.ui.openSheet('Hilos Utilizados', html, async (data) => {
-        // Leer directamente del DOM para obligar al sistema a ver las filas nuevas
-        const matSelects = document.querySelectorAll('#cont-receta-prod select[name="mat_id[]"]');
-        const cantInputs = document.querySelectorAll('#cont-receta-prod input[name="cant[]"]');
-        const usoSelects = document.querySelectorAll('#cont-receta-prod select[name="uso[]"]');
+        // Usamos la misma técnica infalible de extracción de arreglos que en Productos
+        const arrMats = data['mat_id[]'] ? (Array.isArray(data['mat_id[]']) ? data['mat_id[]'] : [data['mat_id[]']]) : [];
+        const arrCants = data['cant[]'] ? (Array.isArray(data['cant[]']) ? data['cant[]'] : [data['cant[]']]) : [];
+        const arrUsos = data['uso[]'] ? (Array.isArray(data['uso[]']) ? data['uso[]'] : [data['uso[]']]) : [];
         
         const recetaFinal = [];
-        for (let i = 0; i < matSelects.length; i++) {
-            const mId = matSelects[i].value;
-            const c = cantInputs[i].value;
-            const u = usoSelects[i].value;
+        for (let i = 0; i < arrMats.length; i++) {
+            const mId = arrMats[i];
+            const c = parseFloat(arrCants[i] || 0);
+            const u = arrUsos[i] || 'Cuerpo';
             
-            if (mId && parseFloat(c) > 0) {
+            if (mId && c > 0) {
                 recetaFinal.push({ mat_id: mId, cant: c, uso: u });
             }
+        }
+
+        if (recetaFinal.length === 0) {
+            App.ui.toast("Debes agregar al menos un hilo válido", "warning");
+            return;
         }
 
         return App.ui.runSafeAction({
