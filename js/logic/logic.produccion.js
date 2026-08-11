@@ -184,15 +184,15 @@ Object.assign(App.logic, {
             );
 
             App.router.handleRoute();
-        } else {
-            App.ui.toast(res.message || "Error al actualizar estado", "danger");
+       } else {
+                App.ui.toast(res.message || "Error al guardar receta", "danger");
+            }
+        } catch (error) {
+            console.error("Error en guardarRecetaProduccion:", error);
+            App.ui.hideLoader();
+            App.ui.toast(error.message || "Error al guardar receta", "danger");
         }
-    } catch (error) {
-        console.error("Error en cambiarEstadoProduccion:", error);
-        App.ui.hideLoader();
-        App.ui.toast(error.message || "Error al actualizar estado", "danger");
-    }
-},
+    }, 
 
     // ==========================================
     // 2. GUARDAR RECETA Y DESCONTAR INVENTARIO
