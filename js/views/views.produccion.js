@@ -784,7 +784,6 @@ App.views.modalMateriaPrima = function (ordenId) {
     let receta = [];
     try { receta = JSON.parse(ord.receta_personalizada || '[]'); } catch (e) { receta = []; }
 
-    // 1. Generador de filas independiente y seguro
     window._generarFilaHiloModal = function(matId = '', cant = '', uso = 'Cuerpo') {
         const opcionesMat = (App.state?.inventario || [])
             .map(m => `<option value="${m.id}" ${matId === m.id ? 'selected' : ''}>${App.ui.escapeHTML(m.nombre)}</option>`)
@@ -825,20 +824,20 @@ App.views.modalMateriaPrima = function (ordenId) {
         htmlFilas += window._generarFilaHiloModal();
     }
 
-    // 2. Le cambiamos el ID al form (form-hilos-seguro) para evitar que el recolector base lo secuestre
+    // El secreto: Pasamos el 'event' para saber exactamente qué botón se presionó
     let html = `
-        <form id="form-hilos-seguro" onsubmit="event.preventDefault(); window._guardarHilosSeguro('${ordenId}');">
-            <div id="cont-hilos-modal">
+        <form class="form-hilos-dinamico" onsubmit="event.preventDefault(); window._guardarHilosSeguro(event, '${ordenId}');">
+            <div class="cont-hilos-wrapper">
                 ${htmlFilas}
             </div>
-            <button type="button" class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="document.getElementById('cont-hilos-modal').insertAdjacentHTML('beforeend', window._generarFilaHiloModal())">+ Añadir otro hilo</button>
+            <button type="button" class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="this.previousElementSibling.insertAdjacentHTML('beforeend', window._generarFilaHiloModal())">+ Añadir otro hilo</button>
             <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">💾 Guardar y Descontar Inventario</button>
         </form>
     `;
 
-    // 3. Función exclusiva para recolectar, validar y enviar los datos extraídos directo del DOM
-    window._guardarHilosSeguro = async function(oId) {
-        const filas = document.querySelectorAll('#cont-hilos-modal .fila-hilo');
+    window._guardarHilosSeguro = async function(e, oId) {
+        const form = e.target;
+        const filas = form.querySelectorAll('.fila-hilo'); // Solo lee las filas de ESTE formulario
         const recetaFinal = [];
 
         filas.forEach(fila => {
@@ -866,6 +865,5 @@ App.views.modalMateriaPrima = function (ordenId) {
         }, async () => App.logic.guardarRecetaProduccion(oId, recetaFinal));
     };
 
-    // Solo abrimos la ventana, sin usar el recolector automático de App.ui
     App.ui.openSheet('Hilos Utilizados', html);
 };
