@@ -778,150 +778,149 @@ Object.assign(App.logic, {
         }
     },
 
-   renderGraficasFinanzas(filtro) {
-    if (!window.Chart) {
-        console.warn("Chart.js no está cargado para gráficas financieras.");
-        return;
-    }
-
-    const ctxIngresosGastos = document.getElementById("graficaFinanzasIngresosGastos");
-    const ctxFlujo = document.getElementById("graficaFinanzasFlujo");
-
-    if (!ctxIngresosGastos && !ctxFlujo) return;
-
-    window.graficaFinanzasIngresosGastos = window.graficaFinanzasIngresosGastos || null;
-    window.graficaFinanzasFlujo = window.graficaFinanzasFlujo || null;
-
-    const hoy = new Date();
-    const mesActual = hoy.getMonth();
-    const anioActual = hoy.getFullYear();
-
-    const fechaDesde = App.state.finanzasFechaDesde || "";
-    const fechaHasta = App.state.finanzasFechaHasta || "";
-
-    const entraEnFiltro = (fechaStr) => {
-        if (!fechaStr) return filtro === "todo";
-
-        const f = new Date(fechaStr);
-        if (isNaN(f.getTime())) return false;
-
-        if (filtro === "todo") return true;
-
-        if (filtro === "custom") {
-            if (!fechaDesde || !fechaHasta) return true;
-
-            const d1 = new Date(fechaDesde + "T00:00:00");
-            const d2 = new Date(fechaHasta + "T23:59:59");
-            return f >= d1 && f <= d2;
+    renderGraficasFinanzas(filtro) {
+        if (!window.Chart) {
+            console.warn("Chart.js no está cargado para gráficas financieras.");
+            return;
         }
 
-        if (filtro === "mes_actual") {
-            return f.getMonth() === mesActual && f.getFullYear() === anioActual;
-        }
+        const ctxIngresosGastos = document.getElementById("graficaFinanzasIngresosGastos");
+        const ctxFlujo = document.getElementById("graficaFinanzasFlujo");
 
-        if (filtro === "trimestre_actual") {
-            const trimHoy = Math.floor(mesActual / 3);
-            const trimFecha = Math.floor(f.getMonth() / 3);
-            return f.getFullYear() === anioActual && trimFecha === trimHoy;
-        }
+        if (!ctxIngresosGastos && !ctxFlujo) return;
 
-        if (filtro === "anio_actual") {
-            return f.getFullYear() === anioActual;
-        }
+        window.graficaFinanzasIngresosGastos = window.graficaFinanzasIngresosGastos || null;
+        window.graficaFinanzasFlujo = window.graficaFinanzasFlujo || null;
 
-        return true;
-    };
+        const hoy = new Date();
+        const mesActual = hoy.getMonth();
+        const anioActual = hoy.getFullYear();
 
-    const pedidos = App.state.pedidos || [];
-    const reparaciones = App.state.reparaciones || [];
-    const abonos = App.state.abonos || [];
-    const abonosReparaciones = App.state.abonos_reparaciones || [];
-    const gastos = App.state.gastos || [];
-    const compras = App.state.compras || [];
-    const pagosArtesanos = App.state.pago_artesanos || [];
+        const fechaDesde = App.state.finanzasFechaDesde || "";
+        const fechaHasta = App.state.finanzasFechaHasta || "";
 
-    const pedidosFil = pedidos.filter(p => entraEnFiltro(p.fecha_creacion || p.fecha));
-    const reparacionesFil = reparaciones.filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
-    const abonosFil = abonos.filter(a => entraEnFiltro(a.fecha));
-    const abonosRepFil = abonosReparaciones.filter(a => entraEnFiltro(a.fecha));
-    const gastosFil = gastos.filter(g => entraEnFiltro(g.fecha));
-    const comprasFil = compras.filter(c => entraEnFiltro(c.fecha || c.fecha_creacion));
-    const pagosArtesanosFil = pagosArtesanos.filter(p => entraEnFiltro(p.fecha_pago || p.fecha || p.fecha_creacion));
+        const entraEnFiltro = (fechaStr) => {
+            if (!fechaStr) return filtro === "todo";
 
-    const ventas = pedidosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0)
-        + reparacionesFil.reduce((acc, r) => acc + (parseFloat(r.precio || 0) || 0), 0);
+            const f = new Date(fechaStr);
+            if (isNaN(f.getTime())) return false;
 
-    const ingresos = abonosFil.reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0)
-        + pedidosFil.reduce((acc, p) => acc + (parseFloat(p.anticipo || 0) || 0), 0)
-        + abonosRepFil.reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0)
-        + reparacionesFil.reduce((acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0), 0);
+            if (filtro === "todo") return true;
 
-    const totalGastos = gastosFil.reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
-    const totalCompras = comprasFil.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
-    const totalNomina = pagosArtesanosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
-    
-    // Mantenemos el egreso total para el gráfico de dona, pero separamos las barras claramente
-    const egresos = totalGastos + totalCompras + totalNomina;
-    const flujoNeto = ingresos - egresos;
+            if (filtro === "custom") {
+                if (!fechaDesde || !fechaHasta) return true;
 
-    if (ctxIngresosGastos) {
-        if (window.graficaFinanzasIngresosGastos && typeof window.graficaFinanzasIngresosGastos.destroy === "function") {
-            window.graficaFinanzasIngresosGastos.destroy();
-        }
-
-        // SEPARAMOS LAS BARRAS PARA EVITAR CONFUSIONES Y MOSTRAR EL DESGLOSE REAL
-        window.graficaFinanzasIngresosGastos = new Chart(ctxIngresosGastos, {
-            type: "bar",
-            data: {
-                labels: ["Ventas", "Ingresos", "Gastos", "Compras", "Nómina"],
-                datasets: [{
-                    label: "Monto ($)",
-                    data: [ventas, ingresos, totalGastos, totalCompras, totalNomina],
-                    backgroundColor: ["#3182CE", "#38A169", "#E53E3E", "#D69E2E", "#805AD5"],
-                    borderRadius: 8
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false }
-                },
-                scales: {
-                    y: { beginAtZero: true }
-                }
+                const d1 = new Date(fechaDesde + "T00:00:00");
+                const d2 = new Date(fechaHasta + "T23:59:59");
+                return f >= d1 && f <= d2;
             }
-        });
-    }
 
-    if (ctxFlujo) {
-        if (window.graficaFinanzasFlujo && typeof window.graficaFinanzasFlujo.destroy === "function") {
-            window.graficaFinanzasFlujo.destroy();
-        }
+            if (filtro === "mes_actual") {
+                return f.getMonth() === mesActual && f.getFullYear() === anioActual;
+            }
 
-        window.graficaFinanzasFlujo = new Chart(ctxFlujo, {
-            type: "doughnut",
-            data: {
-                labels: ["Ingresos", "Egresos totales", "Flujo neto"],
-                datasets: [{
-                    data: [
-                        Math.max(ingresos, 0),
-                        Math.max(egresos, 0),
-                        Math.max(flujoNeto, 0)
-                    ],
-                    backgroundColor: ["#38A169", "#E53E3E", "#3182CE"]
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: "bottom"
+            if (filtro === "trimestre_actual") {
+                const trimHoy = Math.floor(mesActual / 3);
+                const trimFecha = Math.floor(f.getMonth() / 3);
+                return f.getFullYear() === anioActual && trimFecha === trimHoy;
+            }
+
+            if (filtro === "anio_actual") {
+                return f.getFullYear() === anioActual;
+            }
+
+            return true;
+        };
+
+        const pedidos = App.state.pedidos || [];
+        const reparaciones = App.state.reparaciones || [];
+        const abonos = App.state.abonos || [];
+        const abonosReparaciones = App.state.abonos_reparaciones || [];
+        const gastos = App.state.gastos || [];
+        const compras = App.state.compras || [];
+        const pagosArtesanos = App.state.pago_artesanos || [];
+
+        const pedidosFil = pedidos.filter(p => entraEnFiltro(p.fecha_creacion || p.fecha));
+        const reparacionesFil = reparaciones.filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
+        const abonosFil = abonos.filter(a => entraEnFiltro(a.fecha));
+        const abonosRepFil = abonosReparaciones.filter(a => entraEnFiltro(a.fecha));
+        const gastosFil = gastos.filter(g => entraEnFiltro(g.fecha));
+        const comprasFil = compras.filter(c => entraEnFiltro(c.fecha || c.fecha_creacion));
+        const pagosArtesanosFil = pagosArtesanos.filter(p => entraEnFiltro(p.fecha_pago || p.fecha || p.fecha_creacion));
+
+        const ventas = pedidosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0)
+            + reparacionesFil.reduce((acc, r) => acc + (parseFloat(r.precio || 0) || 0), 0);
+
+        const ingresos = abonosFil.reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0)
+            + pedidosFil.reduce((acc, p) => acc + (parseFloat(p.anticipo || 0) || 0), 0)
+            + abonosRepFil.reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0)
+            + reparacionesFil.reduce((acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0), 0);
+
+        const totalGastos = gastosFil.reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
+        const totalCompras = comprasFil.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
+        const totalNomina = pagosArtesanosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+        
+        const egresos = totalGastos + totalCompras + totalNomina;
+        const flujoNeto = ingresos - egresos;
+
+        if (ctxIngresosGastos) {
+            if (window.graficaFinanzasIngresosGastos && typeof window.graficaFinanzasIngresosGastos.destroy === "function") {
+                window.graficaFinanzasIngresosGastos.destroy();
+            }
+
+            window.graficaFinanzasIngresosGastos = new Chart(ctxIngresosGastos, {
+                type: "bar",
+                data: {
+                    labels: ["Ventas", "Ingresos", "Gastos", "Compras", "Nómina"],
+                    datasets: [{
+                        label: "Monto ($)",
+                        data: [ventas, ingresos, totalGastos, totalCompras, totalNomina],
+                        backgroundColor: ["#3182CE", "#38A169", "#E53E3E", "#D69E2E", "#805AD5"],
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
                     }
                 }
+            });
+        }
+
+        if (ctxFlujo) {
+            if (window.graficaFinanzasFlujo && typeof window.graficaFinanzasFlujo.destroy === "function") {
+                window.graficaFinanzasFlujo.destroy();
             }
-        });
+
+            window.graficaFinanzasFlujo = new Chart(ctxFlujo, {
+                type: "doughnut",
+                data: {
+                    labels: ["Ingresos", "Egresos totales", "Flujo neto"],
+                    datasets: [{
+                        data: [
+                            Math.max(ingresos, 0),
+                            Math.max(egresos, 0),
+                            Math.max(flujoNeto, 0)
+                        ],
+                        backgroundColor: ["#38A169", "#E53E3E", "#3182CE"]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: "bottom"
+                        }
+                    }
+                }
+            });
+        }
     }
-},
+});
