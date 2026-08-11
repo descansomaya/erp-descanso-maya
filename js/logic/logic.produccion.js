@@ -381,7 +381,7 @@ Object.assign(App.logic, {
             App.ui.hideLoader();
             App.ui.toast(error.message || "Error al guardar receta", "danger");
         }
-    }
+    },
 
     // ==========================================
     // 3. ACTUALIZAR ASIGNACIÓN DE ARTESANO Y TARIFA
