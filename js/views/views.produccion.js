@@ -454,7 +454,7 @@ App.views._buildOrdenCard = function (o) {
                     ${resumenReceta.length ? `<br><strong>Hilos:</strong> ${resumenReceta.join(' · ')}` : '<br><strong>Hilos:</strong> Sin asignar'}
                 </div>
 
-                <div class="dm-list-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
+               <div class="dm-list-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verDetallesProduccion('${o.id}')">👁️ Detalles</button>
                     ${o.estado === 'pendiente' ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'iniciar')">▶️ Iniciar</button>` : ''}
                     ${o.estado === 'proceso' ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'terminar')">✅ Terminar</button>` : ''}
