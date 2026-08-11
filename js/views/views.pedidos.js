@@ -72,7 +72,7 @@ App.views.accionPedido = function (button, pedidoId, actionName) {
             fn: () => App.logic.eliminarPedido(pedidoId),
             loadingText: "Eliminando...",
             loaderMessage: "Validando taller y eliminando pedido...",
-            toastOnSuccess: false, // ESTA ES LA LÍNEA QUE APAGA EL MENSAJE FALSO VERDE
+            toastOnSuccess: false,
             errorTitle: "No se pudo eliminar el pedido"
         }
     };
@@ -261,8 +261,14 @@ window.generarListaPedidos = function(tipo) {
     return html;
 };
 
+// ==========================================
+// CARRITO Y CREACIÓN DE PEDIDOS MÚLTIPLES
+// ==========================================
 App.views._formPedidoInterno = function(obj = null, prefill = null) {
     const dataBase = Object.assign({ cantidad: 1, anticipo: 0 }, prefill || {}, obj || {});
+
+    // Iniciamos la memoria del carrito
+    if (!obj) { window._carritoTemp = []; }
 
     let htmlClientes = '<option value="STOCK_INTERNO">STOCK BODEGA</option>';
     (App.state.clientes || []).forEach(c => {
@@ -270,70 +276,199 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
         htmlClientes += `<option value="${c.id}" ${selected}>${App.ui.safe(c.nombre)}</option>`;
     });
 
-    let htmlProductos = '<option value="">-- Producto --</option>';
+    let htmlProductos = '<option value="">-- Seleccionar producto --</option>';
     (App.state.productos || []).forEach(p => {
-        const selected = dataBase.producto_id === p.id ? 'selected' : '';
-        htmlProductos += `<option value="${p.id}" ${selected}>${App.ui.safe(p.nombre)}</option>`;
+        const precio = p.precio_venta || 0;
+        htmlProductos += `<option value="${p.id}" data-precio="${precio}">${App.ui.safe(p.nombre)}</option>`;
     });
+
+    let htmlCarrito = '';
+
+    if (!obj) {
+        // MODO CREACIÓN: Mostramos el constructor del carrito
+        htmlCarrito = `
+            <div class="dm-form-group">
+                <label class="dm-label">Artículos del pedido</label>
+                <div class="dm-card dm-mb-2" style="background:var(--dm-surface-2); padding:12px;">
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+                        <select id="cart-prod-select" class="dm-select" style="flex:1; min-width:180px;" onchange="document.getElementById('cart-price').value = this.options[this.selectedIndex].getAttribute('data-precio') || 0;">
+                            ${htmlProductos}
+                        </select>
+                        <button type="button" class="dm-btn dm-btn-secondary" style="padding: 0 12px;" onclick="App.views.formProductoRapidoDesdeCotizacion()">+ Prod</button>
+                    </div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
+                        <div style="width:70px;">
+                            <label class="dm-text-sm dm-muted">Cant.</label>
+                            <input type="number" id="cart-qty" class="dm-input" value="1" min="1">
+                        </div>
+                        <div style="flex:1; min-width:100px;">
+                            <label class="dm-text-sm dm-muted">Precio Unit.</label>
+                            <input type="number" step="0.01" id="cart-price" class="dm-input" placeholder="0.00">
+                        </div>
+                        <button type="button" class="dm-btn dm-btn-info" onclick="window.agregarAlCarrito()">🛒 Agregar</button>
+                    </div>
+                </div>
+                <div id="cart-items-container">
+                    <!-- Aquí se dibujarán los items agregados -->
+                </div>
+            </div>
+        `;
+    } else {
+        // MODO EDICIÓN: Listamos los artículos de forma estática
+        const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === obj.id);
+        let itemsHtml = detalles.map(d => {
+            const p = (App.state.productos || []).find(x => x.id === d.producto_id);
+            return `<div class="dm-text-sm dm-mb-1">✔️ <strong>${d.cantidad}x</strong> ${p ? p.nombre : 'Producto'} - <strong>$${(parseFloat(d.precio_unitario)*d.cantidad).toFixed(2)}</strong></div>`;
+        }).join('');
+        
+        htmlCarrito = `
+            <div class="dm-form-group">
+                <label class="dm-label">Artículos Registrados</label>
+                <div class="dm-card" style="background:var(--dm-surface-2); padding:10px;">
+                    ${itemsHtml || '<i>Sin artículos</i>'}
+                    <div class="dm-text-sm dm-muted dm-mt-2">*Para cambiar productos o cantidades, elimina este pedido y crea uno nuevo para no alterar los descuadres de hilos del taller.</div>
+                </div>
+            </div>
+        `;
+    }
 
     const formHTML = `
         <form id="dynamic-form">
             <div class="dm-form-group">
-                <label class="dm-label">Cliente</label>
+                <label class="dm-label">Cliente / Destino</label>
                 <select class="dm-select" name="cliente_id" onchange="window.verificarStockInterno()">${htmlClientes}</select>
             </div>
 
-           <div class="dm-form-group">
-                <label class="dm-label">Producto</label>
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <select class="dm-select" name="producto_id" required onchange="window.calcularTotalPedido()" style="flex:1; min-width:180px;">
-                        ${htmlProductos}
-                    </select>
-                    <button type="button" class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formProductoRapidoDesdeCotizacion()">+ Producto</button>
-                </div>
-                <div id="info-extra-prod" class="dm-mt-2"></div>
+            ${htmlCarrito}
+
+            <div class="dm-form-group">
+                <label class="dm-label">Fecha estimada de entrega</label>
+                <input type="date" class="dm-input" name="fecha_entrega" value="${dataBase.fecha_entrega || ''}">
             </div>
 
             <div class="dm-form-row">
                 <div class="dm-form-group">
-                    <label class="dm-label">Cantidad</label>
-                    <input type="number" class="dm-input" name="cantidad" value="${dataBase.cantidad || 1}" required oninput="window.calcularTotalPedido()">
+                    <label class="dm-label">Total Pedido ($)</label>
+                    <input type="number" step="0.01" class="dm-input" name="total" value="${dataBase.total || ''}" required ${!obj ? 'readonly' : ''} style="${!obj ? 'background:#e5e7eb; color:#6b7280; cursor:not-allowed;' : ''}">
                 </div>
                 <div class="dm-form-group">
-                    <label class="dm-label">Fecha de entrega</label>
-                    <input type="date" class="dm-input" name="fecha_entrega" value="${dataBase.fecha_entrega || ''}" required>
-                </div>
-            </div>
-
-            <div class="dm-form-row">
-                <div class="dm-form-group">
-                    <label class="dm-label">Total ($)</label>
-                    <input type="number" step="0.01" class="dm-input" name="total" value="${dataBase.total || ''}" required>
-                </div>
-                <div class="dm-form-group">
-                    <label class="dm-label">Anticipo ($)</label>
+                    <label class="dm-label">Anticipo Recibido ($)</label>
                     <input type="number" step="0.01" class="dm-input" name="anticipo" value="${dataBase.anticipo || '0'}" required>
                 </div>
             </div>
+            
+            <div class="dm-form-group">
+                <label class="dm-label">Notas o instrucciones generales</label>
+                <textarea class="dm-textarea" name="notas">${App.ui.escapeHTML(dataBase.notas || '')}</textarea>
+            </div>
 
-            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">${obj ? 'Guardar Cambios' : 'Crear Pedido'}</button>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">${obj ? 'Guardar Cambios Generales' : 'Confirmar Pedido Múltiple'}</button>
         </form>
     `;
 
-    App.ui.openSheet(obj ? 'Editar Pedido' : 'Nuevo Pedido', formHTML, async (data) => {
+    App.ui.openSheet(obj ? 'Editar Pedido' : 'Nuevo Pedido (Multi-artículo)', formHTML, async (data) => {
+        if (!obj) {
+            if (window._carritoTemp.length === 0) {
+                App.ui.toast("Debes agregar al menos un artículo a la lista", "warning");
+                throw new Error("Carrito vacío");
+            }
+            data.carrito = window._carritoTemp; // Inyectamos el carrito completo al servidor
+        }
+
         const action = obj ? () => App.logic.actualizarRegistroGenerico('pedidos', obj.id, data, 'pedidos') : () => App.logic.guardarNuevoPedido(data);
         return App.ui.runSafeAction({
             lockKey: obj ? `pedido:${obj.id}:editar` : 'pedido:nuevo',
             loadingText: obj ? 'Guardando...' : 'Creando...',
-            loaderMessage: obj ? 'Guardando pedido...' : 'Creando pedido...',
-            successMessage: obj ? 'Pedido actualizado' : 'Pedido creado',
-            errorTitle: obj ? 'No se pudo actualizar el pedido' : 'No se pudo crear el pedido',
+            loaderMessage: obj ? 'Guardando cambios...' : 'Creando pedido y apartando inventario para todos los artículos...',
+            successMessage: obj ? 'Pedido actualizado' : 'Pedido registrado correctamente',
+            errorTitle: obj ? 'No se pudo actualizar' : 'No se pudo crear el pedido',
             closeSheetOnSuccess: true
         }, async () => action());
     });
 
+    if (!obj) {
+        // Funciones exclusivas de la ventana de creación
+        window.agregarAlCarrito = function() {
+            const prodSel = document.getElementById('cart-prod-select');
+            const qtyInp = document.getElementById('cart-qty');
+            const priceInp = document.getElementById('cart-price');
+            
+            const prodId = prodSel.value;
+            const qty = parseFloat(qtyInp.value) || 0;
+            const price = parseFloat(priceInp.value) || 0;
+            
+            if (!prodId || qty <= 0) {
+                App.ui.toast("Selecciona un producto y una cantidad válida", "warning");
+                return;
+            }
+            
+            const prod = (App.state.productos || []).find(p => p.id === prodId);
+            window._carritoTemp.push({
+                producto_id: prodId,
+                nombre: prod ? prod.nombre : 'Producto',
+                cantidad: qty,
+                precio_unitario: price,
+                subtotal: qty * price
+            });
+            
+            // Limpiamos los campos
+            qtyInp.value = 1;
+            priceInp.value = '';
+            prodSel.value = '';
+            
+            window.renderCarrito();
+        };
+
+        window.eliminarDelCarrito = function(index) {
+            window._carritoTemp.splice(index, 1);
+            window.renderCarrito();
+        };
+
+        window.renderCarrito = function() {
+            const cont = document.getElementById('cart-items-container');
+            const totalInp = document.querySelector('#dynamic-form input[name="total"]');
+            const clienteSel = document.querySelector('#dynamic-form select[name="cliente_id"]');
+            
+            if (!cont) return;
+            
+            let html = '';
+            let sumTotal = 0;
+            
+            if (window._carritoTemp.length === 0) {
+                html = '<div class="dm-alert dm-alert-warning" style="padding:8px; font-size:13px; text-align:center;">Agrega artículos al pedido usando el botón de arriba.</div>';
+            } else {
+                window._carritoTemp.forEach((item, idx) => {
+                    sumTotal += item.subtotal;
+                    html += `
+                        <div class="dm-list-card" style="padding:10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                            <div style="line-height:1.3;">
+                                <strong>${item.cantidad}x</strong> ${App.ui.safe(item.nombre)}<br>
+                                <small class="dm-muted">$${item.precio_unitario.toFixed(2)} precio unitario</small>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <strong style="font-size:16px;">$${item.subtotal.toFixed(2)}</strong>
+                                <button type="button" class="dm-btn dm-btn-danger dm-btn-sm" style="padding:4px 8px; font-weight:bold;" onclick="window.eliminarDelCarrito(${idx})">X</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            cont.innerHTML = html;
+            
+            if (totalInp) {
+                if (clienteSel && clienteSel.value === 'STOCK_INTERNO') {
+                    totalInp.value = 0;
+                } else {
+                    totalInp.value = sumTotal.toFixed(2);
+                }
+            }
+        };
+
+        setTimeout(() => window.renderCarrito(), 150);
+    }
+
     setTimeout(() => {
-        window.calcularTotalPedido();
         if(typeof window.verificarStockInterno === 'function') window.verificarStockInterno();
     }, 150);
 };
@@ -978,7 +1113,6 @@ App.views.modalDetallesPedido = function(pedidoId) {
     const estado = String(pedido.estado || '').toLowerCase();
     const whatsappAction = estado === 'listo para entregar' ? 'whatsappListo' : 'whatsappCobro';
 
-    // === AGREGAMOS LA INFORMACIÓN DEL CLIENTE Y FECHA AL MODAL ===
     const cliente = (App.state.clientes || []).find(c => c.id === pedido.cliente_id);
     const esInterno = pedido.cliente_id === "STOCK_INTERNO";
     const nombreCliente = esInterno ? "STOCK BODEGA" : (cliente ? cliente.nombre : "Cliente no encontrado");
@@ -1060,11 +1194,11 @@ window.verificarStockInterno = function() {
         }
     } else {
         if (totalInp) { 
-            totalInp.readOnly = false; 
-            totalInp.style.backgroundColor = ''; 
-            totalInp.style.color = ''; 
-            totalInp.style.cursor = ''; 
-            window.calcularTotalPedido(); 
+            totalInp.readOnly = window._carritoTemp ? true : false; 
+            totalInp.style.backgroundColor = window._carritoTemp ? '#e5e7eb' : ''; 
+            totalInp.style.color = window._carritoTemp ? '#6b7280' : ''; 
+            totalInp.style.cursor = window._carritoTemp ? 'not-allowed' : ''; 
+            if (typeof window.renderCarrito === 'function') window.renderCarrito(); 
         }
         if (antInp) { 
             antInp.readOnly = false; 
