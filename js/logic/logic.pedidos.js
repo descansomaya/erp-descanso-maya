@@ -78,7 +78,7 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
 
                 const producto = (App.state.productos || []).find(p => p.id === itemCarro.producto_id);
 
-                if (producto && producto.categoria === "reventa") {
+               if (producto) { // Quitamos el candado de 'reventa' para que aparte TODO
                     for (let i = 1; i <= 20; i++) {
                         const matId = producto[`mat_${i}`];
                         const cantTeorica = (parseFloat(producto[`cant_${i}`] || 0)) * (parseInt(itemCarro.cantidad) || 1);
@@ -99,35 +99,37 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
 
                                 material.stock_reservado = nuevoReservado;
 
-                                const mov = {
-                                    id: "MOV-" + Date.now() + "-" + i + "-" + index,
-                                    fecha: new Date().toISOString().split("T")[0],
-                                    tipo_movimiento: "reserva_venta",
-                                    origen: "pedido",
-                                    origen_id: pedidoId,
-                                    ref_tipo: "material",
-                                    ref_id: material.id,
-                                    material_id: material.id,
-                                    tipo: "salida",
-                                    cantidad: cantTeorica,
-                                    costo_unitario: material.costo_unitario || 0,
-                                    total: cantTeorica * (material.costo_unitario || 0),
-                                    motivo: "Apartado por venta",
-                                    notas: "Apartado por venta"
-                                };
+                                // Solo generamos movimiento Kardex si es venta directa, para no ensuciar la salida del taller
+                                if (producto.categoria === "reventa") {
+                                    const mov = {
+                                        id: "MOV-" + Date.now() + "-" + i + "-" + index,
+                                        fecha: new Date().toISOString().split("T")[0],
+                                        tipo_movimiento: "reserva_venta",
+                                        origen: "pedido",
+                                        origen_id: pedidoId,
+                                        ref_tipo: "material",
+                                        ref_id: material.id,
+                                        material_id: material.id,
+                                        tipo: "salida",
+                                        cantidad: cantTeorica,
+                                        costo_unitario: material.costo_unitario || 0,
+                                        total: cantTeorica * (material.costo_unitario || 0),
+                                        motivo: "Apartado por venta",
+                                        notas: "Apartado por venta"
+                                    };
 
-                                nuevosMovs.push(mov);
+                                    nuevosMovs.push(mov);
 
-                                operaciones.push({
-                                    action: "guardar_fila",
-                                    nombreHoja: "movimientos_inventario",
-                                    datos: mov
-                                });
+                                    operaciones.push({
+                                        action: "guardar_fila",
+                                        nombreHoja: "movimientos_inventario",
+                                        datos: mov
+                                    });
+                                }
                             }
                         }
                     }
                 }
-            });
 
             const resPedido = await App.api.fetch("ejecutar_lote", { operaciones });
 
