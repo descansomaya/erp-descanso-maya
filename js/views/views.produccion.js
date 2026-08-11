@@ -801,11 +801,21 @@ App.views.modalMateriaPrima = function (ordenId) {
     `;
 
     App.ui.openSheet('Hilos Utilizados', html, async (data) => {
-        const matIds = Array.isArray(data['mat_id[]']) ? data['mat_id[]'] : [data['mat_id[]']];
-        const cants = Array.isArray(data['cant[]']) ? data['cant[]'] : [data['cant[]']];
-        const usos = Array.isArray(data['uso[]']) ? data['uso[]'] : [data['uso[]']];
+        // Leer directamente del DOM para obligar al sistema a ver las filas nuevas
+        const matSelects = document.querySelectorAll('#cont-receta-prod select[name="mat_id[]"]');
+        const cantInputs = document.querySelectorAll('#cont-receta-prod input[name="cant[]"]');
+        const usoSelects = document.querySelectorAll('#cont-receta-prod select[name="uso[]"]');
+        
         const recetaFinal = [];
-        for (let i = 0; i < matIds.length; i++) if (matIds[i]) recetaFinal.push({ mat_id: matIds[i], cant: cants[i], uso: usos[i] });
+        for (let i = 0; i < matSelects.length; i++) {
+            const mId = matSelects[i].value;
+            const c = cantInputs[i].value;
+            const u = usoSelects[i].value;
+            
+            if (mId && parseFloat(c) > 0) {
+                recetaFinal.push({ mat_id: mId, cant: c, uso: u });
+            }
+        }
 
         return App.ui.runSafeAction({
             lockKey: `produccion:${ordenId}:receta:guardar`,
