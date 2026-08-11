@@ -6,30 +6,16 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
     if (!orden) throw new Error('Orden no encontrada');
 
     const estadoActual = String(orden.estado || '').toLowerCase();
-    const yaRevertida =
-        String(orden.materiales_revertidos || '').toLowerCase() === 'true' ||
-        orden.materiales_revertidos === true;
+    const yaRevertida = String(orden.materiales_revertidos || '').toLowerCase() === 'true' || orden.materiales_revertidos === true;
 
-    if (estadoActual === 'pendiente') {
-        App.ui.toast('La orden ya está en pendiente', 'warning');
-        return false;
-    }
+    if (estadoActual === 'pendiente') { App.ui.toast('La orden ya está en pendiente', 'warning'); return false; }
+    if (yaRevertida) { App.ui.toast('Esta orden ya tuvo reversa de materiales', 'warning'); return false; }
 
-    if (yaRevertida) {
-        App.ui.toast('Esta orden ya tuvo reversa de materiales', 'warning');
-        return false;
-    }
-
-    const ok = window.confirm(`¿Regresar la orden ${ordenId} a pendiente y restaurar materiales?`);
+    const ok = window.confirm(`¿Regresar la orden ${ordenId} a pendiente y restaurar materiales físicos?`);
     if (!ok) return false;
 
     let receta = [];
-    try {
-        receta = JSON.parse(orden.receta_personalizada || '[]');
-        if (!Array.isArray(receta)) receta = [];
-    } catch (e) {
-        receta = [];
-    }
+    try { receta = JSON.parse(orden.receta_personalizada || '[]'); } catch (e) { receta = []; }
 
     const operaciones = [];
     const ahora = new Date().toISOString();
@@ -44,7 +30,11 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
         if (!mat) return;
 
         const stockActual = parseFloat(mat.stock_real || 0) || 0;
+        const reservadoActual = parseFloat(mat.stock_reservado || 0) || 0;
+        
         const nuevoStock = stockActual + cant;
+        const nuevoReservado = reservadoActual + cant; // <-- Volvemos a apartar el inventario
+
         const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
         const totalMovimiento = cant * costoUnitario;
 
@@ -52,26 +42,16 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
             action: 'actualizar_fila',
             nombreHoja: 'materiales',
             idFila: matId,
-            datosNuevos: {
-                stock_real: nuevoStock
-            }
+            datosNuevos: { stock_real: nuevoStock, stock_reservado: nuevoReservado }
         });
 
         operaciones.push({
             action: 'guardar_fila',
             nombreHoja: 'movimientos_inventario',
             datos: {
-                id: `REV-${movBase}-${i}`,
-                fecha: ahora,
-                tipo_movimiento: 'reversa_produccion',
-                origen: 'orden',
-                origen_id: ordenId,
-                ref_tipo: 'material',
-                ref_id: matId,
-                cantidad: cant,
-                costo_unitario: costoUnitario,
-                total: totalMovimiento,
-                notas: `Reversa por regresar orden ${ordenId} a pendiente`
+                id: `REV-${movBase}-${i}`, fecha: ahora, tipo_movimiento: 'reversa_produccion', origen: 'orden',
+                origen_id: ordenId, ref_tipo: 'material', ref_id: matId, cantidad: cant,
+                costo_unitario: costoUnitario, total: totalMovimiento, notas: `Reversa por regresar orden ${ordenId} a pendiente`
             }
         });
     });
@@ -80,19 +60,13 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
         action: 'actualizar_fila',
         nombreHoja: 'ordenes_produccion',
         idFila: ordenId,
-        datosNuevos: {
-            estado: 'pendiente',
-            materiales_revertidos: true,
-            materiales_descontados: false,
-            fecha_reversa_materiales: ahora
-        }
+        datosNuevos: { estado: 'pendiente', materiales_revertidos: true, materiales_descontados: false, fecha_reversa_materiales: ahora }
     });
 
     const res = await App.api.fetch('ejecutar_lote', { operaciones });
-    if (res.status !== 'success') {
-        throw new Error(res.message || 'No se pudo ejecutar la reversa');
-    }
+    if (res.status !== 'success') { throw new Error(res.message || 'No se pudo ejecutar la reversa'); }
 
+    // Sincronizar memoria (App.state)
     receta.forEach((item) => {
         const matId = item.mat_id;
         const cant = parseFloat(item.cant || 0) || 0;
@@ -101,6 +75,7 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
         const mat = (App.state?.inventario || []).find(m => m.id === matId);
         if (mat) {
             mat.stock_real = (parseFloat(mat.stock_real || 0) || 0) + cant;
+            mat.stock_reservado = (parseFloat(mat.stock_reservado || 0) || 0) + cant; // Sincroniza apartado
         }
     });
 
@@ -112,9 +87,7 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
         ordState.fecha_reversa_materiales = ahora;
     }
 
-    if (!Array.isArray(App.state.movimientos_inventario)) {
-        App.state.movimientos_inventario = [];
-    }
+    if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
 
     receta.forEach((item, i) => {
         const matId = item.mat_id;
@@ -125,22 +98,13 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
         const costoUnitario = parseFloat(mat?.costo_unitario || 0) || 0;
 
         App.state.movimientos_inventario.push({
-            id: `REV-${movBase}-${i}`,
-            fecha: ahora,
-            tipo_movimiento: 'reversa_produccion',
-            origen: 'orden',
-            origen_id: ordenId,
-            ref_tipo: 'material',
-            ref_id: matId,
-            cantidad: cant,
-            costo_unitario: costoUnitario,
-            total: cant * costoUnitario,
-            notas: `Reversa por regresar orden ${ordenId} a pendiente`
+            id: `REV-${movBase}-${i}`, fecha: ahora, tipo_movimiento: 'reversa_produccion', origen: 'orden',
+            origen_id: ordenId, ref_tipo: 'material', ref_id: matId, cantidad: cant,
+            costo_unitario: costoUnitario, total: cant * costoUnitario, notas: `Reversa por regresar orden ${ordenId} a pendiente`
         });
     });
 
     if (App.router?.handleRoute) App.router.handleRoute();
-
     return true;
 };
 
