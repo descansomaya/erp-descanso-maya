@@ -69,13 +69,10 @@ App.views.accionPedido = function (button, pedidoId, actionName) {
             errorTitle: "No se pudo preparar WhatsApp"
         },
         eliminarPedido: {
-            fn: async () => {
-                const ok = window.confirm(`¿Eliminar el pedido ${pedidoId}?`);
-                if (!ok) return false;
-                return App.logic.eliminarRegistroGenerico('pedidos', pedidoId, 'pedidos');
-            },
+            // AQUÍ CONECTAMOS EL BOTÓN AL ESCUDO INTELIGENTE QUE CREAMOS
+            fn: () => App.logic.eliminarPedido(pedidoId),
             loadingText: "Eliminando...",
-            loaderMessage: "Eliminando pedido...",
+            loaderMessage: "Validando taller y eliminando pedido...",
             successMessage: "Pedido eliminado",
             errorTitle: "No se pudo eliminar el pedido"
         }
@@ -156,6 +153,7 @@ App.views.pedidos = function() {
 
     pedidos.forEach(p => {
         const colorEstado = getColorEstado(p.estado);
+        const esInterno = p.cliente_id === 'STOCK_INTERNO';
 
         html += `
             <div class="dm-list-card tarj-ped">
@@ -163,7 +161,7 @@ App.views.pedidos = function() {
                     <div class="dm-row-between" style="flex-wrap:wrap; gap:10px; align-items:flex-start;">
                         <div style="flex:1; min-width:0;">
                             <strong>${App.ui.safe(p.id)}</strong><br>
-                            <small class="dm-muted">${App.ui.safe(p.cliente_nombre || '')}</small>
+                            <small class="dm-muted">${App.ui.safe(esInterno ? 'STOCK BODEGA' : (p.cliente_nombre || ''))}</small>
                         </div>
 
                         <span class="dm-badge" style="background:${colorEstado}; color:white;">${App.ui.safe(p.estado || 'Pendiente')}</span>
@@ -177,7 +175,7 @@ App.views.pedidos = function() {
 
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
                         <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.modalDetallesPedido('${p.id}')">👁️ Ver</button>
-                        <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💰 Cobrar</button>
+                        ${!esInterno && p.estado !== 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💰 Cobrar</button>` : ''}
                         <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'eliminarPedido')">🗑️ Eliminar</button>
                     </div>
                 </div>
@@ -212,6 +210,7 @@ window.generarListaPedidos = function(tipo) {
         const estado = String(p.estado || '').toLowerCase();
         const fecha = p.fecha_creacion ? String(p.fecha_creacion).split('T')[0] : '';
         const whatsappAction = p.estado === 'listo para entregar' ? 'whatsappListo' : 'whatsappCobro';
+        const esInterno = p.cliente_id === 'STOCK_INTERNO';
 
         let estColor = 'dm-badge-primary';
         if (estado === 'entregado' || estado === 'pagado') estColor = 'dm-badge-success';
@@ -220,14 +219,14 @@ window.generarListaPedidos = function(tipo) {
         const accionesOperativas = `
             ${estado !== 'listo para entregar' && estado !== 'entregado' && estado !== 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'marcarListo')">📦 Listo</button>` : ''}
             ${estado === 'listo para entregar' || estado === 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'marcarEntregado')">🚚 Entregado</button>` : ''}
-            ${saldo <= 0.05 && estado !== 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'cerrarPedido')">🔒 Cerrar</button>` : ''}
+            ${!esInterno && saldo <= 0.05 && estado !== 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'cerrarPedido')">🔒 Cerrar</button>` : ''}
         `;
 
         html += `
             <div class="dm-list-card">
                 <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
                     <div style="flex:1; min-width:0;">
-                        <div class="dm-list-card-title">${App.ui.safe(p.id || '')} - ${App.ui.safe(cliente.nombre || 'STOCK BODEGA')}</div>
+                        <div class="dm-list-card-title">${App.ui.safe(p.id || '')} - ${App.ui.safe(esInterno ? 'STOCK BODEGA' : (cliente.nombre || 'Desconocido'))}</div>
                         <div class="dm-list-card-subtitle dm-mt-2">
                             <span class="dm-badge ${estColor}">${App.ui.safe((p.estado || '').toUpperCase())}</span>
                             ${fecha ? `<span class="dm-text-sm dm-muted" style="display:inline-block; margin-left:8px;">${fecha}</span>` : ''}
@@ -247,11 +246,11 @@ window.generarListaPedidos = function(tipo) {
                 <div class="dm-list-card-actions" style="flex-wrap:wrap;">
                     <button class="dm-btn dm-btn-info dm-btn-sm" onclick="App.views.modalDetallesPedido('${p.id}')">📦 Detalles</button>
                     <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formPedido('${p.id}')">✏️ Editar</button>
-                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💳 Abonos</button>
-                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'imprimirNota')">🖨️ Nota</button>
-                    ${ultimoAbono ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionAbono(this, '${ultimoAbono.id}', 'imprimirRecibo')">🧾 Últ. abono</button>` : ''}
-                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'imprimirLiquidacion')">✅ Liquidación</button>
-                    <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', '${whatsappAction}')">💬 WhatsApp</button>
+                    ${!esInterno && p.estado !== 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💳 Abonos</button>` : ''}
+                    ${!esInterno ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'imprimirNota')">🖨️ Nota</button>` : ''}
+                    ${!esInterno && ultimoAbono ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionAbono(this, '${ultimoAbono.id}', 'imprimirRecibo')">🧾 Últ. abono</button>` : ''}
+                    ${!esInterno ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'imprimirLiquidacion')">✅ Liquidación</button>` : ''}
+                    ${!esInterno ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', '${whatsappAction}')">💬 WhatsApp</button>` : ''}
                     ${accionesOperativas}
                     <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'eliminarPedido')">🗑️ Eliminar</button>
                 </div>
@@ -980,7 +979,36 @@ App.views.modalDetallesPedido = function(pedidoId) {
     const estado = String(pedido.estado || '').toLowerCase();
     const whatsappAction = estado === 'listo para entregar' ? 'whatsappListo' : 'whatsappCobro';
 
-    let html = `<div class="dm-list">`;
+    // === AGREGAMOS LA INFORMACIÓN DEL CLIENTE Y FECHA AL MODAL ===
+    const cliente = (App.state.clientes || []).find(c => c.id === pedido.cliente_id);
+    const esInterno = pedido.cliente_id === "STOCK_INTERNO";
+    const nombreCliente = esInterno ? "STOCK BODEGA" : (cliente ? cliente.nombre : "Cliente no encontrado");
+    const telCliente = !esInterno && cliente && cliente.telefono ? cliente.telefono : "N/A";
+
+    let html = `
+        <div class="dm-card dm-mb-3" style="background:var(--dm-surface-2); padding:15px; border:none;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                <span class="dm-text-sm dm-muted">Cliente:</span>
+                <strong>${App.ui.escapeHTML(nombreCliente)}</strong>
+            </div>
+            ${!esInterno ? `
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                <span class="dm-text-sm dm-muted">Teléfono:</span>
+                <span>${App.ui.escapeHTML(telCliente)}</span>
+            </div>` : ''}
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                <span class="dm-text-sm dm-muted">Fecha Creado:</span>
+                <span>${String(pedido.fecha_creacion || '').split('T')[0]}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span class="dm-text-sm dm-muted">Estado:</span>
+                <span class="dm-badge dm-badge-primary" style="background: var(--dm-primary); color: white;">${App.ui.escapeHTML((pedido.estado || '').toUpperCase())}</span>
+            </div>
+        </div>
+        <h4 class="dm-label dm-mb-2">Artículos del pedido:</h4>
+        <div class="dm-list">
+    `;
+
     detalles.forEach(d => {
         const prod = (App.state.productos || []).find(p => p.id === d.producto_id);
         const nombreProducto = prod ? prod.nombre : 'Producto sin nombre';
@@ -991,8 +1019,6 @@ App.views.modalDetallesPedido = function(pedidoId) {
             </div>
         `;
     });
-
-    const esInterno = pedido.cliente_id === 'STOCK_INTERNO';
 
     html += `
         </div>
@@ -1019,13 +1045,12 @@ window.verificarStockInterno = function() {
     const antInp = document.querySelector('#dynamic-form input[name="anticipo"]');
     
     if (clienteSel && clienteSel.value === 'STOCK_INTERNO') {
-        // Si es stock: forzamos a 0, bloqueamos lectura y aplicamos estilo gris/deshabilitado
         if (totalInp) { 
             totalInp.value = 0; 
             totalInp.readOnly = true; 
-            totalInp.style.backgroundColor = '#e5e7eb'; // Gris claro
-            totalInp.style.color = '#6b7280'; // Texto gris oscuro
-            totalInp.style.cursor = 'not-allowed'; // Cursor de prohibido
+            totalInp.style.backgroundColor = '#e5e7eb'; 
+            totalInp.style.color = '#6b7280'; 
+            totalInp.style.cursor = 'not-allowed'; 
         }
         if (antInp) { 
             antInp.value = 0; 
@@ -1035,7 +1060,6 @@ window.verificarStockInterno = function() {
             antInp.style.cursor = 'not-allowed';
         }
     } else {
-        // Si es cliente normal: quitamos el bloqueo, limpiamos los estilos y recalculamos
         if (totalInp) { 
             totalInp.readOnly = false; 
             totalInp.style.backgroundColor = ''; 
