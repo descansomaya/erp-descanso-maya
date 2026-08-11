@@ -68,13 +68,14 @@ App.views.accionPedido = function (button, pedidoId, actionName) {
             successMessage: "Mensaje preparado",
             errorTitle: "No se pudo preparar WhatsApp"
         },
-      eliminarPedido: {
+        eliminarPedido: {
             fn: () => App.logic.eliminarPedido(pedidoId),
             loadingText: "Eliminando...",
             loaderMessage: "Validando taller y eliminando pedido...",
-            toastOnSuccess: false, 
+            toastOnSuccess: false, // ESTA ES LA LÍNEA QUE APAGA EL MENSAJE FALSO VERDE
             errorTitle: "No se pudo eliminar el pedido"
         }
+    };
 
     const config = actions[actionName];
     if (!config) {
@@ -283,15 +284,15 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
             </div>
 
            <div class="dm-form-group">
-    <label class="dm-label">Producto</label>
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <select class="dm-select" name="producto_id" required onchange="window.calcularTotalPedido()" style="flex:1; min-width:180px;">
-            ${htmlProductos}
-        </select>
-        <button type="button" class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formProductoRapidoDesdeCotizacion()">+ Producto</button>
-    </div>
-    <div id="info-extra-prod" class="dm-mt-2"></div>
-</div>
+                <label class="dm-label">Producto</label>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <select class="dm-select" name="producto_id" required onchange="window.calcularTotalPedido()" style="flex:1; min-width:180px;">
+                        ${htmlProductos}
+                    </select>
+                    <button type="button" class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formProductoRapidoDesdeCotizacion()">+ Producto</button>
+                </div>
+                <div id="info-extra-prod" class="dm-mt-2"></div>
+            </div>
 
             <div class="dm-form-row">
                 <div class="dm-form-group">
@@ -332,9 +333,9 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
     });
 
     setTimeout(() => {
-    window.calcularTotalPedido();
-    if(typeof window.verificarStockInterno === 'function') window.verificarStockInterno();
-}, 150);
+        window.calcularTotalPedido();
+        if(typeof window.verificarStockInterno === 'function') window.verificarStockInterno();
+    }, 150);
 };
 
 App.views.formPedido = function(id = null) {
