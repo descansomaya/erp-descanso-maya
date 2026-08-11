@@ -146,6 +146,7 @@ App.views.finanzas = function () {
     const hoy = new Date();
     const mesActual = hoy.getMonth();
     const anioActual = hoy.getFullYear();
+    
     const entraEnFiltro = (fechaStr) => {
         if (!fechaStr) return filtro === 'todo';
         const f = new Date(fechaStr);
@@ -158,7 +159,7 @@ App.views.finanzas = function () {
         return true;
     };
     
-    // AQUÍ EXCLUIMOS EL STOCK INTERNO DE TODOS LOS CÁLCULOS FINANCIEROS GLOBALES
+    // Filtros por fecha y exclusión de STOCK INTERNO
     const pedidosFil = pedidos.filter(p => p.cliente_id !== 'STOCK_INTERNO' && entraEnFiltro(p.fecha_creacion || p.fecha));
     const reparacionesFil = reparaciones.filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
     const gastosFil = gastos.filter(g => entraEnFiltro(g.fecha));
@@ -168,8 +169,8 @@ App.views.finanzas = function () {
     const pagosArtesanosFil = pagosArtesanos.filter(p => entraEnFiltro(p.fecha_pago || p.fecha || p.fecha_creacion));
     const cotizacionesFil = cotizaciones.filter(c => entraEnFiltro(c.fecha || c.fecha_creacion));
     
+    // SUMATORIAS
     const totalVentas = pedidosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
-    const totalGastos = gastosFil.reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
     const totalCobradoPedidos = abonosFil.reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0) + pedidosFil.reduce((acc, p) => acc + (parseFloat(p.anticipo || 0) || 0), 0);
     const totalCobradoReparaciones = abonosRepFil.reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0) + reparacionesFil.reduce((acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0), 0);
     const totalCobrado = totalCobradoPedidos + totalCobradoReparaciones;
@@ -177,6 +178,16 @@ App.views.finanzas = function () {
     const totalNomina = pagosArtesanosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
     const totalCotizado = cotizacionesFil.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
     
+    // EL FILTRO INTELIGENTE DE GASTOS PUROS (Excluye compras duplicadas)
+    const totalGastosCrudo = gastosFil.reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0); // Solo de referencia
+    const gastosOperativosPuros = gastosFil
+        .filter(g => {
+            const desc = String(g.concepto || g.descripcion || '').toLowerCase();
+            return !desc.includes('compra') && !desc.includes('materiales y insumos') && !desc.includes('hilo');
+        })
+        .reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
+    
+    // DEUDAS Y SALDOS
     const porCobrarPedidos = pedidosFil.reduce((acc, p) => { const ab = abonos.filter(a => a.pedido_id === p.id).reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0); const saldo = (parseFloat(p.total || 0) || 0) - (parseFloat(p.anticipo || 0) || 0) - ab; return acc + (saldo > 0 ? saldo : 0); }, 0);
     const porCobrarReparaciones = reparacionesFil.reduce((acc, r) => { const ant = parseFloat(r.anticipo_inicial || 0) || 0; const ab = abonosReparaciones.filter(a => a.reparacion_id === r.id).reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0); const saldo = (parseFloat(r.precio || 0) || 0) - ant - ab; return acc + (saldo > 0 ? saldo : 0); }, 0);
     const dineroEnLaCalle = porCobrarPedidos + porCobrarReparaciones;
@@ -184,14 +195,18 @@ App.views.finanzas = function () {
     const porPagarNomina = pagosArtesanos.filter(p => String(p.estado || '').toLowerCase() === 'pendiente').reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
     const totalPorPagar = porPagarCompras + porPagarNomina;
     
+    // RENTABILIDAD
     const costoRealData = App.views.calcularCostoRealHamacas(filtro);
     const costoRealResumen = costoRealData.resumen;
     const utilidadReal = costoRealResumen.utilidad;
     const margenReal = costoRealResumen.margen;
     
-    const resultadoCaja = totalCobrado - totalGastos;
-    const flujoOperativo = totalCobrado - totalGastos - totalCompras - totalNomina;
+    // FLUJOS CORREGIDOS (Usando solo gastos puros)
+    const resultadoCaja = totalCobrado - gastosOperativosPuros;
+    const flujoOperativo = totalCobrado - gastosOperativosPuros - totalCompras - totalNomina;
     const saldoProyectado = dineroEnLaCalle - totalPorPagar;
+    
+    // SALUD
     const salud = flujoOperativo >= 0 && saldoProyectado >= 0 ? 'Sana' : (flujoOperativo < 0 && saldoProyectado < 0 ? 'Crítica' : 'En observación');
     const saludColor = salud === 'Sana' ? 'green' : (salud === 'Crítica' ? 'red' : '#B7791F');
     const pedidosPendientes = pedidosFil.filter(p => !['pagado', 'entregado'].includes(String(p.estado || '').toLowerCase())).length;
@@ -234,7 +249,10 @@ App.views.finanzas = function () {
         </div>`;
         
     const cobranzaHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">${kpi('Por cobrar pedidos', money(porCobrarPedidos))}${kpi('Por cobrar reparaciones', money(porCobrarReparaciones))}${kpi('Pedidos pendientes', pedidosPendientes)}${kpi('Reparaciones pendientes', reparacionesPendientes)}${kpi('Ventas totales', money(totalVentas))}${kpi('Cotizado', money(totalCotizado))}${kpi('Cotizaciones pendientes', cotPendientes)}</div><div class="dm-card dm-mb-4"><button class="dm-btn dm-btn-primary" onclick="App.views.detalleFinanzas('ventas', '${filtro}')">Ver detalle de ventas</button></div>`;
-    const egresosHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">${kpi('Gastos', money(totalGastos))}${kpi('Compras', money(totalCompras))}${kpi('Por pagar compras', money(porPagarCompras))}${kpi('Registros de gastos', registrosGastos)}</div><div class="dm-card dm-mb-4" style="display:flex; gap:8px; flex-wrap:wrap;"><button class="dm-btn dm-btn-danger" onclick="App.views.formGasto()">+ Nuevo gasto</button><button class="dm-btn dm-btn-secondary" onclick="App.views.detalleFinanzas('gastos', '${filtro}')">Ver detalle de gastos</button><button class="dm-btn dm-btn-secondary" onclick="App.router.navigate('compras')">Ver compras</button></div>`;
+    
+    // Reemplazamos 'Gastos' crudos por 'Gastos Operativos' para dar claridad en la UI
+    const egresosHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">${kpi('Gastos operativos', money(gastosOperativosPuros))}${kpi('Compras', money(totalCompras))}${kpi('Por pagar compras', money(porPagarCompras))}${kpi('Registros de gastos', registrosGastos)}</div><div class="dm-card dm-mb-4" style="display:flex; gap:8px; flex-wrap:wrap;"><button class="dm-btn dm-btn-danger" onclick="App.views.formGasto()">+ Nuevo gasto</button><button class="dm-btn dm-btn-secondary" onclick="App.views.detalleFinanzas('gastos', '${filtro}')">Ver detalle de gastos</button><button class="dm-btn dm-btn-secondary" onclick="App.router.navigate('compras')">Ver compras</button></div>`;
+    
     const nominaHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">${kpi('Nómina filtrada', money(totalNomina))}${kpi('Por pagar nómina', money(porPagarNomina))}</div><div class="dm-card dm-mb-4"><button class="dm-btn dm-btn-primary" onclick="App.router.navigate('nomina')">Ver nómina completa</button></div>`;
     const costosHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">${kpi('Órdenes costeadas', costoRealResumen.ordenes)}${kpi('Venta producción', money(costoRealResumen.venta))}${kpi('Materiales', money(costoRealResumen.costo_materiales))}${kpi('Mano de obra', money(costoRealResumen.mano_obra))}${kpi('Costo real total', money(costoRealResumen.costo_real))}${kpi('Utilidad real', money(costoRealResumen.utilidad), costoRealResumen.utilidad >= 0 ? 'green' : 'red')}${kpi('Margen real', ((costoRealResumen.margen || 0) * 100).toFixed(1) + '%', costoRealResumen.margen >= 0 ? 'green' : 'red')}</div><div class="dm-card dm-mb-4"><button class="dm-btn dm-btn-primary" onclick="App.views.detalleFinanzas('costo_real', '${filtro}')">Ver costo por hamaca</button></div>`;
     const reportesHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;" class="dm-mb-4"><div class="dm-card"><div class="dm-card-title">Vista rápida</div><div class="dm-muted dm-mt-2">Mini gráficas del estado del negocio.</div><div class="dm-mt-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;"><div style="height:220px;"><canvas id="miniGraficaIngresosGastos"></canvas></div><div style="height:220px;"><canvas id="miniGraficaCobrarPagar"></canvas></div><div style="height:220px;"><canvas id="miniGraficaOperacion"></canvas></div></div></div><div class="dm-card"><div class="dm-card-title">Tendencias financieras</div><div class="dm-muted dm-mt-2">Gráficas ejecutivas con datos reales.</div><div class="dm-mt-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;"><div style="height:240px;"><canvas id="graficaFinanzasIngresosGastos"></canvas></div><div style="height:240px;"><canvas id="graficaFinanzasFlujo"></canvas></div></div></div></div>`;
