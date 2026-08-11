@@ -163,31 +163,37 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
 
     async eliminarPedido(id) {
         try {
-            if (!confirm("⚠️ ¿Eliminar pedido por completo?\n\nLos insumos volverán a estar libres en el inventario.")) return;
+            if (!confirm("⚠️ ¿Eliminar pedido por completo?\n\nLos insumos volverán a estar libres en el inventario.")) return false;
 
             App.ui.showLoader("Procesando eliminación...");
 
             const pedido = (App.state.pedidos || []).find(p => p.id === id);
             if (!pedido) {
                 App.ui.hideLoader();
-                App.ui.toast("Pedido no encontrado", "danger");
-                return;
+                throw new Error("Pedido no encontrado");
             }
 
+            // 1. Buscamos todas las órdenes del Taller vinculadas a este pedido
             const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === id);
             const ordenes = (App.state.ordenes_produccion || []).filter(o =>
                 detalles.some(d => d.id === o.pedido_detalle_id)
             );
 
-            const ordenEnProcesoOTerminada = ordenes.some(o => o.estado !== 'pendiente');
+            // 2. EL ESCUDO PROTECTOR DEFINITIVO
+            const ordenEnProcesoOTerminada = ordenes.some(o => {
+                const estadoTaller = String(o.estado || '').toLowerCase().trim();
+                return estadoTaller === 'proceso' || estadoTaller === 'listo';
+            });
+
             if (ordenEnProcesoOTerminada) {
                 App.ui.hideLoader();
-                App.ui.toast("No puedes eliminar este pedido. Hay órdenes en el taller que ya fueron iniciadas o terminadas. Regrésalas a pendiente primero.", "warning");
-                return;
+                // Usamos "throw new Error" para abortar totalmente la acción en la Interfaz Gráfica
+                throw new Error("⚠️ BLOQUEADO: El taller ya inició o terminó esta orden. Regrésala a 'Pendiente' primero para liberar los hilos.");
             }
 
             const operaciones = [];
 
+            // 3. Devolver inventario SOLO para productos de reventa directa
             detalles.forEach(detalle => {
                 const producto = (App.state.productos || []).find(p => p.id === detalle.producto_id);
                 const cantidadDetalle = parseInt(detalle.cantidad) || 1;
@@ -227,6 +233,7 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
                 }
             });
 
+            // 4. ELIMINACIÓN EN CASCADA (Borra el pedido y limpia el taller)
             operaciones.push({ action: "eliminar_fila", nombreHoja: "pedidos", idFila: id });
 
             detalles.forEach(det => {
@@ -250,10 +257,10 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
                 });
 
             const res = await App.api.fetch("ejecutar_lote", { operaciones });
-
             App.ui.hideLoader();
 
             if (res.status === "success") {
+                // Sincronizar memoria para que desaparezca al instante
                 App.state.pedidos = (App.state.pedidos || []).filter(p => p.id !== id);
                 App.state.pedido_detalle = (App.state.pedido_detalle || []).filter(d => d.pedido_id !== id);
                 App.state.ordenes_produccion = (App.state.ordenes_produccion || []).filter(o =>
@@ -264,16 +271,18 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
                 );
                 App.state.abonos = (App.state.abonos || []).filter(a => a.pedido_id !== id);
 
-                App.ui.toast("Pedido eliminado");
+                App.ui.toast("Pedido y órdenes de taller eliminados correctamente.");
                 App.router.handleRoute();
                 App.logic.revisarAlertasStock();
+                return true;
             } else {
-                App.ui.toast(res.message || "Error al eliminar pedido", "danger");
+                throw new Error(res.message || "Error al comunicarse con la base de datos.");
             }
         } catch (error) {
             console.error("Error en eliminarPedido:", error);
             App.ui.hideLoader();
             App.ui.toast(error.message || "Error al eliminar pedido", "danger");
+            return false;
         }
     },
 
