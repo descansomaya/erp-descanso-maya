@@ -33,18 +33,50 @@ App.views.detalleFinanzas = function(tipo, filtro) {
     let resumen = '';
     let tabla = '';
     
-    if (tipo === 'ventas') {
+if (tipo === 'ventas') {
         titulo = 'Ventas totales';
-        // AQUÍ EXCLUIMOS EL STOCK INTERNO DE LA TABLA DE VENTAS
+        const money = (n) => '$' + ((parseFloat(n || 0) || 0).toFixed(2));
+        
+        // 1. Obtenemos pedidos (excluyendo STOCK_INTERNO)
         const pedidos = (App.state.pedidos || []).filter(p => p.cliente_id !== 'STOCK_INTERNO' && entraEnFiltro(p.fecha_creacion || p.fecha));
-        const total = pedidos.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
-        resumen = `<div class="dm-mb-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;"><div class="dm-card" style="background:var(--dm-surface-2);"><div class="dm-kpi-label">Registros</div><div class="dm-kpi-value">${pedidos.length}</div></div><div class="dm-card" style="background:var(--dm-surface-2);"><div class="dm-kpi-label">Total ventas</div><div class="dm-kpi-value">${money(total)}</div></div></div>`;
-        const rows = pedidos.map(p => {
+        // 2. Obtenemos reparaciones
+        const reparaciones = (App.state.reparaciones || []).filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
+        
+        const totalPedidos = pedidos.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+        const totalReparaciones = reparaciones.reduce((acc, r) => acc + (parseFloat(r.precio || 0) || 0), 0);
+        const granTotal = totalPedidos + totalReparaciones;
+        const totalRegistros = pedidos.length + reparaciones.length;
+
+        resumen = `
+            <div class="dm-mb-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+                <div class="dm-card" style="background:var(--dm-surface-2);">
+                    <div class="dm-kpi-label">Registros</div>
+                    <div class="dm-kpi-value">${totalRegistros}</div>
+                </div>
+                <div class="dm-card" style="background:var(--dm-surface-2);">
+                    <div class="dm-kpi-label">Total ventas</div>
+                    <div class="dm-kpi-value">${money(granTotal)}</div>
+                </div>
+            </div>`;
+            
+        // Dibujamos las filas de pedidos
+        const rowsPedidos = pedidos.map(p => {
             const cliente = (App.state.clientes || []).find(c => c.id === p.cliente_id);
             const fecha = String(p.fecha_creacion || p.fecha || '').split('T')[0];
             return `<tr><td>${App.ui.safe(p.id || '')}</td><td>${App.ui.safe(fecha)}</td><td>${App.ui.safe(cliente?.nombre || p.cliente_nombre || p.cliente_id || '')}</td><td>${App.ui.safe(p.estado || '')}</td><td style="text-align:right;">${money(p.total || 0)}</td></tr>`;
         });
-        tabla = renderTabla(['Pedido', 'Fecha', 'Cliente', 'Estado', 'Total'], rows);
+
+        // Dibujamos las filas de reparaciones
+        const rowsReparaciones = reparaciones.map(r => {
+            const cliente = (App.state.clientes || []).find(c => c.id === r.cliente_id);
+            const fecha = String(r.fecha_creacion || r.fecha || '').split('T')[0];
+            return `<tr><td>${App.ui.safe(r.id || '')} (Rep)</td><td>${App.ui.safe(fecha)}</td><td>${App.ui.safe(cliente?.nombre || r.cliente_nombre || r.cliente_id || '')}</td><td>${App.ui.safe(r.estado || '')}</td><td style="text-align:right; color:#805AD5; font-weight:bold;">${money(r.precio || 0)}</td></tr>`;
+        });
+
+        const rows = [...rowsPedidos, ...rowsReparaciones];
+        
+        // Pasamos el nuevo arreglo de filas a la tabla
+        tabla = renderTabla(['Folio', 'Fecha', 'Cliente', 'Estado', 'Total'], rows);
     }
     
     if (tipo === 'gastos') {
