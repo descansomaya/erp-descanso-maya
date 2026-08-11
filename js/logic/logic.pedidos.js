@@ -179,7 +179,7 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
                 detalles.some(d => d.id === o.pedido_detalle_id)
             );
 
-            // 2. EL ESCUDO PROTECTOR DEFINITIVO
+            // 2. EL ESCUDO PROTECTOR DEFINITIVO CON ALERTA CLARA
             const ordenEnProcesoOTerminada = ordenes.some(o => {
                 const estadoTaller = String(o.estado || '').toLowerCase().trim();
                 return estadoTaller === 'proceso' || estadoTaller === 'listo';
@@ -187,8 +187,9 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
 
             if (ordenEnProcesoOTerminada) {
                 App.ui.hideLoader();
-                // Usamos "throw new Error" para abortar totalmente la acción en la Interfaz Gráfica
-                throw new Error("⚠️ BLOQUEADO: El taller ya inició o terminó esta orden. Regrésala a 'Pendiente' primero para liberar los hilos.");
+                // Mostramos un toast de advertencia explícito y frenamos la ejecución
+                App.ui.toast("No se puede eliminar: El taller ya inició o terminó este pedido. Debes regresar la orden en el taller a 'Pendiente' primero.", "danger");
+                return false;
             }
 
             const operaciones = [];
