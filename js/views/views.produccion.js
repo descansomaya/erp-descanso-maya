@@ -801,10 +801,10 @@ App.views.modalMateriaPrima = function (ordenId) {
     `;
 
     App.ui.openSheet('Hilos Utilizados', html, async (data) => {
-        // Usamos la misma técnica infalible de extracción de arreglos que en Productos
-        const arrMats = data['mat_id[]'] ? (Array.isArray(data['mat_id[]']) ? data['mat_id[]'] : [data['mat_id[]']]) : [];
-        const arrCants = data['cant[]'] ? (Array.isArray(data['cant[]']) ? data['cant[]'] : [data['cant[]']]) : [];
-        const arrUsos = data['uso[]'] ? (Array.isArray(data['uso[]']) ? data['uso[]'] : [data['uso[]']]) : [];
+        // CORRECCIÓN: Tu sistema quita los [] automáticamente, así que buscamos "data.mat_id" directo
+        const arrMats = data.mat_id ? (Array.isArray(data.mat_id) ? data.mat_id : [data.mat_id]) : [];
+        const arrCants = data.cant ? (Array.isArray(data.cant) ? data.cant : [data.cant]) : [];
+        const arrUsos = data.uso ? (Array.isArray(data.uso) ? data.uso : [data.uso]) : [];
         
         const recetaFinal = [];
         for (let i = 0; i < arrMats.length; i++) {
@@ -818,7 +818,7 @@ App.views.modalMateriaPrima = function (ordenId) {
         }
 
         if (recetaFinal.length === 0) {
-            App.ui.toast("Debes agregar al menos un hilo válido", "warning");
+            App.ui.toast("Debes agregar al menos un hilo válido mayor a 0", "warning");
             return;
         }
 
