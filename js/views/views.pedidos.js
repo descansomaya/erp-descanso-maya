@@ -704,7 +704,7 @@ App.views.toggleCamposCotizacion = function () {
 
 App.views.formClienteRapidoDesdeCotizacion = function () {
     const formHTML = `
-        <form id="dynamic-form">
+        <form id="dynamic-form-cliente-rapido">
             <div class="dm-form-group">
                 <label class="dm-label">Nombre del cliente</label>
                 <input type="text" class="dm-input" name="nombre" required>
@@ -722,21 +722,29 @@ App.views.formClienteRapidoDesdeCotizacion = function () {
     `;
 
     App.ui.openSheet('Nuevo cliente', formHTML, async (data) => {
-        const res = await App.logic.guardarNuevoGenerico('clientes', data, 'CLI', null, null);
+        // CORRECCIÓN 1: Agregamos 'clientes' como cuarto parámetro para que actualice la memoria sin F5
+        const res = await App.logic.guardarNuevoGenerico('clientes', data, 'CLI', 'clientes');
+        
         setTimeout(() => {
             const select = document.querySelector('#dynamic-form select[name="cliente_id"]');
             const input = document.querySelector('#dynamic-form input[name="cliente_nombre"]');
             const ultimo = (App.state.clientes || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
-            if (select && ultimo) select.value = ultimo.id;
-            if (input && ultimo) input.value = ultimo.nombre || '';
-        }, 250);
+            
+            if (ultimo) {
+                if (select) {
+                    select.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)}</option>`);
+                    select.value = ultimo.id;
+                }
+                if (input) input.value = ultimo.nombre || '';
+            }
+        }, 350);
         return res;
     });
 };
 
 App.views.formProductoRapidoDesdeCotizacion = function () {
     const formHTML = `
-        <form id="dynamic-form">
+        <form id="dynamic-form-producto-rapido">
             <div class="dm-form-group">
                 <label class="dm-label">Nombre del producto</label>
                 <input type="text" class="dm-input" name="nombre" required>
@@ -744,12 +752,12 @@ App.views.formProductoRapidoDesdeCotizacion = function () {
             <div class="dm-form-group">
                 <label class="dm-label">Categoría</label>
                 <select class="dm-select" name="categoria">
-                    <option value="fabricado">Fabricado</option>
-                    <option value="reventa">Reventa</option>
+                    <option value="fabricado">Fabricado / Producción</option>
+                    <option value="reventa">Reventa Directa</option>
                 </select>
             </div>
             <div class="dm-form-group">
-                <label class="dm-label">Precio sugerido</label>
+                <label class="dm-label">Precio sugerido de venta ($)</label>
                 <input type="number" step="0.01" class="dm-input" name="precio_venta" value="0">
             </div>
             <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">Guardar producto</button>
@@ -758,16 +766,36 @@ App.views.formProductoRapidoDesdeCotizacion = function () {
 
     App.ui.openSheet('Nuevo producto', formHTML, async (data) => {
         const payload = Object.assign({ activo: 'TRUE' }, data);
-        const res = await App.logic.guardarNuevoGenerico('productos', payload, 'PROD', null, null);
+        
+        // CORRECCIÓN 1: Agregamos 'productos' como cuarto parámetro para actualizar memoria
+        const res = await App.logic.guardarNuevoGenerico('productos', payload, 'PROD', 'productos');
+        
         setTimeout(() => {
-            const select = document.querySelector('#dynamic-form select[name="producto_id"]');
             const ultimo = (App.state.productos || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
-            if (select && ultimo) {
-                select.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)}</option>`);
-                select.value = ultimo.id;
-                App.views.syncCotizacionProducto();
+            
+            if (ultimo) {
+                // CORRECCIÓN 2: Le enseñamos a buscar el menú del nuevo Carrito de Compras
+                const selectCarrito = document.getElementById('cart-prod-select');
+                if (selectCarrito) {
+                    const precio = ultimo.precio_venta || 0;
+                    selectCarrito.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}" data-precio="${precio}">${App.ui.safe(ultimo.nombre)}</option>`);
+                    selectCarrito.value = ultimo.id;
+                    
+                    const priceInp = document.getElementById('cart-price');
+                    if(priceInp) priceInp.value = precio;
+                }
+
+                // (Respaldo por si se usa desde Cotizaciones regulares)
+                const selectCotizacion = document.querySelector('#dynamic-form select[name="producto_id"]');
+                if (selectCotizacion && !selectCarrito) {
+                    selectCotizacion.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)}</option>`);
+                    selectCotizacion.value = ultimo.id;
+                    if (typeof App.views.syncCotizacionProducto === 'function') {
+                        App.views.syncCotizacionProducto();
+                    }
+                }
             }
-        }, 250);
+        }, 350);
         return res;
     });
 };
