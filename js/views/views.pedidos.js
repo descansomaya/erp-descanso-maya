@@ -68,15 +68,13 @@ App.views.accionPedido = function (button, pedidoId, actionName) {
             successMessage: "Mensaje preparado",
             errorTitle: "No se pudo preparar WhatsApp"
         },
-        eliminarPedido: {
-            // AQUÍ CONECTAMOS EL BOTÓN AL ESCUDO INTELIGENTE QUE CREAMOS
+      eliminarPedido: {
             fn: () => App.logic.eliminarPedido(pedidoId),
             loadingText: "Eliminando...",
             loaderMessage: "Validando taller y eliminando pedido...",
-            successMessage: "Pedido eliminado",
+            toastOnSuccess: false, 
             errorTitle: "No se pudo eliminar el pedido"
         }
-    };
 
     const config = actions[actionName];
     if (!config) {
