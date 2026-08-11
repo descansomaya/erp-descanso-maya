@@ -179,6 +179,13 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
                 detalles.some(d => d.id === o.pedido_detalle_id)
             );
 
+            const ordenEnProcesoOTerminada = ordenes.some(o => o.estado !== 'pendiente');
+            if (ordenEnProcesoOTerminada) {
+                App.ui.hideLoader();
+                App.ui.toast("No puedes eliminar este pedido. Hay órdenes en el taller que ya fueron iniciadas o terminadas. Regrésalas a pendiente primero.", "warning");
+                return;
+            }
+
             const operaciones = [];
 
             detalles.forEach(detalle => {
