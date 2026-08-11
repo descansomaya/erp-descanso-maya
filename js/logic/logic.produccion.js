@@ -253,33 +253,34 @@ Object.assign(App.logic, {
             const movBase = Date.now();
             const movsMemoria = [];
 
-            // ¿El taller ya inició la hamaca?
+            // Detectamos si la orden ya inició (Físico) o sigue pendiente (Apartado)
             const hilosYaDescontados = String(orden.materiales_descontados).toLowerCase() === 'true';
-            const diferencias = [];
             
-            // SOLO hacemos descuento físico (Lógica Delta) si la orden YA había iniciado
-            if (hilosYaDescontados) {
-                const recetaAnterior = this.obtenerRecetaOrden(orden);
-                const mapaAnterior = {};
-                recetaAnterior.forEach(r => { mapaAnterior[r.mat_id] = (mapaAnterior[r.mat_id] || 0) + parseFloat(r.cant || 0); });
-                const mapaNuevo = {};
-                recetaLimpia.forEach(r => { mapaNuevo[r.mat_id] = (mapaNuevo[r.mat_id] || 0) + parseFloat(r.cant || 0); });
+            const recetaAnterior = this.obtenerRecetaOrden(orden);
+            const mapaAnterior = {};
+            recetaAnterior.forEach(r => { mapaAnterior[r.mat_id] = (mapaAnterior[r.mat_id] || 0) + parseFloat(r.cant || 0); });
+            
+            const mapaNuevo = {};
+            recetaLimpia.forEach(r => { mapaNuevo[r.mat_id] = (mapaNuevo[r.mat_id] || 0) + parseFloat(r.cant || 0); });
 
-                for (const mat_id in mapaNuevo) {
-                    const cantNueva = mapaNuevo[mat_id];
-                    const cantAnterior = mapaAnterior[mat_id] || 0;
-                    const delta = cantNueva - cantAnterior;
-                    if (delta !== 0) diferencias.push({ mat_id, delta });
-                }
-                for (const mat_id in mapaAnterior) {
-                    if (!mapaNuevo[mat_id]) diferencias.push({ mat_id, delta: -mapaAnterior[mat_id] });
-                }
+            const diferencias = [];
+            for (const mat_id in mapaNuevo) {
+                const cantNueva = mapaNuevo[mat_id];
+                const cantAnterior = mapaAnterior[mat_id] || 0;
+                const delta = cantNueva - cantAnterior;
+                if (delta !== 0) diferencias.push({ mat_id, delta });
+            }
+            for (const mat_id in mapaAnterior) {
+                if (!mapaNuevo[mat_id]) diferencias.push({ mat_id, delta: -mapaAnterior[mat_id] });
+            }
 
-                let idxMov = 0;
-                diferencias.forEach(diff => {
-                    const mat = (App.state?.inventario || []).find(m => m.id === diff.mat_id);
-                    if (!mat) return;
+            let idxMov = 0;
+            diferencias.forEach(diff => {
+                const mat = (App.state?.inventario || []).find(m => m.id === diff.mat_id);
+                if (!mat) return;
 
+                if (hilosYaDescontados) {
+                    // Si ya inició: El cambio afecta al FÍSICO
                     const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
                     const nuevoStock = (parseFloat(mat.stock_real || 0) || 0) - diff.delta; 
 
@@ -291,11 +292,18 @@ Object.assign(App.logic, {
                         costo_unitario: costoUnitario, total: -(diff.delta * costoUnitario), notas: diff.delta > 0 ? `Adición de hilo extra (Orden ${ordenId})` : `Devolución de hilo (Orden ${ordenId})`
                     };
                     operaciones.push({ action: 'guardar_fila', nombreHoja: 'movimientos_inventario', datos: movData });
-                    movsMemoria.push({ mat, cantDeducida: diff.delta, movData });
-                });
-            }
+                    movsMemoria.push({ mat, cantDeducidaFisica: diff.delta, movData, esReserva: false });
+                } else {
+                    // Si sigue pendiente: El cambio afecta al APARTADO
+                    const reservadoActual = parseFloat(mat.stock_reservado || 0) || 0;
+                    const nuevoReservado = Math.max(0, reservadoActual + diff.delta);
+                    
+                    operaciones.push({ action: 'actualizar_fila', nombreHoja: 'materiales', idFila: mat.id, datosNuevos: { stock_reservado: nuevoReservado } });
+                    movsMemoria.push({ mat, nuevoReservado, esReserva: true });
+                }
+            });
 
-            // ACTUALIZACIÓN DE ORDEN Y ARTESANOS (Esto sí se guarda siempre)
+            // ACTUALIZACIÓN DE ORDEN Y PAGO A ARTESANOS
             const datosOrdenUpdate = { receta_personalizada: recetaJson };
             const asignaciones = (App.state?.ordenes_produccion_artesanos || []).filter(a => a.orden_id === ordenId);
             const asignacionesActualizadas = [];
@@ -324,9 +332,13 @@ Object.assign(App.logic, {
                 Object.assign(orden, datosOrdenUpdate);
                 if (movsMemoria.length > 0) {
                     movsMemoria.forEach(m => {
-                        m.mat.stock_real = (parseFloat(m.mat.stock_real || 0) || 0) - m.cantDeducida;
-                        if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
-                        App.state.movimientos_inventario.push(m.movData);
+                        if (m.esReserva) {
+                            m.mat.stock_reservado = m.nuevoReservado;
+                        } else {
+                            m.mat.stock_real = (parseFloat(m.mat.stock_real || 0) || 0) - m.cantDeducidaFisica;
+                            if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
+                            App.state.movimientos_inventario.push(m.movData);
+                        }
                     });
                 }
                 asignacionesActualizadas.forEach(act => {
@@ -337,9 +349,10 @@ Object.assign(App.logic, {
                     }
                 });
 
-                App.ui.toast(hilosYaDescontados && diferencias.length > 0 ? "Hilos extras descontados" : "Receta guardada en la orden");
+                App.ui.toast(hilosYaDescontados && diferencias.length > 0 ? "Inventario físico actualizado" : "Receta actualizada y stock apartado ajustado");
                 App.ui.closeSheet();
                 App.router.handleRoute();
+                App.logic.revisarAlertasStock();
             } else {
                 App.ui.toast(res.message || "Error al guardar receta", "danger");
             }
