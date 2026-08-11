@@ -189,7 +189,10 @@ App.views.descontarMaterialesProduccion = async function (ordenId) {
         if (!mat) return;
 
         const stockActual = parseFloat(mat.stock_real || 0) || 0;
+        const reservadoActual = parseFloat(mat.stock_reservado || 0) || 0;
+        
         const nuevoStock = stockActual - cant;
+        const nuevoReservado = Math.max(0, reservadoActual - cant); // Liberamos el stock apartado
 
         if (nuevoStock < 0) {
             throw new Error(`Stock insuficiente: ${mat.nombre || matId}`);
@@ -203,7 +206,8 @@ App.views.descontarMaterialesProduccion = async function (ordenId) {
             nombreHoja: 'materiales',
             idFila: matId,
             datosNuevos: {
-                stock_real: nuevoStock
+                stock_real: nuevoStock,
+                stock_reservado: nuevoReservado
             }
         });
 
@@ -242,6 +246,7 @@ App.views.descontarMaterialesProduccion = async function (ordenId) {
         throw new Error(res.message || 'No se pudieron descontar materiales');
     }
 
+    // === AQUÍ ESTÁ LA ACTUALIZACIÓN DE MEMORIA (App.state) ===
     receta.forEach((item) => {
         const matId = item.mat_id;
         const cant = parseFloat(item.cant || 0) || 0;
@@ -250,6 +255,7 @@ App.views.descontarMaterialesProduccion = async function (ordenId) {
         const mat = (App.state?.inventario || []).find(m => m.id === matId);
         if (mat) {
             mat.stock_real = (parseFloat(mat.stock_real || 0) || 0) - cant;
+            mat.stock_reservado = Math.max(0, (parseFloat(mat.stock_reservado || 0) || 0) - cant);
         }
     });
 
@@ -289,31 +295,22 @@ App.views.descontarMaterialesProduccion = async function (ordenId) {
 
 App.views.accionProduccion = function (button, ordenId, actionName) {
     const actions = {
-    iniciar: {
-    fn: async () => {
-        // 1. Descontar primero, con el estado todavía estable
-        await App.views.descontarMaterialesProduccion(ordenId);
-
-        // 2. Luego cambiar estado a proceso
-        await App.logic.cambiarEstadoProduccion(ordenId, 'proceso');
-
-        // 3. Forzar estado local para que se vea de inmediato
-        const orden = App.state?.ordenes_produccion?.find(o => o.id === ordenId);
-        if (orden) {
-            orden.estado = 'proceso';
-            orden.materiales_descontados = true;
-            orden.materiales_revertidos = false;
-        }
-
-        // 4. Refrescar UI
-        if (App.router?.handleRoute) App.router.handleRoute();
-
-        return true;
-    },
- 
+        iniciar: {
+            fn: async () => {
+                await App.views.descontarMaterialesProduccion(ordenId);
+                await App.logic.cambiarEstadoProduccion(ordenId, 'proceso');
+                const orden = App.state?.ordenes_produccion?.find(o => o.id === ordenId);
+                if (orden) {
+                    orden.estado = 'proceso';
+                    orden.materiales_descontados = true;
+                    orden.materiales_revertidos = false;
+                }
+                if (App.router?.handleRoute) App.router.handleRoute();
+                return true;
+            },
             loadingText: 'Iniciando...',
-            loaderMessage: 'Moviendo orden a proceso...',
-            successMessage: 'Orden iniciada',
+            loaderMessage: 'Moviendo orden a proceso y descontando hilos físicos...',
+            successMessage: 'Orden iniciada e inventario actualizado',
             errorTitle: 'No se pudo iniciar la orden'
         },
         terminar: {
@@ -454,12 +451,12 @@ App.views._buildOrdenCard = function (o) {
                     ${resumenReceta.length ? `<br><strong>Hilos:</strong> ${resumenReceta.join(' · ')}` : '<br><strong>Hilos:</strong> Sin asignar'}
                 </div>
 
-               <div class="dm-list-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
+                <div class="dm-list-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verDetallesProduccion('${o.id}')">👁️ Detalles</button>
-                    ${o.estado === 'pendiente' ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'iniciar')">▶️ Iniciar</button>` : ''}
-                    ${o.estado === 'proceso' ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'terminar')">✅ Terminar</button>` : ''}
-                    ${o.estado !== 'pendiente' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'regresarPendiente')">↩️ Pendiente</button>` : ''}
-                    ${o.estado === 'pendiente' ? `<button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'eliminar')">🗑️</button>` : ''}
+                    ${String(o.estado || '').toLowerCase().trim() === 'pendiente' ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'iniciar')">▶️ Iniciar</button>` : ''}
+                    ${String(o.estado || '').toLowerCase().trim() === 'proceso' ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'terminar')">✅ Terminar</button>` : ''}
+                    ${String(o.estado || '').toLowerCase().trim() !== 'pendiente' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'regresarPendiente')">↩️ Pendiente</button>` : ''}
+                    ${String(o.estado || '').toLowerCase().trim() === 'pendiente' ? `<button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'eliminar')">🗑️</button>` : ''}
                 </div>
             </div>
         </div>
@@ -530,7 +527,6 @@ App.views.verDetallesProduccion = function (ordenId) {
     const prod = (App.state?.productos || []).find(x => x.id === pedDet.producto_id) || {};
     const nomCliente = p.cliente_id === 'STOCK_INTERNO' ? 'STOCK BODEGA' : (cliente.nombre || 'Desconocido');
 
-    // 1. BLOQUE DE ARTESANOS
     const asignaciones = App.views._getAsignacionesOrden(o.id);
     let asignacionesHtml = '';
     if (!asignaciones.length) {
@@ -562,9 +558,8 @@ App.views.verDetallesProduccion = function (ordenId) {
                 </div>
             `;
         }).join('') + `</div>`;
-    } // <-- Aquí termina correctamente el bloque de artesanos
+    }
 
-    // 2. BLOQUE DE HILOS (Ahora está afuera y es visible)
     let receta = [];
     try { receta = JSON.parse(o.receta_personalizada || '[]'); } catch (e) { receta = []; }
 
@@ -588,7 +583,6 @@ App.views.verDetallesProduccion = function (ordenId) {
         hilosHtml += `</div>`;
     }
 
-    // 3. RENDERIZADO VISUAL
     const html = `
         <div class="dm-list-card dm-mb-4" style="background:var(--dm-surface-2); padding:15px; border:none;">
             <div class="dm-row-between dm-mb-2">
@@ -817,7 +811,6 @@ App.views.modalMateriaPrima = function (ordenId) {
         `;
     };
 
-    // 1. Creamos un identificador único basado en la hora para esta ventana exacta
     const uniqueId = Date.now();
     let htmlFilas = '';
     
@@ -827,7 +820,6 @@ App.views.modalMateriaPrima = function (ordenId) {
         htmlFilas += window._generarFilaHiloModal();
     }
 
-    // 2. Usamos id="dynamic-form" para conectar con tu sistema base
     let html = `
         <form id="dynamic-form">
             <input type="hidden" name="orden_id" value="${ordenId}">
@@ -835,12 +827,12 @@ App.views.modalMateriaPrima = function (ordenId) {
                 ${htmlFilas}
             </div>
             <button type="button" class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="document.getElementById('hilos-wrapper-${uniqueId}').insertAdjacentHTML('beforeend', window._generarFilaHiloModal())">+ Añadir otro hilo</button>
-            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">💾 Guardar y Descontar Inventario</button>
+            <!-- AQUI SE CAMBIÓ EL TEXTO DEL BOTÓN -->
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">💾 Guardar Receta</button>
         </form>
     `;
 
     App.ui.openSheet('Hilos Utilizados', html, async (data) => {
-        // 3. Leemos directamente la caja única que creamos
         const wrapper = document.getElementById(`hilos-wrapper-${uniqueId}`);
         if (!wrapper) return;
 
@@ -859,15 +851,15 @@ App.views.modalMateriaPrima = function (ordenId) {
 
         if (recetaFinal.length === 0) {
             App.ui.toast("Debes agregar al menos un hilo válido mayor a 0", "warning");
-            throw new Error("Formulario incompleto"); // Evita que la ventana se cierre si hay error
+            throw new Error("Formulario incompleto");
         }
 
-        // 4. Se lo mandamos a logic.produccion (la cual ya programaste perfecta con el modelo Delta)
         return App.ui.runSafeAction({
             lockKey: `produccion:${ordenId}:receta:guardar`,
+            // AQUI SE CAMBIARON LOS MENSAJES PARA REFLEJAR SOLO EL GUARDADO
             loadingText: 'Guardando...',
-            loaderMessage: 'Descontando inventario y recalculando...',
-            successMessage: 'Hilos asignados y descontados correctamente',
+            loaderMessage: 'Guardando receta y recalculando pago...',
+            successMessage: 'Receta de hilos guardada correctamente',
             errorTitle: 'Error al guardar los hilos',
             closeSheetOnSuccess: true
         }, async () => App.logic.guardarRecetaProduccion(ordenId, recetaFinal));
