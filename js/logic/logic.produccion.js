@@ -150,6 +150,53 @@ Object.assign(App.logic, {
 
                 nuevosPagos.push(nuevoPago);
 
+                let invMemoria = null;
+        let invNuevo = null;
+
+        // === NUEVA LÓGICA: INGRESAR A INVENTARIO SI ES STOCK INTERNO ===
+        if (nuevoEstado === "listo") {
+            const detalle = this.obtenerDetalleDeOrden(orden);
+            if (detalle) {
+                const pedido = (App.state?.pedidos || []).find(p => p.id === detalle.pedido_id);
+                if (pedido && pedido.cliente_id === "STOCK_INTERNO") {
+                    const producto = (App.state?.productos || []).find(p => p.id === detalle.producto_id);
+                    if (producto) {
+                        const cantidadTerminada = parseFloat(detalle.cantidad || 1) || 1;
+                        const matExistente = (App.state?.inventario || []).find(m => m.nombre.toLowerCase() === producto.nombre.toLowerCase());
+                        const movId = "ENT-" + Date.now();
+                        const ahoraStr = new Date().toISOString();
+
+                        const baseMov = {
+                            id: movId, fecha: ahoraStr, tipo_movimiento: "entrada_produccion", origen: "orden",
+                            origen_id: ordenId, ref_tipo: "material", cantidad: cantidadTerminada, costo_unitario: 0,
+                            total: 0, notas: `Ingreso por finalización de orden en taller (${ordenId})`
+                        };
+
+                        if (matExistente) {
+                            const nuevoStockReal = (parseFloat(matExistente.stock_real || 0) || 0) + cantidadTerminada;
+                            operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: matExistente.id, datosNuevos: { stock_real: nuevoStockReal } });
+                            baseMov.ref_id = matExistente.id;
+                            baseMov.material_id = matExistente.id;
+                            operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: baseMov });
+                            invMemoria = { mat: matExistente, nuevoStock: nuevoStockReal, mov: baseMov };
+                        } else {
+                            const nuevoIdMat = "MAT-" + Date.now() + "-PROD";
+                            const nuevoMat = {
+                                id: nuevoIdMat, nombre: producto.nombre, tipo: "reventa", unidad: "Pzas",
+                                stock_real: cantidadTerminada, stock_minimo: 0, stock_reservado: 0, stock_comprometido: 0, costo_unitario: 0
+                            };
+                            operaciones.push({ action: "guardar_fila", nombreHoja: "materiales", datos: nuevoMat });
+                            baseMov.ref_id = nuevoIdMat;
+                            baseMov.material_id = nuevoIdMat;
+                            operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: baseMov });
+                            invNuevo = { mat: nuevoMat, mov: baseMov };
+                        }
+                    }
+                }
+            }
+        }
+        // ================================================================
+
                 operaciones.push({
                     action: "guardar_fila",
                     nombreHoja: "pago_artesanos",
@@ -171,6 +218,20 @@ Object.assign(App.logic, {
         if (res.status === "success") {
             Object.assign(orden, dataToUpdate);
 
+            // === AQUÍ INICIA EL CÓDIGO NUEVO QUE SINCRONIZA EL INVENTARIO ===
+            if (invMemoria) {
+                invMemoria.mat.stock_real = invMemoria.nuevoStock;
+                if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
+                App.state.movimientos_inventario.push(invMemoria.mov);
+            }
+            if (invNuevo) {
+                if (!Array.isArray(App.state.inventario)) App.state.inventario = [];
+                App.state.inventario.push(invNuevo.mat);
+                if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
+                App.state.movimientos_inventario.push(invNuevo.mov);
+            }
+            // === AQUÍ TERMINA EL CÓDIGO NUEVO ===
+
             if (!Array.isArray(App.state.pago_artesanos)) {
                 App.state.pago_artesanos = [];
             }
@@ -184,7 +245,7 @@ Object.assign(App.logic, {
             );
 
             App.router.handleRoute();
-       } else {
+        } else {
                 App.ui.toast(res.message || "Error al guardar receta", "danger");
             }
         } catch (error) {
