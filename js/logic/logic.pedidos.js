@@ -32,12 +32,11 @@ Object.assign(App.logic, {
 
             let estadoCalculado = "nuevo";
 
-if (datosFormulario.cliente_id === "STOCK_INTERNO") {
-    // Si es interno, salta las reglas de pago y entra directo a taller
-    estadoCalculado = "taller"; 
-} else if (todosReventa) {
-    estadoCalculado = anticipoNum >= totalNum ? "pagado" : "listo para entregar";
-}
+            if (datosFormulario.cliente_id === "STOCK_INTERNO") {
+                estadoCalculado = "taller"; 
+            } else if (todosReventa) {
+                estadoCalculado = anticipoNum >= totalNum ? "pagado" : "listo para entregar";
+            }
 
             const datosPedido = {
                 id: pedidoId,
@@ -78,7 +77,7 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
 
                 const producto = (App.state.productos || []).find(p => p.id === itemCarro.producto_id);
 
-               if (producto) { // Quitamos el candado de 'reventa' para que aparte TODO
+                if (producto) { 
                     for (let i = 1; i <= 20; i++) {
                         const matId = producto[`mat_${i}`];
                         const cantTeorica = (parseFloat(producto[`cant_${i}`] || 0)) * (parseInt(itemCarro.cantidad) || 1);
@@ -99,7 +98,6 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
 
                                 material.stock_reservado = nuevoReservado;
 
-                                // Solo generamos movimiento Kardex si es venta directa, para no ensuciar la salida del taller
                                 if (producto.categoria === "reventa") {
                                     const mov = {
                                         id: "MOV-" + Date.now() + "-" + i + "-" + index,
@@ -130,6 +128,7 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
                         }
                     }
                 }
+            });
 
             const resPedido = await App.api.fetch("ejecutar_lote", { operaciones });
 
@@ -144,13 +143,11 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
                 App.state.pedido_detalle.push(...nuevosDetallesMemoria);
                 App.state.movimientos_inventario.push(...nuevosMovs);
 
+                if (datosPedido.estado === "taller") {
+                    await App.logic.generarOrdenesDesdePedido(nuevosDetallesMemoria);
+                }
 
-    if (datosPedido.estado === "taller") {
-        await App.logic.generarOrdenesDesdePedido(nuevosDetallesMemoria);
-    }
-
-
-                App.ui.toast(todosReventa ? "Pedido guardado y stock apartado" : "Pedido guardado");
+                App.ui.toast(todosReventa ? "Pedido guardado y stock apartado" : "Pedido guardado y hilos apartados");
                 App.router.handleRoute();
                 App.logic.revisarAlertasStock();
             } else {
@@ -175,13 +172,11 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
                 throw new Error("Pedido no encontrado");
             }
 
-            // 1. Buscamos todas las órdenes del Taller vinculadas a este pedido
             const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === id);
             const ordenes = (App.state.ordenes_produccion || []).filter(o =>
                 detalles.some(d => d.id === o.pedido_detalle_id)
             );
 
-            // 2. EL ESCUDO PROTECTOR DEFINITIVO CON ALERTA CLARA
             const ordenEnProcesoOTerminada = ordenes.some(o => {
                 const estadoTaller = String(o.estado || '').toLowerCase().trim();
                 return estadoTaller === 'proceso' || estadoTaller === 'listo';
@@ -189,54 +184,48 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
 
             if (ordenEnProcesoOTerminada) {
                 App.ui.hideLoader();
-                // Mostramos un toast de advertencia explícito y frenamos la ejecución
-                App.ui.toast("No se puede eliminar: El taller ya inició o terminó este pedido. Debes regresar la orden en el taller a 'Pendiente' primero.", "danger");
-                return false;
+                throw new Error("⚠️ BLOQUEADO: El taller ya inició o terminó esta orden. Regrésala a 'Pendiente' primero para liberar los hilos.");
             }
 
             const operaciones = [];
 
-            // 3. Devolver inventario SOLO para productos de reventa directa
             detalles.forEach(detalle => {
                 const producto = (App.state.productos || []).find(p => p.id === detalle.producto_id);
                 const cantidadDetalle = parseInt(detalle.cantidad) || 1;
 
                 if (!producto) return;
 
-                if (producto.categoria === "reventa") {
-                    for (let i = 1; i <= 20; i++) {
-                        const matId = producto[`mat_${i}`];
-                        const cantTeorica = (parseFloat(producto[`cant_${i}`] || 0)) * cantidadDetalle;
+                for (let i = 1; i <= 20; i++) {
+                    const matId = producto[`mat_${i}`];
+                    const cantTeorica = (parseFloat(producto[`cant_${i}`] || 0)) * cantidadDetalle;
 
-                        if (matId && cantTeorica > 0) {
-                            const mat = (App.state.inventario || []).find(m => m.id === matId);
-                            if (!mat) continue;
+                    if (matId && cantTeorica > 0) {
+                        const mat = (App.state.inventario || []).find(m => m.id === matId);
+                        if (!mat) continue;
 
-                            if (pedido.estado === "listo para entregar" || pedido.estado === "pagado" || pedido.estado === "entregado") {
-                                const nuevoReal = parseFloat(mat.stock_real || 0) + cantTeorica;
-                                operaciones.push({
-                                    action: "actualizar_fila",
-                                    nombreHoja: "materiales",
-                                    idFila: mat.id,
-                                    datosNuevos: { stock_real: nuevoReal }
-                                });
-                                mat.stock_real = nuevoReal;
-                            } else {
-                                const nuevoReservado = Math.max(0, parseFloat(mat.stock_reservado || 0) - cantTeorica);
-                                operaciones.push({
-                                    action: "actualizar_fila",
-                                    nombreHoja: "materiales",
-                                    idFila: mat.id,
-                                    datosNuevos: { stock_reservado: nuevoReservado }
-                                });
-                                mat.stock_reservado = nuevoReservado;
-                            }
+                        if (pedido.estado === "listo para entregar" || pedido.estado === "pagado" || pedido.estado === "entregado") {
+                            const nuevoReal = parseFloat(mat.stock_real || 0) + cantTeorica;
+                            operaciones.push({
+                                action: "actualizar_fila",
+                                nombreHoja: "materiales",
+                                idFila: mat.id,
+                                datosNuevos: { stock_real: nuevoReal }
+                            });
+                            mat.stock_real = nuevoReal;
+                        } else {
+                            const nuevoReservado = Math.max(0, parseFloat(mat.stock_reservado || 0) - cantTeorica);
+                            operaciones.push({
+                                action: "actualizar_fila",
+                                nombreHoja: "materiales",
+                                idFila: mat.id,
+                                datosNuevos: { stock_reservado: nuevoReservado }
+                            });
+                            mat.stock_reservado = nuevoReservado;
                         }
                     }
                 }
             });
 
-            // 4. ELIMINACIÓN EN CASCADA (Borra el pedido y limpia el taller)
             operaciones.push({ action: "eliminar_fila", nombreHoja: "pedidos", idFila: id });
 
             detalles.forEach(det => {
@@ -263,7 +252,6 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
             App.ui.hideLoader();
 
             if (res.status === "success") {
-                // Sincronizar memoria para que desaparezca al instante
                 App.state.pedidos = (App.state.pedidos || []).filter(p => p.id !== id);
                 App.state.pedido_detalle = (App.state.pedido_detalle || []).filter(d => d.pedido_id !== id);
                 App.state.ordenes_produccion = (App.state.ordenes_produccion || []).filter(o =>
