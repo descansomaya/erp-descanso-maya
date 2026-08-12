@@ -147,6 +147,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
             const venta = (parseFloat(det.precio_unitario || 0) || 0) * cantidad;
 
             const orden = ordenes.find(o => o.pedido_detalle_id === det.id);
+            const esReventa = (producto.categoria === 'reventa' || producto.clasificacion === 'Reventa');
 
             let costoMateriales = 0;
             let manoObra = 0;
@@ -155,8 +156,8 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
             let folio = '';
 
             if (orden) {
-                // FABRICACIÓN (Taller)
-                tipo = 'Fabricado';
+                // 1. FABRICACIÓN SOBRE PEDIDO (Taller)
+                tipo = 'Fabricado (Taller)';
                 folio = orden.id;
                 const receta = parseReceta(orden);
                 costoMateriales = receta.reduce((acc, item) => {
@@ -174,12 +175,38 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 resFab.costo_real += costoReal;
                 resFab.utilidad += (venta - costoReal);
 
+            } else if (!esReventa) {
+                // 2. FABRICACIÓN DESDE STOCK (Bodega)
+                tipo = 'Fabricado (Bodega)';
+                folio = p.id;
+                
+                // Para calcular lo que te costó, el sistema va a leer la receta original guardada en tu catálogo
+                let costoMatEstandar = 0;
+                for (let i = 1; i <= 20; i++) {
+                    if (producto[`mat_${i}`]) {
+                        const mat = materiales.find(m => m.id === producto[`mat_${i}`]) || {};
+                        costoMatEstandar += (parseFloat(producto[`cant_${i}`] || 0) * (parseFloat(mat.costo_unitario || 0) || 0));
+                    }
+                }
+                costoMateriales = costoMatEstandar * cantidad;
+                
+                // Al sacarla de bodega hoy, no sabemos exactamente a qué artesano se le pagó en el pasado. 
+                // Por lo tanto, la mano de obra saldrá temporalmente en $0 para esta venta en mostrador.
+                manoObra = 0; 
+                costoReal = costoMateriales + manoObra;
+
+                resFab.ordenes += 1;
+                resFab.venta += venta;
+                resFab.costo_materiales += costoMateriales;
+                resFab.mano_obra += manoObra;
+                resFab.costo_real += costoReal;
+                resFab.utilidad += (venta - costoReal);
+
             } else {
-                // REVENTA
+                // 3. REVENTA PURA
                 tipo = 'Reventa';
                 folio = p.id;
                 
-                // Extrae el costo unitario del catálogo de productos
                 const costoUnitario = parseFloat(producto.costo_unitario || producto.precio_compra || producto.costo || 0);
                 costoReal = costoUnitario * cantidad;
                 costoMateriales = costoReal; 
