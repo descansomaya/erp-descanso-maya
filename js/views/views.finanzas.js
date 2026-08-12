@@ -151,7 +151,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
             
             const porcionComision = totalVentaPedido > 0 ? (venta / totalVentaPedido) * comisionPedido : 0;
 
-            const orden = ordenes.find(o => o.pedido_detalle_id === det.id);
+const orden = ordenes.find(o => o.pedido_detalle_id === det.id);
             const esReventa = (producto.categoria === 'reventa' || producto.clasificacion === 'Reventa');
 
             let costoMateriales = 0;
@@ -160,24 +160,26 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
             let tipo = '';
             let folio = '';
 
-if (orden) {
+            // BLINDAJE: Si existe una orden en el taller, OBLIGATORIAMENTE es fabricada, nunca reventa
+            if (orden) {
                 // 1. FABRICACIÓN SOBRE PEDIDO (Taller)
                 tipo = 'Fabricado (Taller)';
                 folio = orden.id;
 
-                // Buscamos las salidas reales registradas en movimientos_inventario para esta orden
                 const movsOrden = (App.state.movimientos_inventario || []).filter(m => m.origen_id === orden.id || m.origen_id === p.id);
 
                 if (movsOrden.length > 0) {
-                    // Usamos Math.abs() para asegurar que los costos de materiales siempre sumen en positivo, sin importar reversas de prueba
                     costoMateriales = movsOrden.reduce((acc, m) => acc + Math.abs(parseFloat(m.total || 0) || 0), 0);
                 } else {
-                    const receta = parseReceta(orden);
-                    costoMateriales = receta.reduce((acc, item) => {
-                        const mat = materiales.find(m => m.id === item.mat_id) || {};
-                        const precioHistorico = parseFloat(item.costo_unitario || mat.costo_unitario || 0);
-                        return acc + ((parseFloat(item.cant || 0) || 0) * precioHistorico);
-                    }, 0);
+                    // Si los movimientos fallaron por las pruebas, leemos directo de la receta oficial del producto para que no falle
+                    let costoMatReceta = 0;
+                    for (let i = 1; i <= 20; i++) {
+                        if (producto[`mat_${i}`]) {
+                            const mat = materiales.find(m => m.id === producto[`mat_${i}`]) || {};
+                            costoMatReceta += (parseFloat(producto[`cant_${i}`] || 0) * (parseFloat(mat.costo_unitario || 0) || 0));
+                        }
+                    }
+                    costoMateriales = costoMatReceta * cantidad;
                 }
 
                 const pagoArtesano = asignaciones.filter(a => a.orden_id === orden.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
@@ -192,7 +194,48 @@ if (orden) {
                 resFab.mano_obra += manoObra;
                 resFab.costo_real += costoReal;
                 resFab.utilidad += (venta - costoReal);
-            
+
+            } else if (!esReventa) {
+                // 2. FABRICACIÓN DESDE STOCK (Bodega)
+                tipo = 'Fabricado (Bodega)';
+                folio = p.id;
+                
+                if (det.costo_mat_historico || det.costo_mo_historico) {
+                    costoMateriales = parseFloat(det.costo_mat_historico || 0) * cantidad;
+                    const pagoHistoricoMo = parseFloat(det.costo_mo_historico || 0) * cantidad;
+                    manoObra = pagoHistoricoMo + porcionComision;
+                } else {
+                    let costoMatEstandar = 0;
+                    for (let i = 1; i <= 20; i++) {
+                        if (producto[`mat_${i}`]) {
+                            const mat = materiales.find(m => m.id === producto[`mat_${i}`]) || {};
+                            costoMatEstandar += (parseFloat(producto[`cant_${i}`] || 0) * (parseFloat(mat.costo_unitario || 0) || 0));
+                        }
+                    }
+                    costoMateriales = costoMatEstandar * cantidad;
+
+                    const ultimaOrdenProd = ordenes.filter(o => {
+                        const dRef = detalle.find(dt => dt.id === o.pedido_detalle_id);
+                        return dRef && dRef.producto_id === producto.id;
+                    }).sort((a, b) => new Date(b.fecha_creacion || 0) - new Date(a.fecha_creacion || 0))[0];
+
+                    let ultimoPagoMo = 0;
+                    if (ultimaOrdenProd) {
+                        ultimoPagoMo = asignaciones.filter(a => a.orden_id === ultimaOrdenProd.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
+                                                   .reduce((acc, a) => acc + (parseFloat(a.pago_estimado || a.total || 0) || 0), 0);
+                    }
+                    manoObra = ultimoPagoMo + porcionComision;
+                }
+
+                costoReal = costoMateriales + manoObra;
+
+                resFab.ordenes += 1;
+                resFab.venta += venta;
+                resFab.costo_materiales += costoMateriales;
+                resFab.mano_obra += manoObra;
+                resFab.costo_real += costoReal;
+                resFab.utilidad += (venta - costoReal);
+
             } else {
                 // 3. REVENTA PURA
                 tipo = 'Reventa';
