@@ -6,45 +6,40 @@ window.App = window.App || {};
 App.logic = App.logic || {};
 
 Object.assign(App.logic, {
+    
     generarReporteRentabilidad() {
-        const stats = {};
+        // Conectamos el reporte con el nuevo motor de costeo que incluye Reventa y Fabricación
+        // Validamos que exista la función antes de llamarla para evitar errores
+        if (typeof App.views.calcularCostoRealHamacas !== 'function') {
+            console.warn("La función calcularCostoRealHamacas no está definida. Asegúrate de actualizar views.finanzas.js");
+            return [];
+        }
 
-        (App.state.ordenes_produccion || []).forEach((orden) => {
-            if (orden.estado !== "listo" || !orden.costos_finales) return;
+        const datosCosteo = App.views.calcularCostoRealHamacas('todo').ordenes;
+        const agrupado = {};
 
-            const detalle = (App.state.pedido_detalle || []).find(d => d.id === orden.pedido_detalle_id);
-            if (!detalle) return;
-
-            const producto = (App.state.productos || []).find(p => p.id === detalle.producto_id);
-            if (!producto) return;
-
-            try {
-                const cf = JSON.parse(orden.costos_finales);
-
-                if (parseFloat(cf.precio_venta || 0) <= 0) return;
-
-                if (!stats[producto.id]) {
-                    stats[producto.id] = {
-                        nombre: producto.nombre,
-                        ventas: 0,
-                        costo_mat: 0,
-                        costo_mo: 0,
-                        utilidad: 0,
-                        cantidad: 0
-                    };
-                }
-
-                stats[producto.id].ventas += parseFloat(cf.precio_venta || 0);
-                stats[producto.id].costo_mat += parseFloat(cf.materiales || 0);
-                stats[producto.id].costo_mo += parseFloat(cf.mano_obra || 0);
-                stats[producto.id].utilidad += parseFloat(cf.utilidad || 0);
-                stats[producto.id].cantidad += 1;
-            } catch (e) {
-                console.warn("No se pudo interpretar costos_finales en orden:", orden.id, e);
+        // Agrupamos la rentabilidad por producto
+        datosCosteo.forEach(item => {
+            if (!agrupado[item.producto]) {
+                agrupado[item.producto] = { 
+                    nombre: item.producto, 
+                    ventas: 0, 
+                    costo_mat: 0, // Usaremos esto para el modal si es necesario
+                    costo_mo: 0,  // Usaremos esto para el modal si es necesario
+                    utilidad: 0, 
+                    cantidad: 0 
+                };
             }
+            
+            agrupado[item.producto].ventas += item.venta;
+            agrupado[item.producto].costo_mat += item.costo_materiales;
+            agrupado[item.producto].costo_mo += item.mano_obra;
+            agrupado[item.producto].utilidad += item.utilidad;
+            agrupado[item.producto].cantidad += item.cantidad;
         });
 
-        return Object.values(stats).sort((a, b) => b.utilidad - a.utilidad);
+        // Retornamos el arreglo ordenado por los productos que dejan más ganancia neta
+        return Object.values(agrupado).sort((a, b) => b.utilidad - a.utilidad);
     },
 
     generarReporteTopProductos() {
