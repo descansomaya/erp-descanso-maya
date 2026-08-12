@@ -161,26 +161,16 @@ const orden = ordenes.find(o => o.pedido_detalle_id === det.id);
             let folio = '';
 
             // BLINDAJE: Si existe una orden en el taller, OBLIGATORIAMENTE es fabricada, nunca reventa
-            if (orden) {
-                // 1. FABRICACIÓN SOBRE PEDIDO (Taller)
+           if (orden) {
+                // 1. FABRICACIÓN SOBRE PEDIDO (Taller) -> Forzamos a que lea exactamente la misma receta del Taller
                 tipo = 'Fabricado (Taller)';
                 folio = orden.id;
 
-                const movsOrden = (App.state.movimientos_inventario || []).filter(m => m.origen_id === orden.id || m.origen_id === p.id);
-
-                if (movsOrden.length > 0) {
-                    costoMateriales = movsOrden.reduce((acc, m) => acc + Math.abs(parseFloat(m.total || 0) || 0), 0);
-                } else {
-                    // Si los movimientos fallaron por las pruebas, leemos directo de la receta oficial del producto para que no falle
-                    let costoMatReceta = 0;
-                    for (let i = 1; i <= 20; i++) {
-                        if (producto[`mat_${i}`]) {
-                            const mat = materiales.find(m => m.id === producto[`mat_${i}`]) || {};
-                            costoMatReceta += (parseFloat(producto[`cant_${i}`] || 0) * (parseFloat(mat.costo_unitario || 0) || 0));
-                        }
-                    }
-                    costoMateriales = costoMatReceta * cantidad;
-                }
+                const receta = parseReceta(orden);
+                costoMateriales = receta.reduce((acc, item) => {
+                    const mat = materiales.find(m => m.id === item.mat_id) || {};
+                    return acc + ((parseFloat(item.cant || 0) || 0) * (parseFloat(mat.costo_unitario || 0) || 0));
+                }, 0);
 
                 const pagoArtesano = asignaciones.filter(a => a.orden_id === orden.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
                                        .reduce((acc, a) => acc + (parseFloat(a.pago_estimado || a.total || 0) || 0), 0);
