@@ -164,11 +164,23 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 // 1. FABRICACIÓN SOBRE PEDIDO (Taller)
                 tipo = 'Fabricado (Taller)';
                 folio = orden.id;
-                const receta = parseReceta(orden);
-                costoMateriales = receta.reduce((acc, item) => {
-                    const mat = materiales.find(m => m.id === item.mat_id) || {};
-                    return acc + ((parseFloat(item.cant || 0) || 0) * (parseFloat(mat.costo_unitario || 0) || 0));
-                }, 0);
+
+                // Buscamos las salidas reales registradas en movimientos_inventario para esta orden
+                const movsOrden = (App.state.movimientos_inventario || []).filter(m => m.origen_id === orden.id || m.origen_id === p.id);
+
+                if (movsOrden.length > 0) {
+                    // Leemos el costo real e histórico que se registró al momento de la salida de insumos
+                    costoMateriales = movsOrden.reduce((acc, m) => acc + (parseFloat(m.total || 0) || 0), 0);
+                } else {
+                    // Respaldo por si no hay movimiento registrado: lee la receta multiplicada por el inventario
+                    const receta = parseReceta(orden);
+                    costoMateriales = receta.reduce((acc, item) => {
+                        const mat = materiales.find(m => m.id === item.mat_id) || {};
+                        const precioHistorico = parseFloat(item.costo_unitario || mat.costo_unitario || 0);
+                        return acc + ((parseFloat(item.cant || 0) || 0) * precioHistorico);
+                    }, 0);
+                }
+
                 const pagoArtesano = asignaciones.filter(a => a.orden_id === orden.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
                                        .reduce((acc, a) => acc + (parseFloat(a.pago_estimado || a.total || 0) || 0), 0);
                 
@@ -181,7 +193,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 resFab.mano_obra += manoObra;
                 resFab.costo_real += costoReal;
                 resFab.utilidad += (venta - costoReal);
-
+                
             } else if (!esReventa) {
                 // 2. FABRICACIÓN DESDE STOCK (Bodega) -> Con lectura inteligente del histórico de taller
                 tipo = 'Fabricado (Bodega)';
