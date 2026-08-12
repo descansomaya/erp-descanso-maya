@@ -260,7 +260,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
         });
     });
 
-    // 2. PROCESAR REPARACIONES
+   // 2. PROCESAR REPARACIONES (Búsqueda inteligente en Nómina/Pagos)
     const reparacionesValidas = reparaciones.filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
 
     reparacionesValidas.forEach(r => {
@@ -268,8 +268,14 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
         const nombreCliente = cliente.nombre || r.cliente_nombre || r.cliente_id || 'Cliente';
         
         const ventaRep = parseFloat(r.precio || 0) || 0;
-        const pagoArtesanoRep = asignaciones.filter(a => a.orden_id === r.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
-                                           .reduce((acc, a) => acc + (parseFloat(a.pago_estimado || a.total || 0) || 0), 0);
+        
+        // Busca el pago del artesano en la tabla de nómina por orden_id, reparacion_id o ref_id
+        const pagoArtesanoNomi = asignaciones
+            .filter(a => (a.orden_id === r.id || a.reparacion_id === r.id || a.ref_id === r.id) && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
+            .reduce((acc, a) => acc + (parseFloat(a.pago_estimado || a.monto || a.total || 0) || 0), 0);
+        
+        const pagoArtesanoDirecto = parseFloat(r.costo_mano_obra || 0) || 0;
+        const pagoArtesanoRep = pagoArtesanoNomi > 0 ? pagoArtesanoNomi : pagoArtesanoDirecto;
         
         const costoMatRep = parseFloat(r.costo_materiales || 0) || 0;
         const costoRealRep = costoMatRep + pagoArtesanoRep;
