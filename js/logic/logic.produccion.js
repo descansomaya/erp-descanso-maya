@@ -607,8 +607,8 @@ Object.assign(App.logic, {
         }
     },
 
-    // ==========================================
-    // 4. GENERAR ÓRDENES DESDE PEDIDO
+   // ==========================================
+    // 4. GENERAR ÓRDENES DESDE PEDIDO (CON CONGELADO DE COSTOS)
     // ==========================================
     async generarOrdenesDesdePedido(detallesArray) {
         try {
@@ -622,10 +622,14 @@ Object.assign(App.logic, {
                 const recetaBase = [];
 
                 for (let i = 1; i <= 20; i++) {
-                    if (producto[`mat_${i}`]) {
+                    const matId = producto[`mat_${i}`];
+                    if (matId) {
+                        const mat = (App.state?.inventario || []).find(m => m.id === matId) || {};
                         recetaBase.push({
-                            mat_id: producto[`mat_${i}`], cant: producto[`cant_${i}`],
-                            uso: producto[`uso_${i}`] || "Cuerpo"
+                            mat_id: matId, 
+                            cant: producto[`cant_${i}`],
+                            uso: producto[`uso_${i}`] || "Cuerpo",
+                            costo_unitario: parseFloat(mat.costo_unitario || 0) // <--- FOTO CONGELADA DEL COSTO DEL HILO
                         });
                     }
                 }
