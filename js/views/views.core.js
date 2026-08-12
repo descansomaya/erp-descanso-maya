@@ -251,6 +251,7 @@ App.views.mas = function() {
                 ${card("nomina","💵","Nómina")}
                 ${card("reportes","📈","Reportes")}
                 ${card("clientes","👥","Clientes")}
+                ${card("vendedores","💼","Vendedores")} <!-- NUEVO MÓDULO -->
                 ${card("proveedores","🚚","Proveedores")}
                 ${card("artesanos","🧑‍🎨","Artesanos")}
                 ${card("productos","🧵","Productos")}
