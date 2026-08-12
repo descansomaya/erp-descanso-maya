@@ -265,17 +265,27 @@ window.generarListaPedidos = function(tipo) {
 // CARRITO Y CREACIÓN DE PEDIDOS MÚLTIPLES
 // ==========================================
 App.views._formPedidoInterno = function(obj = null, prefill = null) {
-    const dataBase = Object.assign({ cantidad: 1, anticipo: 0, comision: 0 }, prefill || {}, obj || {});
+    // 1. Agregamos vendedor_id a los datos base
+    const dataBase = Object.assign({ cantidad: 1, anticipo: 0, comision: 0, vendedor_id: '' }, prefill || {}, obj || {});
 
     // Iniciamos la memoria del carrito
     if (!obj) { window._carritoTemp = []; }
 
+    // 2. Preparamos la lista de Clientes
     let htmlClientes = '<option value="STOCK_INTERNO">STOCK BODEGA</option>';
     (App.state.clientes || []).forEach(c => {
         const selected = dataBase.cliente_id === c.id ? 'selected' : '';
         htmlClientes += `<option value="${c.id}" ${selected}>${App.ui.safe(c.nombre)}</option>`;
     });
 
+    // 3. NUEVO: Preparamos la lista de Vendedores
+    let htmlVendedores = '<option value="">-- Venta Directa (Sin Vendedor) --</option>';
+    (App.state.vendedores || []).forEach(v => {
+        const selected = dataBase.vendedor_id === v.id ? 'selected' : '';
+        htmlVendedores += `<option value="${v.id}" ${selected}>${App.ui.safe(v.nombre)}</option>`;
+    });
+
+    // 4. Preparamos la lista de Productos
     let htmlProductos = '<option value="">-- Seleccionar producto --</option>';
     (App.state.productos || []).forEach(p => {
         const precio = p.precio_venta || 0;
@@ -334,9 +344,18 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
 
     const formHTML = `
         <form id="dynamic-form">
-            <div class="dm-form-group">
-                <label class="dm-label">Cliente / Destino</label>
-                <select class="dm-select" name="cliente_id" onchange="window.verificarStockInterno()">${htmlClientes}</select>
+            <!-- NUEVO: Fila compartida para Cliente y Vendedor -->
+            <div class="dm-form-row">
+                <div class="dm-form-group">
+                    <label class="dm-label">Cliente / Destino</label>
+                    <select class="dm-select" name="cliente_id" onchange="window.verificarStockInterno()">${htmlClientes}</select>
+                </div>
+                <div class="dm-form-group">
+                    <label class="dm-label" style="color: #2B6CB0;">¿Quién cerró la venta?</label>
+                    <select class="dm-select" name="vendedor_id" style="border-color: #bee3f8; background-color: #ebf8ff;">
+                        ${htmlVendedores}
+                    </select>
+                </div>
             </div>
 
             ${htmlCarrito}
@@ -380,7 +399,7 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
                 App.ui.toast("Debes agregar al menos un artículo a la lista", "warning");
                 throw new Error("Carrito vacío");
             }
-            data.carrito = window._carritoTemp; // Inyectamos el carrito completo al servidor
+            data.carrito = window._carritoTemp;
         }
 
         const action = obj ? () => App.logic.actualizarRegistroGenerico('pedidos', obj.id, data, 'pedidos') : () => App.logic.guardarNuevoPedido(data);
@@ -395,7 +414,6 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
     });
 
     if (!obj) {
-        // Funciones exclusivas de la ventana de creación
         window.agregarAlCarrito = function() {
             const prodSel = document.getElementById('cart-prod-select');
             const qtyInp = document.getElementById('cart-qty');
@@ -419,7 +437,6 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
                 subtotal: qty * price
             });
             
-            // Limpiamos los campos
             qtyInp.value = 1;
             priceInp.value = '';
             prodSel.value = '';
@@ -480,7 +497,6 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
         if(typeof window.verificarStockInterno === 'function') window.verificarStockInterno();
     }, 150);
 };
-
 App.views.formPedido = function(id = null) {
     const obj = id ? (App.state.pedidos || []).find(p => p.id === id) : null;
     return App.views._formPedidoInterno(obj, null);
