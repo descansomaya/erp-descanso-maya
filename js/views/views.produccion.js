@@ -379,9 +379,18 @@ App.views._buildOrdenCard = function (o) {
 
     let costoMateriales = 0;
     const receta = App.views._getRecetaOrden(o);
-    const resumenReceta = receta.slice(0, 3).map(item => {
+    
+    // CORRECCIÓN: Sumamos el 100% de la receta sin recortar a 3 ítems
+    receta.forEach(item => {
         const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id);
-        if (mat) costoMateriales += (parseFloat(mat.costo_unitario || 0) || 0) * (parseFloat(item.cant || 0) || 0);
+        if (mat) {
+            const precioAplicado = parseFloat(item.costo_unitario !== undefined ? item.costo_unitario : (mat.costo_unitario || 0)) || 0;
+            costoMateriales += precioAplicado * (parseFloat(item.cant || 0) || 0);
+        }
+    });
+
+    const resumenReceta = receta.map(item => {
+        const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id);
         return mat ? `${App.ui.safe(item.cant)}x ${App.ui.safe(mat.nombre)}` : null;
     }).filter(Boolean);
 
@@ -807,9 +816,15 @@ App.views.modalMateriaPrima = function (ordenId) {
             const mId = fila.querySelector('.mat-select').value;
             const c = parseFloat(fila.querySelector('.cant-input').value || 0);
             const u = fila.querySelector('.uso-select').value;
+            const mat = (App.state?.inventario || []).find(m => m.id === mId);
 
             if (mId && c > 0) {
-                recetaFinal.push({ mat_id: mId, cant: c, uso: u });
+                recetaFinal.push({ 
+                    mat_id: mId, 
+                    cant: c, 
+                    uso: u,
+                    costo_unitario: parseFloat(mat?.costo_unitario || 0) // <--- Congela el costo si se edita en el modal
+                });
             }
         });
 
