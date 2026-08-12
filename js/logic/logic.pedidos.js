@@ -56,15 +56,34 @@ Object.assign(App.logic, {
             const nuevosMovs = [];
             const nuevosDetallesMemoria = [];
 
-            listaProductos.forEach((itemCarro, index) => {
+          listaProductos.forEach((itemCarro, index) => {
                 const idDetalle = "PDET-" + Date.now() + "-" + index;
+                const producto = (App.state.productos || []).find(p => p.id === itemCarro.producto_id);
+
+                // --- NUEVO: CONGELADO DE COSTOS ---
+                let cMatH = 0;
+                let cMoH = 0;
+                if (producto && producto.categoria !== "reventa") {
+                    // Calculamos material según receta del producto
+                    for (let i = 1; i <= 20; i++) {
+                        const matId = producto[`mat_${i}`];
+                        if (matId) {
+                            const mat = (App.state.inventario || []).find(m => m.id === matId) || {};
+                            cMatH += (parseFloat(producto[`cant_${i}`] || 0) * (parseFloat(mat.costo_unitario || 0)));
+                        }
+                    }
+                    cMoH = parseFloat(producto.costo_mano_obra || 0); // Este campo lo pusimos en el paso anterior
+                }
+                // ----------------------------------
 
                 const datosDetalle = {
                     id: idDetalle,
                     pedido_id: pedidoId,
                     producto_id: itemCarro.producto_id,
                     cantidad: parseInt(itemCarro.cantidad) || 1,
-                    precio_unitario: parseFloat(itemCarro.precio_unitario || 0)
+                    precio_unitario: parseFloat(itemCarro.precio_unitario || 0),
+                    costo_mat_historico: cMatH, // Guardamos la foto del costo
+                    costo_mo_historico: cMoH    // Guardamos la foto de la mano de obra
                 };
 
                 operaciones.push({
@@ -72,7 +91,6 @@ Object.assign(App.logic, {
                     nombreHoja: "pedido_detalle",
                     datos: datosDetalle
                 });
-
                 nuevosDetallesMemoria.push(datosDetalle);
 
                 const producto = (App.state.productos || []).find(p => p.id === itemCarro.producto_id);
