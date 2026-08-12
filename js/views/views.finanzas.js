@@ -161,15 +161,17 @@ const orden = ordenes.find(o => o.pedido_detalle_id === det.id);
             let folio = '';
 
             // BLINDAJE: Si existe una orden en el taller, OBLIGATORIAMENTE es fabricada, nunca reventa
-          if (orden) {
-                // 1. FABRICACIÓN SOBRE PEDIDO (Taller) -> Leemos estrictamente la receta de la orden
+         if (orden) {
+                // 1. FABRICACIÓN SOBRE PEDIDO (Taller)
                 tipo = 'Fabricado (Taller)';
                 folio = orden.id;
 
                 const receta = parseReceta(orden);
                 costoMateriales = receta.reduce((acc, item) => {
                     const mat = materiales.find(m => m.id === item.mat_id) || {};
-                    return acc + ((parseFloat(item.cant || 0) || 0) * (parseFloat(mat.costo_unitario || 0) || 0));
+                    // Prioriza el costo congelado dentro del JSON de la orden; si es una orden antigua, usa el de inventario como respaldo
+                    const precioAplicado = parseFloat(item.costo_unitario !== undefined ? item.costo_unitario : (mat.costo_unitario || 0)) || 0;
+                    return acc + ((parseFloat(item.cant || 0) || 0) * precioAplicado);
                 }, 0);
 
                 const pagoArtesano = asignaciones.filter(a => a.orden_id === orden.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
