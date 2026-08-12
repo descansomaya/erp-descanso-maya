@@ -36,10 +36,7 @@ App.views.detalleFinanzas = function(tipo, filtro) {
     
     if (tipo === 'ventas') {
         titulo = 'Ventas totales';
-        
-        // 1. Obtenemos pedidos (excluyendo STOCK_INTERNO)
         const pedidos = (App.state.pedidos || []).filter(p => p.cliente_id !== 'STOCK_INTERNO' && entraEnFiltro(p.fecha_creacion || p.fecha));
-        // 2. Obtenemos reparaciones
         const reparaciones = (App.state.reparaciones || []).filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
         
         const totalPedidos = pedidos.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
@@ -59,14 +56,12 @@ App.views.detalleFinanzas = function(tipo, filtro) {
                 </div>
             </div>`;
             
-        // Dibujamos las filas de pedidos
         const rowsPedidos = pedidos.map(p => {
             const cliente = (App.state.clientes || []).find(c => c.id === p.cliente_id);
             const fecha = String(p.fecha_creacion || p.fecha || '').split('T')[0];
             return `<tr><td>${App.ui.safe(p.id || '')}</td><td>${App.ui.safe(fecha)}</td><td>${App.ui.safe(cliente?.nombre || p.cliente_nombre || p.cliente_id || '')}</td><td>${App.ui.safe(p.estado || '')}</td><td style="text-align:right;">${money(p.total || 0)}</td></tr>`;
         });
 
-        // Dibujamos las filas de reparaciones
         const rowsReparaciones = reparaciones.map(r => {
             const cliente = (App.state.clientes || []).find(c => c.id === r.cliente_id);
             const fecha = String(r.fecha_creacion || r.fecha || '').split('T')[0];
@@ -87,7 +82,7 @@ App.views.detalleFinanzas = function(tipo, filtro) {
     }
     
     if (tipo === 'costo_real') {
-        titulo = 'Costo real por artículo (Fabricación y Reventa)';
+        titulo = 'Costo real por artículo (Fabricación, Reventa y Reparaciones)';
         const datos = App.views.calcularCostoRealHamacas ? App.views.calcularCostoRealHamacas(filtro) : { ordenes: [], resumen: {} };
         const rows = datos.ordenes.map(o => `<tr><td>${App.ui.safe(o.orden_id)}</td><td>${App.ui.safe(o.pedido_id)}</td><td>${App.ui.safe(o.producto)} <br><strong style="font-size:0.8em; color:gray;">(${App.ui.safe(o.tipo)})</strong></td><td>${App.ui.safe(o.cliente)}</td><td style="text-align:right;">${money(o.venta)}</td><td style="text-align:right;">${money(o.costo_materiales)}</td><td style="text-align:right;">${money(o.mano_obra)}</td><td style="text-align:right;">${money(o.costo_real)}</td><td style="text-align:right;color:${o.utilidad >= 0 ? 'green' : 'red'};">${money(o.utilidad)}</td><td style="text-align:right;">${((o.margen || 0) * 100).toFixed(1)}%</td></tr>`);
         resumen = `<div class="dm-mb-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;"><div class="dm-card" style="background:var(--dm-surface-2);"><div class="dm-kpi-label">Artículos costeados</div><div class="dm-kpi-value">${datos.resumen?.ordenes || 0}</div></div><div class="dm-card" style="background:var(--dm-surface-2);"><div class="dm-kpi-label">Venta total</div><div class="dm-kpi-value">${money(datos.resumen?.venta || 0)}</div></div><div class="dm-card" style="background:var(--dm-surface-2);"><div class="dm-kpi-label">Costo total</div><div class="dm-kpi-value">${money(datos.resumen?.costo_real || 0)}</div></div><div class="dm-card" style="background:var(--dm-surface-2);"><div class="dm-kpi-label">Utilidad total</div><div class="dm-kpi-value" style="color:${(datos.resumen?.utilidad || 0) >= 0 ? 'green' : 'red'};">${money(datos.resumen?.utilidad || 0)}</div></div></div>`;
@@ -134,6 +129,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
     const resultado = [];
     const resFab = { ordenes: 0, venta: 0, costo_materiales: 0, mano_obra: 0, costo_real: 0, utilidad: 0, margen: 0 };
     const resRev = { ordenes: 0, venta: 0, costo_materiales: 0, mano_obra: 0, costo_real: 0, utilidad: 0, margen: 0 };
+    const resRep = { ordenes: 0, venta: 0, costo_materiales: 0, mano_obra: 0, costo_real: 0, utilidad: 0, margen: 0 };
 
     // 1. PROCESAR PEDIDOS (TALLER Y REVENTA)
     const pedidosValidos = pedidos.filter(p => p.cliente_id !== 'STOCK_INTERNO' && entraEnFiltro(p.fecha_creacion || p.fecha));
@@ -264,7 +260,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
         });
     });
 
-    // 2. PROCESAR REPARACIONES (SUMA DIRECTA A RENTABILIDAD)
+    // 2. PROCESAR REPARACIONES
     const reparacionesValidas = reparaciones.filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
 
     reparacionesValidas.forEach(r => {
@@ -272,7 +268,6 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
         const nombreCliente = cliente.nombre || r.cliente_nombre || r.cliente_id || 'Cliente';
         
         const ventaRep = parseFloat(r.precio || 0) || 0;
-        // Costo asignado de mano de obra en reparación (si se registró en pago artesanos)
         const pagoArtesanoRep = asignaciones.filter(a => a.orden_id === r.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
                                            .reduce((acc, a) => acc + (parseFloat(a.pago_estimado || a.total || 0) || 0), 0);
         
@@ -281,12 +276,12 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
         const utilidadRep = ventaRep - costoRealRep;
         const margenRep = ventaRep > 0 ? utilidadRep / ventaRep : 0;
 
-        resFab.ordenes += 1;
-        resFab.venta += ventaRep;
-        resFab.costo_materiales += costoMatRep;
-        resFab.mano_obra += pagoArtesanoRep;
-        resFab.costo_real += costoRealRep;
-        resFab.utilidad += utilidadRep;
+        resRep.ordenes += 1;
+        resRep.venta += ventaRep;
+        resRep.costo_materiales += costoMatRep;
+        resRep.mano_obra += pagoArtesanoRep;
+        resRep.costo_real += costoRealRep;
+        resRep.utilidad += utilidadRep;
 
         if (ventaRep > 0 || costoRealRep > 0) {
             resultado.push({
@@ -307,18 +302,23 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
 
     resFab.margen = resFab.venta > 0 ? resFab.utilidad / resFab.venta : 0;
     resRev.margen = resRev.venta > 0 ? resRev.utilidad / resRev.venta : 0;
+    resRep.margen = resRep.venta > 0 ? resRep.utilidad / resRep.venta : 0;
+
+    const totalVentasComp = resFab.venta + resRev.venta + resRep.venta;
+    const totalCostosComp = resFab.costo_real + resRev.costo_real + resRep.costo_real;
+    const totalUtilidadComp = resFab.utilidad + resRev.utilidad + resRep.utilidad;
 
     const resumenGlobal = {
-        ordenes: resFab.ordenes + resRev.ordenes,
-        venta: resFab.venta + resRev.venta,
-        costo_materiales: resFab.costo_materiales + resRev.costo_materiales,
-        mano_obra: resFab.mano_obra + resRev.mano_obra,
-        costo_real: resFab.costo_real + resRev.costo_real,
-        utilidad: resFab.utilidad + resRev.utilidad,
-        margen: (resFab.venta + resRev.venta) > 0 ? (resFab.utilidad + resRev.utilidad) / (resFab.venta + resRev.venta) : 0
+        ordenes: resFab.ordenes + resRev.ordenes + resRep.ordenes,
+        venta: totalVentasComp,
+        costo_materiales: resFab.costo_materiales + resRev.costo_materiales + resRep.costo_materiales,
+        mano_obra: resFab.mano_obra + resRev.mano_obra + resRep.mano_obra,
+        costo_real: totalCostosComp,
+        utilidad: totalUtilidadComp,
+        margen: totalVentasComp > 0 ? totalUtilidadComp / totalVentasComp : 0
     };
 
-    return { ordenes: resultado, resumen: resumenGlobal, resFab, resRev };
+    return { ordenes: resultado, resumen: resumenGlobal, resFab, resRev, resRep };
 };
 
 App.views.finanzas = function () {
@@ -374,24 +374,54 @@ App.views.finanzas = function () {
     const totalNomina = pagosArtesanosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
     const totalCotizado = cotizacionesFil.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
     
-   // 1. Desglose de Gastos Operativos
-    const totalGastosCrudo = gastosFil.reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0); 
     const gastosOperativosPuros = gastosFil
         .filter(g => {
             const desc = String(g.concepto || g.descripcion || '').toLowerCase();
             return !desc.includes('compra') && !desc.includes('materiales y insumos') && !desc.includes('hilo');
         })
         .reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
+    
+    const porCobrarPedidos = pedidosFil.reduce((acc, p) => { const ab = abonos.filter(a => a.pedido_id === p.id).reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0); const saldo = (parseFloat(p.total || 0) || 0) - (parseFloat(p.anticipo || 0) || 0) - ab; return acc + (saldo > 0 ? saldo : 0); }, 0);
+    const porCobrarReparaciones = reparacionesFil.reduce((acc, r) => { const ant = parseFloat(r.anticipo_inicial || 0) || 0; const ab = abonosReparaciones.filter(a => a.reparacion_id === r.id).reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0); const saldo = (parseFloat(r.precio || 0) || 0) - ant - ab; return acc + (saldo > 0 ? saldo : 0); }, 0);
+    const dineroEnLaCalle = porCobrarPedidos + porCobrarReparaciones;
+    const porPagarCompras = comprasFil.reduce((acc, c) => { const total = parseFloat(c.total || 0) || 0; const pagado = c.monto_pagado !== undefined && c.monto_pagado !== '' ? parseFloat(c.monto_pagado || 0) : total; const deuda = total - pagado; return acc + (deuda > 0 ? deuda : 0); }, 0);
+    const porPagarNomina = pagosArtesanos.filter(p => String(p.estado || '').toLowerCase() === 'pendiente').reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+    const totalPorPagar = porPagarCompras + porPagarNomina;
+    
+    // RENTABILIDAD
+    const costoRealData = App.views.calcularCostoRealHamacas(filtro);
+    const resGlobal = costoRealData.resumen;
+    const resFab = costoRealData.resFab;
+    const resRev = costoRealData.resRev;
+    const resRep = costoRealData.resRep;
 
-    // 2. Extracción de totales globales
     const ventaGlobal = resGlobal.venta;
     const costoDirectoGlobal = resGlobal.costo_real;
     const utilidadBrutaGlobal = resGlobal.utilidad;
-    
-    // 3. Resultado Operativo Real
     const utilidadOperativaReal = utilidadBrutaGlobal - gastosOperativosPuros;
     const margenOperativoReal = ventaGlobal > 0 ? (utilidadOperativaReal / ventaGlobal) * 100 : 0;
 
+    const resultadoCaja = totalCobrado - gastosOperativosPuros;
+    const flujoOperativo = totalCobrado - gastosOperativosPuros - totalCompras - totalNomina;
+    const saldoProyectado = dineroEnLaCalle - totalPorPagar;
+    
+    const salud = flujoOperativo >= 0 && saldoProyectado >= 0 ? 'Sana' : (flujoOperativo < 0 && saldoProyectado < 0 ? 'Crítica' : 'En observación');
+    const saludColor = salud === 'Sana' ? 'green' : (salud === 'Crítica' ? 'red' : '#B7791F');
+    const pedidosPendientes = pedidosFil.filter(p => !['pagado', 'entregado'].includes(String(p.estado || '').toLowerCase())).length;
+    const reparacionesPendientes = reparacionesFil.filter(r => !['entregada'].includes(String(r.estado || '').toLowerCase())).length;
+    const cotPendientes = cotizacionesFil.filter(c => String(c.estado_conversion || '').toLowerCase() !== 'convertida').length;
+    const registrosGastos = gastosFil.length;
+    
+    setTimeout(() => { if (App.logic && App.logic.renderMiniGraficasDashboard) App.logic.renderMiniGraficasDashboard(); if (App.logic && App.logic.renderGraficasFinanzas) App.logic.renderGraficasFinanzas(filtro); }, 120);
+    
+    const activeFiltro = (x) => filtro === x ? 'dm-btn-primary' : 'dm-btn-secondary';
+    const activeTab = (x) => tab === x ? 'dm-btn-primary' : 'dm-btn-secondary';
+    const kpi = (label, value, color = '') => `<div class="dm-card"><div class="dm-kpi-label">${label}</div><div class="dm-kpi-value" ${color ? `style="color:${color};"` : ''}>${value}</div></div>`;
+    const sectionTitle = (title, desc) => `<div class="dm-mb-2"><h3 class="dm-card-title">${title}</h3>${desc ? `<p class="dm-muted dm-mt-1">${desc}</p>` : ''}</div>`;
+    
+    const filtrosHTML = `<div class="dm-card dm-mb-4"><div class="dm-card-title">Filtros de fecha</div><div class="dm-mt-3" style="display:flex; gap:8px; flex-wrap:wrap;"><button class="dm-btn ${activeFiltro('mes_actual')}" onclick="App.views.aplicarFiltroFinanzas('mes_actual')">Mes actual</button><button class="dm-btn ${activeFiltro('trimestre_actual')}" onclick="App.views.aplicarFiltroFinanzas('trimestre_actual')">Trimestre</button><button class="dm-btn ${activeFiltro('anio_actual')}" onclick="App.views.aplicarFiltroFinanzas('anio_actual')">Año</button><button class="dm-btn ${activeFiltro('todo')}" onclick="App.views.aplicarFiltroFinanzas('todo')">Todo</button></div><div class="dm-mt-3" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; align-items:end;"><div class="dm-form-group"><label class="dm-label">Desde</label><input type="date" id="finanzas-fecha-desde" class="dm-input" value="${fechaDesde}"></div><div class="dm-form-group"><label class="dm-label">Hasta</label><input type="date" id="finanzas-fecha-hasta" class="dm-input" value="${fechaHasta}"></div><div><button class="dm-btn dm-btn-primary" onclick="App.views.aplicarFiltroFinanzasCustom()">Aplicar rango</button></div></div></div>`;
+    const tabsHTML = `<div class="dm-card dm-mb-4"><div style="display:flex; gap:8px; flex-wrap:wrap;"><button class="dm-btn ${activeTab('resumen')}" onclick="App.views.setFinanzasTab('resumen')">📊 Resumen</button><button class="dm-btn ${activeTab('cobranza')}" onclick="App.views.setFinanzasTab('cobranza')">💰 Cobranza</button><button class="dm-btn ${activeTab('egresos')}" onclick="App.views.setFinanzasTab('egresos')">💸 Egresos</button><button class="dm-btn ${activeTab('nomina')}" onclick="App.views.setFinanzasTab('nomina')">👷 Nómina</button><button class="dm-btn ${activeTab('costos')}" onclick="App.views.setFinanzasTab('costos')">🧮 Costos reales</button><button class="dm-btn ${activeTab('reportes')}" onclick="App.views.setFinanzasTab('reportes')">📈 Reportes</button></div></div>`;
+    
     const resumenHTML = `
         <div class="dm-card dm-mb-4">
             ${sectionTitle('Flujo de caja', 'Mide dinero cobrado, deudas y presión de efectivo.')}
