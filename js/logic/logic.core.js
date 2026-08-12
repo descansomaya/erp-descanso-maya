@@ -24,7 +24,8 @@ App.logic.MAPA_TABLAS = [
     { hoja: "tarifas_artesano", state: "tarifas_artesano" },
     { hoja: "pago_artesanos", state: "pago_artesanos" },
     { hoja: "movimientos_inventario", state: "movimientos_inventario" },
-    { hoja: "abonos_proveedores", state: "abonos_proveedores" }
+    { hoja: "abonos_proveedores", state: "abonos_proveedores" },
+    { hoja: "vendedores", state: "vendedores" }
 ];
 
 Object.assign(App.logic, {
@@ -321,7 +322,24 @@ Object.assign(App.logic, {
                 `);
             }
         });
-
+// NUEVO BLOQUE: Búsqueda de Vendedores
+        (App.state.vendedores || []).forEach(v => {
+            const nombreVend = String(v.nombre || "").toLowerCase();
+            const telVend = String(v.telefono || "").toLowerCase();
+            if (nombreVend.includes(q) || telVend.includes(q)) {
+                resultados.push(`
+                    <div style="padding:12px; border-bottom:1px solid #edf2f7; cursor:pointer; display:flex; align-items:center; gap:10px;"
+                        onclick="App.ui.closeSheet(); App.router.navigate('vendedores');">
+                        <span style="font-size:1.5rem;">💼</span>
+                        <div>
+                            <strong style="color:#3182CE;">${App.ui.escapeHTML(v.nombre)}</strong><br>
+                            <small style="color:var(--text-muted);">Vendedor / Promotor</small>
+                        </div>
+                    </div>
+                `);
+            }
+        });
+        
         cont.innerHTML = resultados.length === 0
             ? '<p style="color:var(--danger); margin-top:20px;">No se encontró nada con esa búsqueda 😔</p>'
             : resultados.join("");
