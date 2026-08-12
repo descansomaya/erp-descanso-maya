@@ -109,6 +109,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
     const ordenes = App.state.ordenes_produccion || [];
     const asignaciones = App.state.ordenes_produccion_artesanos || [];
     const materiales = App.state.inventario || [];
+    const reparaciones = App.state.reparaciones || [];
     
     const hoy = new Date();
     const mesActual = hoy.getMonth();
@@ -134,6 +135,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
     const resFab = { ordenes: 0, venta: 0, costo_materiales: 0, mano_obra: 0, costo_real: 0, utilidad: 0, margen: 0 };
     const resRev = { ordenes: 0, venta: 0, costo_materiales: 0, mano_obra: 0, costo_real: 0, utilidad: 0, margen: 0 };
 
+    // 1. PROCESAR PEDIDOS (TALLER Y REVENTA)
     const pedidosValidos = pedidos.filter(p => p.cliente_id !== 'STOCK_INTERNO' && entraEnFiltro(p.fecha_creacion || p.fecha));
 
     pedidosValidos.forEach(p => {
@@ -160,9 +162,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
             let tipo = '';
             let folio = '';
 
-            // BLINDAJE: Si existe una orden en el taller, OBLIGATORIAMENTE es fabricada, nunca reventa
             if (orden) {
-                // 1. FABRICACIÓN SOBRE PEDIDO (Taller)
                 tipo = 'Fabricado (Taller)';
                 folio = orden.id;
 
@@ -187,7 +187,6 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 resFab.utilidad += (venta - costoReal);
 
             } else if (!esReventa) {
-                // 2. FABRICACIÓN DESDE STOCK (Bodega)
                 tipo = 'Fabricado (Bodega)';
                 folio = p.id;
                 
@@ -228,7 +227,6 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 resFab.utilidad += (venta - costoReal);
 
             } else {
-                // 3. REVENTA PURA
                 tipo = 'Reventa';
                 folio = p.id;
                 
@@ -264,6 +262,47 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 });
             }
         });
+    });
+
+    // 2. PROCESAR REPARACIONES (SUMA DIRECTA A RENTABILIDAD)
+    const reparacionesValidas = reparaciones.filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
+
+    reparacionesValidas.forEach(r => {
+        const cliente = clientes.find(c => c.id === r.cliente_id) || {};
+        const nombreCliente = cliente.nombre || r.cliente_nombre || r.cliente_id || 'Cliente';
+        
+        const ventaRep = parseFloat(r.precio || 0) || 0;
+        // Costo asignado de mano de obra en reparación (si se registró en pago artesanos)
+        const pagoArtesanoRep = asignaciones.filter(a => a.orden_id === r.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
+                                           .reduce((acc, a) => acc + (parseFloat(a.pago_estimado || a.total || 0) || 0), 0);
+        
+        const costoMatRep = parseFloat(r.costo_materiales || 0) || 0;
+        const costoRealRep = costoMatRep + pagoArtesanoRep;
+        const utilidadRep = ventaRep - costoRealRep;
+        const margenRep = ventaRep > 0 ? utilidadRep / ventaRep : 0;
+
+        resFab.ordenes += 1;
+        resFab.venta += ventaRep;
+        resFab.costo_materiales += costoMatRep;
+        resFab.mano_obra += pagoArtesanoRep;
+        resFab.costo_real += costoRealRep;
+        resFab.utilidad += utilidadRep;
+
+        if (ventaRep > 0 || costoRealRep > 0) {
+            resultado.push({
+                orden_id: r.id,
+                pedido_id: r.id,
+                producto: r.descripcion || 'Servicio de Reparación',
+                cliente: nombreCliente,
+                tipo: 'Reparación',
+                venta: ventaRep,
+                costo_materiales: costoMatRep,
+                mano_obra: pagoArtesanoRep,
+                costo_real: costoRealRep,
+                utilidad: utilidadRep,
+                margen: margenRep
+            });
+        }
     });
 
     resFab.margen = resFab.venta > 0 ? resFab.utilidad / resFab.venta : 0;
