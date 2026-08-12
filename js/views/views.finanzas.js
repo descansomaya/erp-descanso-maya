@@ -161,8 +161,8 @@ const orden = ordenes.find(o => o.pedido_detalle_id === det.id);
             let folio = '';
 
             // BLINDAJE: Si existe una orden en el taller, OBLIGATORIAMENTE es fabricada, nunca reventa
-           if (orden) {
-                // 1. FABRICACIÓN SOBRE PEDIDO (Taller) -> Forzamos a que lea exactamente la misma receta del Taller
+          if (orden) {
+                // 1. FABRICACIÓN SOBRE PEDIDO (Taller) -> Leemos estrictamente la receta de la orden
                 tipo = 'Fabricado (Taller)';
                 folio = orden.id;
 
