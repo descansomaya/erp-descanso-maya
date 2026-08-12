@@ -160,7 +160,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
             let tipo = '';
             let folio = '';
 
-            if (orden) {
+if (orden) {
                 // 1. FABRICACIÓN SOBRE PEDIDO (Taller)
                 tipo = 'Fabricado (Taller)';
                 folio = orden.id;
@@ -169,10 +169,9 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 const movsOrden = (App.state.movimientos_inventario || []).filter(m => m.origen_id === orden.id || m.origen_id === p.id);
 
                 if (movsOrden.length > 0) {
-                    // Leemos el costo real e histórico que se registró al momento de la salida de insumos
-                    costoMateriales = movsOrden.reduce((acc, m) => acc + (parseFloat(m.total || 0) || 0), 0);
+                    // Usamos Math.abs() para asegurar que los costos de materiales siempre sumen en positivo, sin importar reversas de prueba
+                    costoMateriales = movsOrden.reduce((acc, m) => acc + Math.abs(parseFloat(m.total || 0) || 0), 0);
                 } else {
-                    // Respaldo por si no hay movimiento registrado: lee la receta multiplicada por el inventario
                     const receta = parseReceta(orden);
                     costoMateriales = receta.reduce((acc, item) => {
                         const mat = materiales.find(m => m.id === item.mat_id) || {};
@@ -193,51 +192,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 resFab.mano_obra += manoObra;
                 resFab.costo_real += costoReal;
                 resFab.utilidad += (venta - costoReal);
-                
-            } else if (!esReventa) {
-                // 2. FABRICACIÓN DESDE STOCK (Bodega) -> Con lectura inteligente del histórico de taller
-                tipo = 'Fabricado (Bodega)';
-                folio = p.id;
-                
-                // Si el detalle tiene la "foto" histórica guardada, la usamos
-                if (det.costo_mat_historico || det.costo_mo_historico) {
-                    costoMateriales = parseFloat(det.costo_mat_historico || 0) * cantidad;
-                    const pagoHistoricoMo = parseFloat(det.costo_mo_historico || 0) * cantidad;
-                    manoObra = pagoHistoricoMo + porcionComision;
-                } else {
-                    // Respaldo automático si es un pedido anterior: calculamos hilos del catálogo y buscamos la última orden real del taller
-                    let costoMatEstandar = 0;
-                    for (let i = 1; i <= 20; i++) {
-                        if (producto[`mat_${i}`]) {
-                            const mat = materiales.find(m => m.id === producto[`mat_${i}`]) || {};
-                            costoMatEstandar += (parseFloat(producto[`cant_${i}`] || 0) * (parseFloat(mat.costo_unitario || 0) || 0));
-                        }
-                    }
-                    costoMateriales = costoMatEstandar * cantidad;
-
-                    // Buscamos la última orden de este mismo producto en el taller para extraer su mano de obra real
-                    const ultimaOrdenProd = ordenes.filter(o => {
-                        const dRef = detalle.find(dt => dt.id === o.pedido_detalle_id);
-                        return dRef && dRef.producto_id === producto.id;
-                    }).sort((a, b) => new Date(b.fecha_creacion || 0) - new Date(a.fecha_creacion || 0))[0];
-
-                    let ultimoPagoMo = 0;
-                    if (ultimaOrdenProd) {
-                        ultimoPagoMo = asignaciones.filter(a => a.orden_id === ultimaOrdenProd.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
-                                                   .reduce((acc, a) => acc + (parseFloat(a.pago_estimado || a.total || 0) || 0), 0);
-                    }
-                    manoObra = ultimoPagoMo + porcionComision;
-                }
-
-                costoReal = costoMateriales + manoObra;
-
-                resFab.ordenes += 1;
-                resFab.venta += venta;
-                resFab.costo_materiales += costoMateriales;
-                resFab.mano_obra += manoObra;
-                resFab.costo_real += costoReal;
-                resFab.utilidad += (venta - costoReal);
-
+            
             } else {
                 // 3. REVENTA PURA
                 tipo = 'Reventa';
