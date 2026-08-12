@@ -370,13 +370,11 @@ App.views.formProducto = function(id = null, callback = null) {
                         ${opcMat}
                     </select>
                 </div>
-
                 <div class="dm-form-row">
                     <div class="dm-form-group">
                         <label class="dm-label">Cantidad</label>
                         <input type="number" step="0.1" class="dm-input" name="cant[]" value="${cant || ''}" placeholder="Cant" required>
                     </div>
-
                     <div class="dm-form-group">
                         <label class="dm-label">Uso</label>
                         <select class="dm-select" name="uso[]" required>
@@ -386,37 +384,31 @@ App.views.formProducto = function(id = null, callback = null) {
                         </select>
                     </div>
                 </div>
-
-                <button
-                    type="button"
-                    class="dm-btn dm-btn-danger dm-btn-block"
-                    style="min-height:36px;"
-                    onclick="this.parentElement.remove()"
-                >
-                    Quitar insumo
-                </button>
+                <button type="button" class="dm-btn dm-btn-danger dm-btn-block" style="min-height:36px;" onclick="this.parentElement.remove()">Quitar insumo</button>
             </div>
         `;
     };
 
     let recetaHTML = '';
     let counter = 1;
-
     if (obj) {
         while (obj[`mat_${counter}`]) {
             recetaHTML += generarFila(obj[`mat_${counter}`], obj[`cant_${counter}`], obj[`uso_${counter}`]);
             counter++;
         }
     }
-
     if (recetaHTML === '') recetaHTML = generarFila('', '', '');
 
     const clasif = obj ? obj.clasificacion : '';
     const cat = obj ? obj.categoria : '';
     
-    // Validamos si debe nacer visible
-    const mostrarCosto = (cat === 'reventa' || clasif === 'Reventa') ? 'block' : 'none';
+    // Controles visuales
+    const esRevInicial = (cat === 'reventa' || clasif === 'Reventa');
+    const mostrarCostoCompra = esRevInicial ? 'block' : 'none';
+    const mostrarCostoMano = !esRevInicial ? 'block' : 'none';
+    
     const costoActual = obj ? (obj.costo_unitario || obj.precio_compra || obj.costo || '') : '';
+    const costoManoActual = obj ? (obj.costo_mano_obra || '') : '';
 
     const formHTML = `
         <form id="dynamic-form">
@@ -428,15 +420,22 @@ App.views.formProducto = function(id = null, callback = null) {
             <div class="dm-form-row">
                 <div class="dm-form-group">
                     <label class="dm-label">Categoría</label>
-                    <select class="dm-select" name="categoria" onchange="document.getElementById('grupo-costo-compra').style.display = (this.value === 'reventa' || document.querySelector('[name=clasificacion]').value === 'Reventa') ? 'block' : 'none';">
+                    <select class="dm-select" name="categoria" onchange="
+                        const esRev = (this.value === 'reventa' || document.querySelector('[name=clasificacion]').value === 'Reventa');
+                        document.getElementById('grupo-costo-compra').style.display = esRev ? 'block' : 'none';
+                        document.getElementById('grupo-costo-mo').style.display = !esRev ? 'block' : 'none';
+                    ">
                         <option value="fabricacion" ${obj && obj.categoria === 'fabricacion' ? 'selected' : ''}>Fabricación</option>
                         <option value="reventa" ${obj && obj.categoria === 'reventa' ? 'selected' : ''}>Reventa</option>
                     </select>
                 </div>
-
                 <div class="dm-form-group">
                     <label class="dm-label">Clasificación</label>
-                    <select class="dm-select" name="clasificacion" onchange="document.getElementById('grupo-costo-compra').style.display = (this.value === 'Reventa' || document.querySelector('[name=categoria]').value === 'reventa') ? 'block' : 'none';">
+                    <select class="dm-select" name="clasificacion" onchange="
+                        const esRev = (this.value === 'Reventa' || document.querySelector('[name=categoria]').value === 'reventa');
+                        document.getElementById('grupo-costo-compra').style.display = esRev ? 'block' : 'none';
+                        document.getElementById('grupo-costo-mo').style.display = !esRev ? 'block' : 'none';
+                    ">
                         <option value="Unicolor" ${clasif === 'Unicolor' ? 'selected' : ''}>Unicolor</option>
                         <option value="Combinada" ${clasif === 'Combinada' ? 'selected' : ''}>Combinada</option>
                         <option value="Especial" ${clasif === 'Especial' ? 'selected' : ''}>Especial</option>
@@ -446,22 +445,27 @@ App.views.formProducto = function(id = null, callback = null) {
                 </div>
             </div>
 
-            <!-- NUEVO CAMPO INTELIGENTE: COSTO DE COMPRA -->
-            <div class="dm-form-group" id="grupo-costo-compra" style="display: ${mostrarCosto}; background: #EBF8FF; padding: 12px; border-radius: 8px; border: 1px dashed #3182CE; margin-bottom: 15px;">
+            <!-- CAJÓN DE REVENTA -->
+            <div class="dm-form-group" id="grupo-costo-compra" style="display: ${mostrarCostoCompra}; background: #EBF8FF; padding: 12px; border-radius: 8px; border: 1px dashed #3182CE; margin-bottom: 15px;">
                 <label class="dm-label" style="color: #2B6CB0; font-weight: bold;">Costo de Compra ($)</label>
                 <input type="number" step="0.01" class="dm-input" name="costo_unitario" value="${costoActual}" placeholder="Ej. 800.00">
-                <small style="color: #3182CE; font-size: 0.8rem; display: block; margin-top: 4px;">Este costo se usará para calcular la rentabilidad de reventa en el dashboard financiero.</small>
+            </div>
+
+            <!-- NUEVO: CAJÓN DE MANO DE OBRA (FABRICACIÓN) -->
+            <div class="dm-form-group" id="grupo-costo-mo" style="display: ${mostrarCostoMano}; background: #FFF5F5; padding: 12px; border-radius: 8px; border: 1px dashed #C53030; margin-bottom: 15px;">
+                <label class="dm-label" style="color: #C53030; font-weight: bold;">Costo Mano de Obra Artesano ($)</label>
+                <input type="number" step="0.01" class="dm-input" name="costo_mano_obra" value="${costoManoActual}" placeholder="Ej. 350.00">
+                <small style="color: #C53030; font-size: 0.8rem; display: block; margin-top: 4px;">Se usará para calcular el margen cuando vendas esta hamaca desde la bodega.</small>
             </div>
 
             <div class="dm-form-row">
                 <div class="dm-form-group">
                     <label class="dm-label">Tamaño</label>
-                    <input type="text" class="dm-input" name="tamano" value="${obj ? App.ui.escapeHTML(obj.tamano || '') : ''}" placeholder="Ej. Matrimonial">
+                    <input type="text" class="dm-input" name="tamano" value="${obj ? App.ui.escapeHTML(obj.tamano || '') : ''}">
                 </div>
-
                 <div class="dm-form-group">
                     <label class="dm-label">Color</label>
-                    <input type="text" class="dm-input" name="color" value="${obj ? App.ui.escapeHTML(obj.color || '') : ''}" placeholder="Ej. Rojo/Blanco">
+                    <input type="text" class="dm-input" name="color" value="${obj ? App.ui.escapeHTML(obj.color || '') : ''}">
                 </div>
             </div>
 
@@ -470,7 +474,6 @@ App.views.formProducto = function(id = null, callback = null) {
                     <label class="dm-label">Precio Venta ($)</label>
                     <input type="number" class="dm-input" name="precio_venta" value="${obj ? obj.precio_venta : ''}" required>
                 </div>
-
                 <div class="dm-form-group">
                     <label class="dm-label">Precio Mayoreo ($)</label>
                     <input type="number" class="dm-input" name="precio_mayoreo" value="${obj ? (obj.precio_mayoreo || '') : ''}">
@@ -478,17 +481,9 @@ App.views.formProducto = function(id = null, callback = null) {
             </div>
 
             <div class="dm-card dm-mb-3" style="background:#F7FAFC; border:1px solid var(--border);">
-                <strong class="dm-label" style="color:var(--primary); display:block; margin-bottom:10px;">📦 Receta de Inventario (Solo Fabricación)</strong>
+                <strong class="dm-label" style="color:var(--primary); display:block; margin-bottom:10px;">📦 Receta de Inventario</strong>
                 <div id="cont-receta">${recetaHTML}</div>
-
-                <button
-                    type="button"
-                    class="dm-btn dm-btn-secondary dm-btn-block"
-                    style="margin-top:10px; border:1px dashed var(--primary); color:var(--primary); background:transparent;"
-                    onclick="window.agregarFilaReceta()"
-                >
-                    + Añadir Insumo a la Receta
-                </button>
+                <button type="button" class="dm-btn dm-btn-secondary dm-btn-block" style="margin-top:10px; border:1px dashed var(--primary); color:var(--primary); background:transparent;" onclick="window.agregarFilaReceta()">+ Añadir Insumo a la Receta</button>
             </div>
 
             <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">
@@ -498,41 +493,26 @@ App.views.formProducto = function(id = null, callback = null) {
     `;
 
     App.ui.openSheet(obj ? 'Editar Producto' : 'Nuevo Producto', formHTML, (data) => {
-        
-        // 1. Limpiar cualquier rastro previo de columnas de receta
-        for (let i = 1; i <= 20; i++) {
-            data[`mat_${i}`] = "";
-            data[`cant_${i}`] = "";
-            data[`uso_${i}`] = "";
-        }
-
-        // 2. Extraer los arreglos capturados por el formulario
+        for (let i = 1; i <= 20; i++) { data[`mat_${i}`] = ""; data[`cant_${i}`] = ""; data[`uso_${i}`] = ""; }
         const arrMats = data['mat_id[]'] ? (Array.isArray(data['mat_id[]']) ? data['mat_id[]'] : [data['mat_id[]']]) : [];
         const arrCants = data['cant[]'] ? (Array.isArray(data['cant[]']) ? data['cant[]'] : [data['cant[]']]) : [];
         const arrUsos = data['uso[]'] ? (Array.isArray(data['uso[]']) ? data['uso[]'] : [data['uso[]']]) : [];
 
-        // 3. Aplanar en las 20 columnas reales de la base de datos
-        let contadorAplanado = 1;
+        let contador = 1;
         for (let i = 0; i < arrMats.length; i++) {
-            if (arrMats[i] && contadorAplanado <= 20) {
-                data[`mat_${contadorAplanado}`] = arrMats[i];
-                data[`cant_${contadorAplanado}`] = arrCants[i] || "0";
-                data[`uso_${contadorAplanado}`] = arrUsos[i] || "Cuerpo";
-                contadorAplanado++;
+            if (arrMats[i] && contador <= 20) {
+                data[`mat_${contador}`] = arrMats[i];
+                data[`cant_${contador}`] = arrCants[i] || "0";
+                data[`uso_${contador}`] = arrUsos[i] || "Cuerpo";
+                contador++;
             }
         }
 
-        // 4. Si el producto es reventa y no enviaron insumos, evitamos guardar la fila en blanco generada por defecto
         if ((data.categoria === 'reventa' || data.clasificacion === 'Reventa') && arrMats.length === 1 && !arrMats[0]) {
-            data[`mat_1`] = "";
-            data[`cant_1`] = "";
-            data[`uso_1`] = "";
+            data[`mat_1`] = ""; data[`cant_1`] = ""; data[`uso_1`] = "";
         }
 
-        // 5. Limpiar los arreglos temporales
-        delete data['mat_id[]'];
-        delete data['cant[]'];
-        delete data['uso[]'];
+        delete data['mat_id[]']; delete data['cant[]']; delete data['uso[]'];
 
         if (obj) App.logic.actualizarRegistroGenerico('productos', id, data, 'productos');
         else App.logic.guardarNuevoGenerico('productos', data, 'PROD', 'productos', callback);
