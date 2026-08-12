@@ -1,5 +1,5 @@
 // ==========================================
-// VISTAS: INVENTARIO Y COMPRAS
+// VISTAS: INVENTARIO Y COMPRAS (FLUIDO & AUTO-RETORNO)
 // ==========================================
 
 window.App = window.App || {};
@@ -45,13 +45,13 @@ App.views._resumenInventario = function () {
         const valor = real * costo;
 
         const salidasItem30d = movimientos
-         .filter(m => m.ref_id === i.id || m.material_id === i.id)
+            .filter(m => m.ref_id === i.id || m.material_id === i.id)
             .filter(m => {
                 const fechaMov = m.fecha ? new Date(m.fecha) : null;
                 return fechaMov && !isNaN(fechaMov.getTime()) && fechaMov >= hace30 && (() => {
-    const tipo = String(m.tipo_movimiento || m.tipo || '').toLowerCase();
-    return tipo.includes('salida');
-})()
+                    const tipo = String(m.tipo_movimiento || m.tipo || '').toLowerCase();
+                    return tipo.includes('salida');
+                })();
             })
             .reduce((acc, m) => acc + Math.abs(parseFloat(m.cantidad || 0) || 0), 0);
 
@@ -74,8 +74,8 @@ App.views._resumenInventario = function () {
         if (!fechaMov || isNaN(fechaMov.getTime()) || fechaMov < hace30) return;
         const cantidad = Math.abs(parseFloat(m.cantidad || 0) || 0);
         const tipo = String(m.tipo_movimiento || m.tipo || '').toLowerCase();
-if (tipo.includes('entrada') || tipo.includes('reversa')) resumen.entradas30d += cantidad;
-if (tipo.includes('salida')) resumen.salidas30d += cantidad;
+        if (tipo.includes('entrada') || tipo.includes('reversa')) resumen.entradas30d += cantidad;
+        if (tipo.includes('salida')) resumen.salidas30d += cantidad;
     });
 
     resumen.topCriticos = resumen.topCriticos.filter(x => x.minimo > 0).sort((a, b) => (a.libre - a.minimo) - (b.libre - b.minimo)).slice(0, 5);
@@ -382,6 +382,9 @@ App.views.calcularTotalCompraForm = function () {
     if (totalInput) totalInput.value = total.toFixed(2);
 };
 
+// ==========================================
+// CREAR PROVEEDOR CON AUTO-SELECCIÓN Y CIERRE
+// ==========================================
 App.views.formProveedorCompra = function (callback = null) {
     const formHTML = `
         <form id="dynamic-form">
@@ -393,17 +396,35 @@ App.views.formProveedorCompra = function (callback = null) {
     `;
 
     App.ui.openSheet('Nuevo proveedor', formHTML, async (data) => {
-        const payload = Object.assign({ activo: 'TRUE' }, data);
-        const res = await App.logic.guardarNuevoGenerico('proveedores', payload, 'PROV', 'proveedores', callback);
-        setTimeout(() => {
-            const sel = document.getElementById('compra-proveedor-select');
-            const ultimo = (App.state.proveedores || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
-            if (sel && ultimo) sel.value = ultimo.id;
-        }, 250);
-        return res;
+        return App.ui.runSafeAction({
+            lockKey: 'proveedor:nuevo:rapido',
+            loadingText: 'Guardando...',
+            loaderMessage: 'Guardando proveedor...',
+            successMessage: 'Proveedor guardado correctamente',
+            errorTitle: 'No se pudo guardar el proveedor',
+            closeSheetOnSuccess: true // <--- Cierra el modal automáticamente
+        }, async () => {
+            const payload = Object.assign({ activo: 'TRUE' }, data);
+            const res = await App.logic.guardarNuevoGenerico('proveedores', payload, 'PROV', 'proveedores', callback);
+            
+            // AUTO-SELECCIÓN: Añade y selecciona al nuevo proveedor en el formulario de Compra activo
+            setTimeout(() => {
+                const sel = document.getElementById('compra-proveedor-select');
+                const ultimo = (App.state.proveedores || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
+                if (sel && ultimo) {
+                    sel.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)}</option>`);
+                    sel.value = ultimo.id;
+                }
+            }, 200);
+
+            return res;
+        });
     });
 };
 
+// ==========================================
+// CREAR MATERIAL / REVENTA DESDE COMPRAS CON AUTO-SELECCIÓN Y CIERRE
+// ==========================================
 App.views.formMaterialCompra = function (callback = null) {
     const formHTML = `
         <form id="dynamic-form">
@@ -421,19 +442,31 @@ App.views.formMaterialCompra = function (callback = null) {
     `;
 
     App.ui.openSheet('Nuevo material / reventa', formHTML, async (data) => {
-        const payload = Object.assign({ costo_unitario: 0 }, data);
-       const res = await App.logic.guardarNuevoGenerico('materiales', payload, 'MAT', 'inventario', callback);
-        setTimeout(() => {
-            const selects = document.querySelectorAll('#cont-filas-compra select[name="mat_id[]"]');
-            const ultimo = (App.state.inventario || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
-            selects.forEach(sel => {
-                if (!sel.value && ultimo) {
-                    sel.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)} (${App.ui.safe(ultimo.tipo || '')})</option>`);
-                    sel.value = ultimo.id;
-                }
-            });
-        }, 250);
-        return res;
+        return App.ui.runSafeAction({
+            lockKey: 'material:nuevo:rapido',
+            loadingText: 'Guardando...',
+            loaderMessage: 'Guardando material...',
+            successMessage: 'Material guardado correctamente',
+            errorTitle: 'No se pudo guardar el material',
+            closeSheetOnSuccess: true // <--- Cierra el modal automáticamente
+        }, async () => {
+            const payload = Object.assign({ costo_unitario: 0 }, data);
+            const res = await App.logic.guardarNuevoGenerico('materiales', payload, 'MAT', 'inventario', callback);
+            
+            // AUTO-SELECCIÓN: Asigna el nuevo material a las filas de la compra
+            setTimeout(() => {
+                const selects = document.querySelectorAll('#cont-filas-compra select[name="mat_id[]"]');
+                const ultimo = (App.state.inventario || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
+                selects.forEach(sel => {
+                    if (!sel.value && ultimo) {
+                        sel.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)} (${App.ui.safe(ultimo.tipo || '')})</option>`);
+                        sel.value = ultimo.id;
+                    }
+                });
+            }, 200);
+
+            return res;
+        });
     });
 };
 
@@ -466,7 +499,17 @@ App.views.formCompra = function() {
         </form>
     `;
 
-    App.ui.openSheet('Nueva Compra', formHTML, async (data) => App.logic.guardarNuevaCompra(data));
+    App.ui.openSheet('Nueva Compra', formHTML, async (data) => {
+        return App.ui.runSafeAction({
+            lockKey: 'compra:nueva',
+            loadingText: 'Registrando...',
+            loaderMessage: 'Registrando compra y actualizando inventario...',
+            successMessage: 'Compra registrada correctamente',
+            errorTitle: 'No se pudo registrar la compra',
+            closeSheetOnSuccess: true // <--- Cierra el modal de compra
+        }, async () => App.logic.guardarNuevaCompra(data));
+    });
+
     setTimeout(() => App.views.calcularTotalCompraForm(), 150);
 };
 
@@ -484,7 +527,16 @@ App.views.formAbonoCompra = function(compraId) {
         </form>
     `;
 
-    App.ui.openSheet('Abono a compra', formHTML, async (data) => App.logic.guardarAbonoCompra(data));
+    App.ui.openSheet('Abono a compra', formHTML, async (data) => {
+        return App.ui.runSafeAction({
+            lockKey: `compra:${compraId}:abono:nuevo`,
+            loadingText: 'Registrando...',
+            loaderMessage: 'Registrando abono a compra...',
+            successMessage: 'Abono registrado',
+            errorTitle: 'No se pudo registrar el abono',
+            closeSheetOnSuccess: true // <--- Cierra el modal de abono a compra
+        }, async () => App.logic.guardarAbonoCompra(data));
+    });
 };
 
 App.views.verDetallesCompra = function(compraId) {
@@ -527,9 +579,17 @@ App.views.formMaterial = function(id = null, callback = null) {
         </form>
     `;
 
-    App.ui.openSheet(obj ? 'Editar Insumo' : 'Nuevo Insumo', formHTML, (data) => {
-        if (obj) App.logic.actualizarRegistroGenerico('materiales', id, data, 'inventario');
-        else App.logic.guardarNuevoGenerico('materiales', data, 'MAT', 'inventario', callback);
+    App.ui.openSheet(obj ? 'Editar Insumo' : 'Nuevo Insumo', formHTML, async (data) => {
+        return App.ui.runSafeAction({
+            lockKey: obj ? `material:${id}:editar` : 'material:nuevo',
+            loadingText: 'Guardando...',
+            loaderMessage: obj ? 'Guardando cambios...' : 'Guardando nuevo insumo...',
+            successMessage: obj ? 'Insumo actualizado' : 'Insumo creado',
+            closeSheetOnSuccess: true // <--- Cierra el modal de insumo
+        }, async () => {
+            if (obj) return App.logic.actualizarRegistroGenerico('materiales', id, data, 'inventario');
+            return App.logic.guardarNuevoGenerico('materiales', data, 'MAT', 'inventario', callback);
+        });
     });
 };
 
@@ -541,8 +601,8 @@ App.views.modalKardex = function(matId) {
     if (!movs.length) html += `<div class="dm-alert dm-alert-info">No hay movimientos para este insumo.</div>`;
     movs.forEach(m => {
         const fecha = m.fecha ? String(m.fecha).split('T')[0] : '';
-const tipoMovimiento = String(m.tipo_movimiento || m.tipo || '').toLowerCase();
-const esEntrada = tipoMovimiento.includes('entrada') || tipoMovimiento.includes('reversa');
+        const tipoMovimiento = String(m.tipo_movimiento || m.tipo || '').toLowerCase();
+        const esEntrada = tipoMovimiento.includes('entrada') || tipoMovimiento.includes('reversa');
         html += `
             <div class="dm-list-card" style="padding:10px;">
                 <div class="dm-row-between" style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
