@@ -265,7 +265,7 @@ window.generarListaPedidos = function(tipo) {
 // CARRITO Y CREACIÓN DE PEDIDOS MÚLTIPLES
 // ==========================================
 App.views._formPedidoInterno = function(obj = null, prefill = null) {
-    const dataBase = Object.assign({ cantidad: 1, anticipo: 0 }, prefill || {}, obj || {});
+    const dataBase = Object.assign({ cantidad: 1, anticipo: 0, comision: 0 }, prefill || {}, obj || {});
 
     // Iniciamos la memoria del carrito
     if (!obj) { window._carritoTemp = []; }
@@ -354,6 +354,14 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
                 <div class="dm-form-group">
                     <label class="dm-label">Anticipo Recibido ($)</label>
                     <input type="number" step="0.01" class="dm-input" name="anticipo" value="${dataBase.anticipo || '0'}" required>
+                </div>
+            </div>
+            
+            <div class="dm-form-row">
+                <div class="dm-form-group" style="background: #EBF8FF; padding: 10px; border-radius: 6px; border: 1px dashed #3182CE;">
+                    <label class="dm-label" style="color: #2B6CB0; margin-bottom:4px;">Comisión por venta ($)</label>
+                    <input type="number" step="0.01" class="dm-input" name="comision" value="${dataBase.comision || '0'}" placeholder="0.00">
+                    <small style="color: #3182CE; font-size: 0.75rem; display: block; margin-top: 4px; line-height:1.2;">Se restará de la utilidad. Si no pagas comisión, déjalo en 0.</small>
                 </div>
             </div>
             
