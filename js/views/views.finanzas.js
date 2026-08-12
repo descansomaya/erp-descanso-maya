@@ -184,7 +184,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 resFab.costo_real += costoReal;
                 resFab.utilidad += (venta - costoReal);
 
-            } else if (!esReventa) {
+           } else if (!esReventa) {
                 // 2. FABRICACIÓN DESDE STOCK (Bodega)
                 tipo = 'Fabricado (Bodega)';
                 folio = p.id;
@@ -198,7 +198,9 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 }
                 costoMateriales = costoMatEstandar * cantidad;
                 
-                manoObra = porcionComision; // Solo cobramos la comisión, la manufactura ya se pagó en el pasado
+                // NUEVO: Leemos el costo estándar de mano de obra del catálogo
+                const costoManoObraEst = parseFloat(producto.costo_mano_obra || 0) * cantidad;
+                manoObra = costoManoObraEst + porcionComision; // Sumamos artesano + comisión
                 costoReal = costoMateriales + manoObra;
 
                 resFab.ordenes += 1;
