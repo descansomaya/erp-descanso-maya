@@ -141,7 +141,6 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
         const nombreCliente = cliente.nombre || p.cliente_nombre || p.cliente_id || 'Cliente';
         const detallesDelPedido = detalle.filter(d => d.pedido_id === p.id);
         
-        // Calculamos la comisión total del pedido y el total de la venta para repartirla proporcionalmente
         const comisionPedido = parseFloat(p.comision || 0) || 0;
         const totalVentaPedido = detallesDelPedido.reduce((acc, d) => acc + ((parseFloat(d.precio_unitario || 0) || 0) * (parseFloat(d.cantidad || 1) || 1)), 0);
 
@@ -150,7 +149,6 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
             const cantidad = parseFloat(det.cantidad || 1) || 1;
             const venta = (parseFloat(det.precio_unitario || 0) || 0) * cantidad;
             
-            // Le asignamos a este artículo la rebanada de comisión que le toca (basado en lo que costó)
             const porcionComision = totalVentaPedido > 0 ? (venta / totalVentaPedido) * comisionPedido : 0;
 
             const orden = ordenes.find(o => o.pedido_detalle_id === det.id);
@@ -174,7 +172,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 const pagoArtesano = asignaciones.filter(a => a.orden_id === orden.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
                                        .reduce((acc, a) => acc + (parseFloat(a.pago_estimado || a.total || 0) || 0), 0);
                 
-                manoObra = pagoArtesano + porcionComision; // Sumamos la comisión como costo operativo
+                manoObra = pagoArtesano + porcionComision;
                 costoReal = costoMateriales + manoObra;
 
                 resFab.ordenes += 1;
@@ -184,23 +182,41 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 resFab.costo_real += costoReal;
                 resFab.utilidad += (venta - costoReal);
 
-           } else if (!esReventa) {
-                // 2. FABRICACIÓN DESDE STOCK (Bodega)
+            } else if (!esReventa) {
+                // 2. FABRICACIÓN DESDE STOCK (Bodega) -> Con lectura inteligente del histórico de taller
                 tipo = 'Fabricado (Bodega)';
                 folio = p.id;
                 
-                let costoMatEstandar = 0;
-                for (let i = 1; i <= 20; i++) {
-                    if (producto[`mat_${i}`]) {
-                        const mat = materiales.find(m => m.id === producto[`mat_${i}`]) || {};
-                        costoMatEstandar += (parseFloat(producto[`cant_${i}`] || 0) * (parseFloat(mat.costo_unitario || 0) || 0));
+                // Si el detalle tiene la "foto" histórica guardada, la usamos
+                if (det.costo_mat_historico || det.costo_mo_historico) {
+                    costoMateriales = parseFloat(det.costo_mat_historico || 0) * cantidad;
+                    const pagoHistoricoMo = parseFloat(det.costo_mo_historico || 0) * cantidad;
+                    manoObra = pagoHistoricoMo + porcionComision;
+                } else {
+                    // Respaldo automático si es un pedido anterior: calculamos hilos del catálogo y buscamos la última orden real del taller
+                    let costoMatEstandar = 0;
+                    for (let i = 1; i <= 20; i++) {
+                        if (producto[`mat_${i}`]) {
+                            const mat = materiales.find(m => m.id === producto[`mat_${i}`]) || {};
+                            costoMatEstandar += (parseFloat(producto[`cant_${i}`] || 0) * (parseFloat(mat.costo_unitario || 0) || 0));
+                        }
                     }
+                    costoMateriales = costoMatEstandar * cantidad;
+
+                    // Buscamos la última orden de este mismo producto en el taller para extraer su mano de obra real
+                    const ultimaOrdenProd = ordenes.filter(o => {
+                        const dRef = detalle.find(dt => dt.id === o.pedido_detalle_id);
+                        return dRef && dRef.producto_id === producto.id;
+                    }).sort((a, b) => new Date(b.fecha_creacion || 0) - new Date(a.fecha_creacion || 0))[0];
+
+                    let ultimoPagoMo = 0;
+                    if (ultimaOrdenProd) {
+                        ultimoPagoMo = asignaciones.filter(a => a.orden_id === ultimaOrdenProd.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
+                                                   .reduce((acc, a) => acc + (parseFloat(a.pago_estimado || a.total || 0) || 0), 0);
+                    }
+                    manoObra = ultimoPagoMo + porcionComision;
                 }
-                costoMateriales = costoMatEstandar * cantidad;
-                
-                // NUEVO: Leemos el costo estándar de mano de obra del catálogo
-                const costoManoObraEst = parseFloat(producto.costo_mano_obra || 0) * cantidad;
-                manoObra = costoManoObraEst + porcionComision; // Sumamos artesano + comisión
+
                 costoReal = costoMateriales + manoObra;
 
                 resFab.ordenes += 1;
@@ -217,7 +233,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 
                 const costoUnitario = parseFloat(producto.costo_unitario || producto.precio_compra || producto.costo || 0);
                 costoMateriales = costoUnitario * cantidad; 
-                manoObra = porcionComision; // La comisión es el único costo extra de la reventa
+                manoObra = porcionComision; 
                 costoReal = costoMateriales + manoObra;
 
                 resRev.ordenes += 1; 
@@ -240,7 +256,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                     tipo,
                     venta,
                     costo_materiales: costoMateriales,
-                    mano_obra: manoObra, // Aquí se reflejará el pago al artesano + comisión (o pura comisión)
+                    mano_obra: manoObra,
                     costo_real: costoReal,
                     utilidad,
                     margen
