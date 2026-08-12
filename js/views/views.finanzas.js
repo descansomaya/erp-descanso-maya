@@ -151,7 +151,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
             
             const porcionComision = totalVentaPedido > 0 ? (venta / totalVentaPedido) * comisionPedido : 0;
 
-const orden = ordenes.find(o => o.pedido_detalle_id === det.id);
+            const orden = ordenes.find(o => o.pedido_detalle_id === det.id);
             const esReventa = (producto.categoria === 'reventa' || producto.clasificacion === 'Reventa');
 
             let costoMateriales = 0;
@@ -161,7 +161,7 @@ const orden = ordenes.find(o => o.pedido_detalle_id === det.id);
             let folio = '';
 
             // BLINDAJE: Si existe una orden en el taller, OBLIGATORIAMENTE es fabricada, nunca reventa
-         if (orden) {
+            if (orden) {
                 // 1. FABRICACIÓN SOBRE PEDIDO (Taller)
                 tipo = 'Fabricado (Taller)';
                 folio = orden.id;
@@ -169,7 +169,6 @@ const orden = ordenes.find(o => o.pedido_detalle_id === det.id);
                 const receta = parseReceta(orden);
                 costoMateriales = receta.reduce((acc, item) => {
                     const mat = materiales.find(m => m.id === item.mat_id) || {};
-                    // Prioriza el costo congelado dentro del JSON de la orden; si es una orden antigua, usa el de inventario como respaldo
                     const precioAplicado = parseFloat(item.costo_unitario !== undefined ? item.costo_unitario : (mat.costo_unitario || 0)) || 0;
                     return acc + ((parseFloat(item.cant || 0) || 0) * precioAplicado);
                 }, 0);
@@ -356,6 +355,11 @@ App.views.finanzas = function () {
     const resGlobal = costoRealData.resumen;
     const resFab = costoRealData.resFab;
     const resRev = costoRealData.resRev;
+
+    // CÁLCULO DE UTILIDAD Y MARGEN OPERATIVO REAL
+    const utilidadBruta = resGlobal.utilidad;
+    const utilidadOperativa = utilidadBruta - gastosOperativosPuros;
+    const margenOperativo = resGlobal.venta > 0 ? (utilidadOperativa / resGlobal.venta) : 0;
     
     const resultadoCaja = totalCobrado - gastosOperativosPuros;
     const flujoOperativo = totalCobrado - gastosOperativosPuros - totalCompras - totalNomina;
@@ -415,12 +419,14 @@ App.views.finanzas = function () {
         </div>
 
         <div class="dm-card dm-mb-4" style="background:#F0FFF4; border:1px solid #C6F6D5;">
-            ${sectionTitle('3. Rentabilidad: GLOBAL', 'El panorama completo (Producción + Reventa).')}
+            ${sectionTitle('3. Rentabilidad: GLOBAL Y OPERATIVA', 'El panorama completo (Ventas - Costos Directos - Gastos Operativos).')}
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
                 ${kpi('Ventas Totales', money(resGlobal.venta))}
-                ${kpi('Costo Total', money(resGlobal.costo_real))}
-                ${kpi('Utilidad Neta', money(resGlobal.utilidad), resGlobal.utilidad >= 0 ? 'green' : 'red')}
-                ${kpi('Margen Promedio', ((resGlobal.margen || 0) * 100).toFixed(1) + '%', resGlobal.margen >= 0 ? 'green' : 'red')}
+                ${kpi('Costo Directo', money(resGlobal.costo_real))}
+                ${kpi('Utilidad Bruta', money(utilidadBruta), utilidadBruta >= 0 ? 'green' : 'red')}
+                ${kpi('Gastos Operativos', money(gastosOperativosPuros), '#E53E3E')}
+                ${kpi('Utilidad Operativa Real', money(utilidadOperativa), utilidadOperativa >= 0 ? 'green' : 'red')}
+                ${kpi('Margen Operativo', ((margenOperativo || 0) * 100).toFixed(1) + '%', margenOperativo >= 0 ? 'green' : 'red')}
             </div>
         </div>`;
         
@@ -433,8 +439,8 @@ App.views.finanzas = function () {
             ${kpi('Artículos totales', resGlobal.ordenes)}
             ${kpi('Venta global', money(resGlobal.venta))}
             ${kpi('Costo global', money(resGlobal.costo_real))}
-            ${kpi('Utilidad global', money(resGlobal.utilidad), resGlobal.utilidad >= 0 ? 'green' : 'red')}
-            ${kpi('Margen promedio', ((resGlobal.margen || 0) * 100).toFixed(1) + '%', resGlobal.margen >= 0 ? 'green' : 'red')}
+            ${kpi('Utilidad bruta global', money(resGlobal.utilidad), resGlobal.utilidad >= 0 ? 'green' : 'red')}
+            ${kpi('Margen bruto promedio', ((resGlobal.margen || 0) * 100).toFixed(1) + '%', resGlobal.margen >= 0 ? 'green' : 'red')}
         </div>
         <div class="dm-card dm-mb-4">
             <button class="dm-btn dm-btn-primary" onclick="App.views.detalleFinanzas('costo_real', '${filtro}')">Ver costo detallado por artículo</button>
