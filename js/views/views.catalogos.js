@@ -402,13 +402,11 @@ App.views.formProducto = function(id = null, callback = null) {
     const clasif = obj ? obj.clasificacion : '';
     const cat = obj ? obj.categoria : '';
     
-    // Controles visuales
+    // Controles visuales (Solo mantenemos el costo de compra para reventa)
     const esRevInicial = (cat === 'reventa' || clasif === 'Reventa');
     const mostrarCostoCompra = esRevInicial ? 'block' : 'none';
-    const mostrarCostoMano = !esRevInicial ? 'block' : 'none';
     
     const costoActual = obj ? (obj.costo_unitario || obj.precio_compra || obj.costo || '') : '';
-    const costoManoActual = obj ? (obj.costo_mano_obra || '') : '';
 
     const formHTML = `
         <form id="dynamic-form">
@@ -423,7 +421,6 @@ App.views.formProducto = function(id = null, callback = null) {
                     <select class="dm-select" name="categoria" onchange="
                         const esRev = (this.value === 'reventa' || document.querySelector('[name=clasificacion]').value === 'Reventa');
                         document.getElementById('grupo-costo-compra').style.display = esRev ? 'block' : 'none';
-                        document.getElementById('grupo-costo-mo').style.display = !esRev ? 'block' : 'none';
                     ">
                         <option value="fabricacion" ${obj && obj.categoria === 'fabricacion' ? 'selected' : ''}>Fabricación</option>
                         <option value="reventa" ${obj && obj.categoria === 'reventa' ? 'selected' : ''}>Reventa</option>
@@ -434,7 +431,6 @@ App.views.formProducto = function(id = null, callback = null) {
                     <select class="dm-select" name="clasificacion" onchange="
                         const esRev = (this.value === 'Reventa' || document.querySelector('[name=categoria]').value === 'reventa');
                         document.getElementById('grupo-costo-compra').style.display = esRev ? 'block' : 'none';
-                        document.getElementById('grupo-costo-mo').style.display = !esRev ? 'block' : 'none';
                     ">
                         <option value="Unicolor" ${clasif === 'Unicolor' ? 'selected' : ''}>Unicolor</option>
                         <option value="Combinada" ${clasif === 'Combinada' ? 'selected' : ''}>Combinada</option>
@@ -449,13 +445,6 @@ App.views.formProducto = function(id = null, callback = null) {
             <div class="dm-form-group" id="grupo-costo-compra" style="display: ${mostrarCostoCompra}; background: #EBF8FF; padding: 12px; border-radius: 8px; border: 1px dashed #3182CE; margin-bottom: 15px;">
                 <label class="dm-label" style="color: #2B6CB0; font-weight: bold;">Costo de Compra ($)</label>
                 <input type="number" step="0.01" class="dm-input" name="costo_unitario" value="${costoActual}" placeholder="Ej. 800.00">
-            </div>
-
-            <!-- NUEVO: CAJÓN DE MANO DE OBRA (FABRICACIÓN) -->
-            <div class="dm-form-group" id="grupo-costo-mo" style="display: ${mostrarCostoMano}; background: #FFF5F5; padding: 12px; border-radius: 8px; border: 1px dashed #C53030; margin-bottom: 15px;">
-                <label class="dm-label" style="color: #C53030; font-weight: bold;">Costo Mano de Obra Artesano ($)</label>
-                <input type="number" step="0.01" class="dm-input" name="costo_mano_obra" value="${costoManoActual}" placeholder="Ej. 350.00">
-                <small style="color: #C53030; font-size: 0.8rem; display: block; margin-top: 4px;">Se usará para calcular el margen cuando vendas esta hamaca desde la bodega.</small>
             </div>
 
             <div class="dm-form-row">
@@ -518,6 +507,7 @@ App.views.formProducto = function(id = null, callback = null) {
         else App.logic.guardarNuevoGenerico('productos', data, 'PROD', 'productos', callback);
     });
 };
+
 // ==========================================
 // ARTESANOS
 // ==========================================
@@ -720,10 +710,10 @@ App.views.formTarifa = function(artesanoId, tarifaId = null) {
             <div class="dm-form-group">
                 <label class="dm-label">Aplica a</label>
                 <select class="dm-select" name="aplica_a" id="aplica-a-tarifa">
-                    <option value="total" ${aplicaA === 'total' ? 'selected' : ''}>Total de la receta</option>
-                    <option value="Cuerpo" ${aplicaA === 'Cuerpo' ? 'selected' : ''}>Cuerpo</option>
-                    <option value="Brazos" ${aplicaA === 'Brazos' ? 'selected' : ''}>Brazos</option>
-                    <option value="Adicional" ${aplicaA === 'Adicional' ? 'selected' : ''}>Adicional</option>
+                    <option value="total" ${aplica_a === 'total' ? 'selected' : ''}>Total de la receta</option>
+                    <option value="Cuerpo" ${aplica_a === 'Cuerpo' ? 'selected' : ''}>Cuerpo</option>
+                    <option value="Brazos" ${aplica_a === 'Brazos' ? 'selected' : ''}>Brazos</option>
+                    <option value="Adicional" ${aplica_a === 'Adicional' ? 'selected' : ''}>Adicional</option>
                 </select>
                 <small class="dm-text-sm dm-muted">
                     Solo se usa cuando el modo es "por_unidad".
