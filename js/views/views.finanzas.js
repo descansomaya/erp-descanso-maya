@@ -111,6 +111,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
     const ordenes = App.state.ordenes_produccion || [];
     const asignaciones = App.state.ordenes_produccion_artesanos || [];
     const materiales = App.state.inventario || [];
+    
     const hoy = new Date();
     const mesActual = hoy.getMonth();
     const anioActual = hoy.getFullYear();
@@ -131,30 +132,86 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
     
     const parseReceta = (orden) => { try { const r = JSON.parse(orden?.receta_personalizada || '[]'); return Array.isArray(r) ? r : []; } catch(e) { return []; } };
     
-    const resultado = ordenes.filter(o => entraEnFiltro(o.fecha_creacion || o.fecha_inicio || o.fecha_descuento_materiales)).map(o => {
-        const det = detalle.find(d => d.id === o.pedido_detalle_id) || {};
-        const pedido = pedidos.find(p => p.id === det.pedido_id) || {};
-        const cliente = clientes.find(c => c.id === pedido.cliente_id) || {};
-        const producto = productos.find(p => p.id === det.producto_id) || {};
-        const cantidad = parseFloat(det.cantidad || 1) || 1;
-        const venta = (parseFloat(det.precio_unitario || 0) || 0) * cantidad;
-        const receta = parseReceta(o);
-        const costoMateriales = receta.reduce((acc, item) => {
-            const mat = materiales.find(m => m.id === item.mat_id) || {};
-            return acc + ((parseFloat(item.cant || 0) || 0) * (parseFloat(mat.costo_unitario || 0) || 0));
-        }, 0);
-        const manoObra = asignaciones.filter(a => a.orden_id === o.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado').reduce((acc, a) => acc + (parseFloat(a.pago_estimado || a.total || 0) || 0), 0);
-        const costoReal = costoMateriales + manoObra;
-        const utilidad = venta - costoReal;
-        const margen = venta > 0 ? utilidad / venta : 0;
-        return { orden_id: o.id, pedido_id: det.pedido_id || '', producto: producto.nombre || det.producto_nombre || 'Producto', cliente: pedido.cliente_id === 'STOCK_INTERNO' ? 'STOCK BODEGA' : (cliente.nombre || pedido.cliente_nombre || pedido.cliente_id || ''), venta, costo_materiales: costoMateriales, mano_obra: manoObra, costo_real: costoReal, utilidad, margen };
+    const resultado = [];
+    let itemsCosteados = 0;
+
+    // Solo tomamos pedidos reales
+    const pedidosValidos = pedidos.filter(p => p.cliente_id !== 'STOCK_INTERNO' && entraEnFiltro(p.fecha_creacion || p.fecha));
+
+    pedidosValidos.forEach(p => {
+        const cliente = clientes.find(c => c.id === p.cliente_id) || {};
+        const nombreCliente = cliente.nombre || p.cliente_nombre || p.cliente_id || 'Cliente';
+        const detallesDelPedido = detalle.filter(d => d.pedido_id === p.id);
+
+        detallesDelPedido.forEach(det => {
+            const producto = productos.find(prod => prod.id === det.producto_id) || {};
+            const cantidad = parseFloat(det.cantidad || 1) || 1;
+            const venta = (parseFloat(det.precio_unitario || 0) || 0) * cantidad;
+
+            let costoMateriales = 0;
+            let manoObra = 0;
+            let tipo = 'Reventa';
+            let folio = p.id;
+
+            const orden = ordenes.find(o => o.pedido_detalle_id === det.id);
+
+            if (orden) {
+                // Es Fabricación
+                tipo = 'Fabricado';
+                folio = orden.id;
+                const receta = parseReceta(orden);
+                costoMateriales = receta.reduce((acc, item) => {
+                    const mat = materiales.find(m => m.id === item.mat_id) || {};
+                    return acc + ((parseFloat(item.cant || 0) || 0) * (parseFloat(mat.costo_unitario || 0) || 0));
+                }, 0);
+
+                manoObra = asignaciones.filter(a => a.orden_id === orden.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
+                                       .reduce((acc, a) => acc + (parseFloat(a.pago_estimado || a.total || 0) || 0), 0);
+            } else {
+                // Es Reventa
+                // Busca el costo unitario guardado en la tabla de productos
+                const costoUnidad = parseFloat(producto.costo_unitario || producto.costo || producto.precio_compra || 0);
+                costoMateriales = costoUnidad * cantidad; // El costo de reventa lo ponemos en "materiales"
+                manoObra = 0;
+            }
+
+            const costoReal = costoMateriales + manoObra;
+            const utilidad = venta - costoReal;
+            const margen = venta > 0 ? utilidad / venta : 0;
+
+            if (venta > 0 || costoReal > 0) {
+                itemsCosteados++;
+                resultado.push({
+                    orden_id: folio,
+                    pedido_id: p.id,
+                    producto: producto.nombre || det.producto_nombre || 'Producto',
+                    cliente: nombreCliente,
+                    tipo: tipo,
+                    cantidad: cantidad,
+                    venta,
+                    costo_materiales: costoMateriales,
+                    mano_obra: manoObra,
+                    costo_real: costoReal,
+                    utilidad,
+                    margen
+                });
+            }
+        });
     });
     
-    const resumen = resultado.reduce((acc, x) => { acc.ordenes += 1; acc.venta += x.venta; acc.costo_materiales += x.costo_materiales; acc.mano_obra += x.mano_obra; acc.costo_real += x.costo_real; acc.utilidad += x.utilidad; return acc; }, { ordenes: 0, venta: 0, costo_materiales: 0, mano_obra: 0, costo_real: 0, utilidad: 0 });
+    const resumen = resultado.reduce((acc, x) => { 
+        acc.venta += x.venta; 
+        acc.costo_materiales += x.costo_materiales; 
+        acc.mano_obra += x.mano_obra; 
+        acc.costo_real += x.costo_real; 
+        acc.utilidad += x.utilidad; 
+        return acc; 
+    }, { ordenes: itemsCosteados, venta: 0, costo_materiales: 0, mano_obra: 0, costo_real: 0, utilidad: 0 });
+    
     resumen.margen = resumen.venta > 0 ? resumen.utilidad / resumen.venta : 0;
     return { ordenes: resultado, resumen };
 };
-
+            
 App.views.finanzas = function () {
     const title = document.getElementById('app-header-title');
     const subtitle = document.getElementById('app-header-subtitle');
