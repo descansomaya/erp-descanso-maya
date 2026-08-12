@@ -140,11 +140,18 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
         const cliente = clientes.find(c => c.id === p.cliente_id) || {};
         const nombreCliente = cliente.nombre || p.cliente_nombre || p.cliente_id || 'Cliente';
         const detallesDelPedido = detalle.filter(d => d.pedido_id === p.id);
+        
+        // Calculamos la comisión total del pedido y el total de la venta para repartirla proporcionalmente
+        const comisionPedido = parseFloat(p.comision || 0) || 0;
+        const totalVentaPedido = detallesDelPedido.reduce((acc, d) => acc + ((parseFloat(d.precio_unitario || 0) || 0) * (parseFloat(d.cantidad || 1) || 1)), 0);
 
         detallesDelPedido.forEach(det => {
             const producto = productos.find(prod => prod.id === det.producto_id) || {};
             const cantidad = parseFloat(det.cantidad || 1) || 1;
             const venta = (parseFloat(det.precio_unitario || 0) || 0) * cantidad;
+            
+            // Le asignamos a este artículo la rebanada de comisión que le toca (basado en lo que costó)
+            const porcionComision = totalVentaPedido > 0 ? (venta / totalVentaPedido) * comisionPedido : 0;
 
             const orden = ordenes.find(o => o.pedido_detalle_id === det.id);
             const esReventa = (producto.categoria === 'reventa' || producto.clasificacion === 'Reventa');
@@ -164,8 +171,10 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                     const mat = materiales.find(m => m.id === item.mat_id) || {};
                     return acc + ((parseFloat(item.cant || 0) || 0) * (parseFloat(mat.costo_unitario || 0) || 0));
                 }, 0);
-                manoObra = asignaciones.filter(a => a.orden_id === orden.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
+                const pagoArtesano = asignaciones.filter(a => a.orden_id === orden.id && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
                                        .reduce((acc, a) => acc + (parseFloat(a.pago_estimado || a.total || 0) || 0), 0);
+                
+                manoObra = pagoArtesano + porcionComision; // Sumamos la comisión como costo operativo
                 costoReal = costoMateriales + manoObra;
 
                 resFab.ordenes += 1;
@@ -180,7 +189,6 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 tipo = 'Fabricado (Bodega)';
                 folio = p.id;
                 
-                // Para calcular lo que te costó, el sistema va a leer la receta original guardada en tu catálogo
                 let costoMatEstandar = 0;
                 for (let i = 1; i <= 20; i++) {
                     if (producto[`mat_${i}`]) {
@@ -190,9 +198,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 }
                 costoMateriales = costoMatEstandar * cantidad;
                 
-                // Al sacarla de bodega hoy, no sabemos exactamente a qué artesano se le pagó en el pasado. 
-                // Por lo tanto, la mano de obra saldrá temporalmente en $0 para esta venta en mostrador.
-                manoObra = 0; 
+                manoObra = porcionComision; // Solo cobramos la comisión, la manufactura ya se pagó en el pasado
                 costoReal = costoMateriales + manoObra;
 
                 resFab.ordenes += 1;
@@ -208,13 +214,15 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                 folio = p.id;
                 
                 const costoUnitario = parseFloat(producto.costo_unitario || producto.precio_compra || producto.costo || 0);
-                costoReal = costoUnitario * cantidad;
-                costoMateriales = costoReal; 
+                costoMateriales = costoUnitario * cantidad; 
+                manoObra = porcionComision; // La comisión es el único costo extra de la reventa
+                costoReal = costoMateriales + manoObra;
 
                 resRev.ordenes += 1; 
                 resRev.venta += venta;
                 resRev.costo_real += costoReal;
-                resRev.costo_materiales += costoMateriales; 
+                resRev.costo_materiales += costoMateriales;
+                resRev.mano_obra += manoObra;
                 resRev.utilidad += (venta - costoReal);
             }
 
@@ -230,7 +238,7 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
                     tipo,
                     venta,
                     costo_materiales: costoMateriales,
-                    mano_obra: manoObra,
+                    mano_obra: manoObra, // Aquí se reflejará el pago al artesano + comisión (o pura comisión)
                     costo_real: costoReal,
                     utilidad,
                     margen
