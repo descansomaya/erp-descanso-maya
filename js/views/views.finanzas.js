@@ -260,8 +260,9 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
         });
     });
 
-   // 2. PROCESAR REPARACIONES (Búsqueda inteligente en Nómina/Pagos)
+  // 2. PROCESAR REPARACIONES (Busca en pago_artesanos, asignaciones y hoja directa)
     const reparacionesValidas = reparaciones.filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
+    const pagosTablaDirecta = App.state.pago_artesanos || [];
 
     reparacionesValidas.forEach(r => {
         const cliente = clientes.find(c => c.id === r.cliente_id) || {};
@@ -269,13 +270,21 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
         
         const ventaRep = parseFloat(r.precio || 0) || 0;
         
-        // Busca el pago del artesano en la tabla de nómina por orden_id, reparacion_id o ref_id
-        const pagoArtesanoNomi = asignaciones
+        // 1. Busca en la tabla pago_artesanos (Nómina)
+        const pagoNomina = pagosTablaDirecta
+            .filter(p => (p.orden_id === r.id || p.reparacion_id === r.id || p.ref_id === r.id) && String(p.estado || '').toLowerCase() !== 'cancelado')
+            .reduce((acc, p) => acc + (parseFloat(p.total || p.monto || p.pago_estimado || 0) || 0), 0);
+
+        // 2. Busca en la tabla ordenes_produccion_artesanos (Asignaciones Taller)
+        const pagoTaller = asignaciones
             .filter(a => (a.orden_id === r.id || a.reparacion_id === r.id || a.ref_id === r.id) && String(a.estado || 'activo').toLowerCase() !== 'cancelado')
             .reduce((acc, a) => acc + (parseFloat(a.pago_estimado || a.monto || a.total || 0) || 0), 0);
-        
-        const pagoArtesanoDirecto = parseFloat(r.costo_mano_obra || 0) || 0;
-        const pagoArtesanoRep = pagoArtesanoNomi > 0 ? pagoArtesanoNomi : pagoArtesanoDirecto;
+
+        // 3. Busca en la columna directa de la hoja reparaciones
+        const pagoDirectoHoja = parseFloat(r.costo_mano_obra || 0) || 0;
+
+        // Prioridad: Nómina > Taller > Columna Hoja
+        const pagoArtesanoRep = pagoNomina > 0 ? pagoNomina : (pagoTaller > 0 ? pagoTaller : pagoDirectoHoja);
         
         const costoMatRep = parseFloat(r.costo_materiales || 0) || 0;
         const costoRealRep = costoMatRep + pagoArtesanoRep;
@@ -305,7 +314,6 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
             });
         }
     });
-
     resFab.margen = resFab.venta > 0 ? resFab.utilidad / resFab.venta : 0;
     resRev.margen = resRev.venta > 0 ? resRev.utilidad / resRev.venta : 0;
     resRep.margen = resRep.venta > 0 ? resRep.utilidad / resRep.venta : 0;
