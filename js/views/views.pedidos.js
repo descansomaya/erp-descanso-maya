@@ -1,5 +1,5 @@
 // ==========================================
-// VISTAS: PEDIDOS Y COTIZACIONES
+// VISTAS: PEDIDOS Y COTIZACIONES (FLUIDO & AUTO-RETORNO)
 // ==========================================
 
 window.App = window.App || {};
@@ -265,27 +265,22 @@ window.generarListaPedidos = function(tipo) {
 // CARRITO Y CREACIÓN DE PEDIDOS MÚLTIPLES
 // ==========================================
 App.views._formPedidoInterno = function(obj = null, prefill = null) {
-    // 1. Agregamos vendedor_id a los datos base
     const dataBase = Object.assign({ cantidad: 1, anticipo: 0, comision: 0, vendedor_id: '' }, prefill || {}, obj || {});
 
-    // Iniciamos la memoria del carrito
     if (!obj) { window._carritoTemp = []; }
 
-    // 2. Preparamos la lista de Clientes
     let htmlClientes = '<option value="STOCK_INTERNO">STOCK BODEGA</option>';
     (App.state.clientes || []).forEach(c => {
         const selected = dataBase.cliente_id === c.id ? 'selected' : '';
         htmlClientes += `<option value="${c.id}" ${selected}>${App.ui.safe(c.nombre)}</option>`;
     });
 
-    // 3. NUEVO: Preparamos la lista de Vendedores
     let htmlVendedores = '<option value="">-- Venta Directa (Sin Vendedor) --</option>';
     (App.state.vendedores || []).forEach(v => {
         const selected = dataBase.vendedor_id === v.id ? 'selected' : '';
         htmlVendedores += `<option value="${v.id}" ${selected}>${App.ui.safe(v.nombre)}</option>`;
     });
 
-    // 4. Preparamos la lista de Productos
     let htmlProductos = '<option value="">-- Seleccionar producto --</option>';
     (App.state.productos || []).forEach(p => {
         const precio = p.precio_venta || 0;
@@ -295,7 +290,6 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
     let htmlCarrito = '';
 
     if (!obj) {
-        // MODO CREACIÓN: Mostramos el constructor del carrito
         htmlCarrito = `
             <div class="dm-form-group">
                 <label class="dm-label">Artículos del pedido</label>
@@ -319,12 +313,11 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
                     </div>
                 </div>
                 <div id="cart-items-container">
-                    <!-- Aquí se dibujarán los items agregados -->
+                    <!-- Artículos dinámicos -->
                 </div>
             </div>
         `;
     } else {
-        // MODO EDICIÓN: Listamos los artículos de forma estática
         const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === obj.id);
         let itemsHtml = detalles.map(d => {
             const p = (App.state.productos || []).find(x => x.id === d.producto_id);
@@ -336,7 +329,7 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
                 <label class="dm-label">Artículos Registrados</label>
                 <div class="dm-card" style="background:var(--dm-surface-2); padding:10px;">
                     ${itemsHtml || '<i>Sin artículos</i>'}
-                    <div class="dm-text-sm dm-muted dm-mt-2">*Para cambiar productos o cantidades, elimina este pedido y crea uno nuevo para no alterar los descuadres de hilos del taller.</div>
+                    <div class="dm-text-sm dm-muted dm-mt-2">*Para cambiar productos o cantidades, elimina este pedido y crea uno nuevo.</div>
                 </div>
             </div>
         `;
@@ -344,11 +337,13 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
 
     const formHTML = `
         <form id="dynamic-form">
-            <!-- NUEVO: Fila compartida para Cliente y Vendedor -->
             <div class="dm-form-row">
                 <div class="dm-form-group">
-                    <label class="dm-label">Cliente / Destino</label>
-                    <select class="dm-select" name="cliente_id" onchange="window.verificarStockInterno()">${htmlClientes}</select>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <label class="dm-label" style="margin:0;">Cliente / Destino</label>
+                        <button type="button" class="dm-btn dm-btn-ghost dm-btn-sm" style="padding:0 4px; font-size:12px; color:var(--dm-primary);" onclick="App.views.formClienteRapidoDesdeCotizacion()">+ Cliente</button>
+                    </div>
+                    <select class="dm-select" name="cliente_id" id="select-cliente-pedido" onchange="window.verificarStockInterno()">${htmlClientes}</select>
                 </div>
                 <div class="dm-form-group">
                     <label class="dm-label" style="color: #2B6CB0;">¿Quién cerró la venta?</label>
@@ -389,11 +384,11 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
                 <textarea class="dm-textarea" name="notas">${App.ui.escapeHTML(dataBase.notas || '')}</textarea>
             </div>
 
-            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">${obj ? 'Guardar Cambios Generales' : 'Confirmar Pedido '}</button>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">${obj ? 'Guardar Cambios Generales' : 'Confirmar Pedido'}</button>
         </form>
     `;
 
-    App.ui.openSheet(obj ? 'Editar Pedido' : 'Nuevo Pedido ', formHTML, async (data) => {
+    App.ui.openSheet(obj ? 'Editar Pedido' : 'Nuevo Pedido', formHTML, async (data) => {
         if (!obj) {
             if (window._carritoTemp.length === 0) {
                 App.ui.toast("Debes agregar al menos un artículo a la lista", "warning");
@@ -409,7 +404,7 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
             loaderMessage: obj ? 'Guardando cambios...' : 'Creando pedido y apartando inventario para todos los artículos...',
             successMessage: obj ? 'Pedido actualizado' : 'Pedido registrado correctamente',
             errorTitle: obj ? 'No se pudo actualizar' : 'No se pudo crear el pedido',
-            closeSheetOnSuccess: true
+            closeSheetOnSuccess: true // <--- Cierra el modal automáticamente
         }, async () => action());
     });
 
@@ -497,6 +492,7 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
         if(typeof window.verificarStockInterno === 'function') window.verificarStockInterno();
     }, 150);
 };
+
 App.views.formPedido = function(id = null) {
     const obj = id ? (App.state.pedidos || []).find(p => p.id === id) : null;
     return App.views._formPedidoInterno(obj, null);
@@ -568,13 +564,13 @@ App.views.modalAbonos = function(pedidoId) {
             loaderMessage: 'Registrando abono...',
             successMessage: 'Abono registrado',
             errorTitle: 'No se pudo registrar el abono',
-            closeSheetOnSuccess: true
+            closeSheetOnSuccess: true // <--- Cierra el modal de abono
         }, async () => App.logic.guardarAbono(data));
     });
 };
 
 // ==========================================
-// COTIZACIONES
+// COTIZACIONES Y CREACIÓN RÁPIDA CON AUTO-SELECCIÓN
 // ==========================================
 App.views._resumenConversionCotizaciones = function () {
     const cotizaciones = App.state.cotizaciones || [];
@@ -726,6 +722,9 @@ App.views.toggleCamposCotizacion = function () {
     }
 };
 
+// ==========================================
+// CREACIÓN RÁPIDA DE CLIENTES CON AUTO-SELECCIÓN Y CIERRE
+// ==========================================
 App.views.formClienteRapidoDesdeCotizacion = function () {
     const formHTML = `
         <form id="dynamic-form-cliente-rapido">
@@ -746,26 +745,46 @@ App.views.formClienteRapidoDesdeCotizacion = function () {
     `;
 
     App.ui.openSheet('Nuevo cliente', formHTML, async (data) => {
-        // CORRECCIÓN 1: Agregamos 'clientes' como cuarto parámetro para que actualice la memoria sin F5
-        const res = await App.logic.guardarNuevoGenerico('clientes', data, 'CLI', 'clientes');
-        
-        setTimeout(() => {
-            const select = document.querySelector('#dynamic-form select[name="cliente_id"]');
-            const input = document.querySelector('#dynamic-form input[name="cliente_nombre"]');
-            const ultimo = (App.state.clientes || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
+        return App.ui.runSafeAction({
+            lockKey: 'cliente:nuevo:rapido',
+            loadingText: 'Guardando...',
+            loaderMessage: 'Guardando cliente...',
+            successMessage: 'Cliente guardado correctamente',
+            errorTitle: 'No se pudo guardar el cliente',
+            closeSheetOnSuccess: true // <--- Cierra el modal automáticamente
+        }, async () => {
+            const res = await App.logic.guardarNuevoGenerico('clientes', data, 'CLI', 'clientes');
             
-            if (ultimo) {
-                if (select) {
-                    select.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)}</option>`);
-                    select.value = ultimo.id;
+            // AUTO-SELECCIÓN: Busca al cliente guardado y lo selecciona en los desplegables activos
+            setTimeout(() => {
+                const ultimo = (App.state.clientes || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
+                if (ultimo) {
+                    // Si está dentro de Pedidos:
+                    const selectPedido = document.getElementById('select-cliente-pedido');
+                    if (selectPedido) {
+                        selectPedido.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)}</option>`);
+                        selectPedido.value = ultimo.id;
+                    }
+
+                    // Si está dentro de Cotizaciones:
+                    const selectCot = document.querySelector('#dynamic-form select[name="cliente_id"]');
+                    const inputCot = document.querySelector('#dynamic-form input[name="cliente_nombre"]');
+                    if (selectCot) {
+                        selectCot.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)}</option>`);
+                        selectCot.value = ultimo.id;
+                    }
+                    if (inputCot) inputCot.value = ultimo.nombre || '';
                 }
-                if (input) input.value = ultimo.nombre || '';
-            }
-        }, 350);
-        return res;
+            }, 200);
+
+            return res;
+        });
     });
 };
 
+// ==========================================
+// CREACIÓN RÁPIDA DE PRODUCTOS CON AUTO-SELECCIÓN Y CIERRE
+// ==========================================
 App.views.formProductoRapidoDesdeCotizacion = function () {
     const formHTML = `
         <form id="dynamic-form-producto-rapido">
@@ -789,38 +808,45 @@ App.views.formProductoRapidoDesdeCotizacion = function () {
     `;
 
     App.ui.openSheet('Nuevo producto', formHTML, async (data) => {
-        const payload = Object.assign({ activo: 'TRUE' }, data);
-        
-        // CORRECCIÓN 1: Agregamos 'productos' como cuarto parámetro para actualizar memoria
-        const res = await App.logic.guardarNuevoGenerico('productos', payload, 'PROD', 'productos');
-        
-        setTimeout(() => {
-            const ultimo = (App.state.productos || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
+        return App.ui.runSafeAction({
+            lockKey: 'producto:nuevo:rapido',
+            loadingText: 'Guardando...',
+            loaderMessage: 'Guardando producto...',
+            successMessage: 'Producto guardado correctamente',
+            errorTitle: 'No se pudo guardar el producto',
+            closeSheetOnSuccess: true // <--- Cierra el modal automáticamente
+        }, async () => {
+            const payload = Object.assign({ activo: 'TRUE' }, data);
+            const res = await App.logic.guardarNuevoGenerico('productos', payload, 'PROD', 'productos');
             
-            if (ultimo) {
-                // CORRECCIÓN 2: Le enseñamos a buscar el menú del nuevo Carrito de Compras
-                const selectCarrito = document.getElementById('cart-prod-select');
-                if (selectCarrito) {
-                    const precio = ultimo.precio_venta || 0;
-                    selectCarrito.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}" data-precio="${precio}">${App.ui.safe(ultimo.nombre)}</option>`);
-                    selectCarrito.value = ultimo.id;
-                    
-                    const priceInp = document.getElementById('cart-price');
-                    if(priceInp) priceInp.value = precio;
-                }
+            // AUTO-SELECCIÓN: Asigna el producto creado al carrito o formulario activo
+            setTimeout(() => {
+                const ultimo = (App.state.productos || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
+                
+                if (ultimo) {
+                    const selectCarrito = document.getElementById('cart-prod-select');
+                    if (selectCarrito) {
+                        const precio = ultimo.precio_venta || 0;
+                        selectCarrito.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}" data-precio="${precio}">${App.ui.safe(ultimo.nombre)}</option>`);
+                        selectCarrito.value = ultimo.id;
+                        
+                        const priceInp = document.getElementById('cart-price');
+                        if(priceInp) priceInp.value = precio;
+                    }
 
-                // (Respaldo por si se usa desde Cotizaciones regulares)
-                const selectCotizacion = document.querySelector('#dynamic-form select[name="producto_id"]');
-                if (selectCotizacion && !selectCarrito) {
-                    selectCotizacion.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)}</option>`);
-                    selectCotizacion.value = ultimo.id;
-                    if (typeof App.views.syncCotizacionProducto === 'function') {
-                        App.views.syncCotizacionProducto();
+                    const selectCotizacion = document.querySelector('#dynamic-form select[name="producto_id"]');
+                    if (selectCotizacion && !selectCarrito) {
+                        selectCotizacion.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)}</option>`);
+                        selectCotizacion.value = ultimo.id;
+                        if (typeof App.views.syncCotizacionProducto === 'function') {
+                            App.views.syncCotizacionProducto();
+                        }
                     }
                 }
-            }
-        }, 350);
-        return res;
+            }, 200);
+
+            return res;
+        });
     });
 };
 
@@ -1141,9 +1167,17 @@ App.views.formReparacionDesdeCotizacion = function(cotizacionId) {
     `;
 
     App.ui.openSheet('Convertir a reparación', formHTML, async (data) => {
-        const res = await App.logic.guardarNuevoGenerico('reparaciones', data, 'REP', 'reparaciones');
-        await App.views._marcarCotizacionConvertida(cotizacionId, { convertido_a: 'reparacion' });
-        return res;
+        return App.ui.runSafeAction({
+            lockKey: `cotizacion:${cotizacionId}:convertir:reparacion`,
+            loadingText: 'Creando...',
+            loaderMessage: 'Creando reparación...',
+            successMessage: 'Reparación creada correctamente',
+            closeSheetOnSuccess: true
+        }, async () => {
+            const res = await App.logic.guardarNuevoGenerico('reparaciones', data, 'REP', 'reparaciones');
+            await App.views._marcarCotizacionConvertida(cotizacionId, { convertido_a: 'reparacion' });
+            return res;
+        });
     });
 };
 
