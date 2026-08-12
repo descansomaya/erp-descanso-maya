@@ -33,7 +33,7 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
         const reservadoActual = parseFloat(mat.stock_reservado || 0) || 0;
         
         const nuevoStock = stockActual + cant;
-        const nuevoReservado = reservadoActual + cant; // <-- Volvemos a apartar el inventario
+        const nuevoReservado = reservadoActual + cant;
 
         const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
         const totalMovimiento = cant * costoUnitario;
@@ -66,7 +66,6 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
     const res = await App.api.fetch('ejecutar_lote', { operaciones });
     if (res.status !== 'success') { throw new Error(res.message || 'No se pudo ejecutar la reversa'); }
 
-    // Sincronizar memoria (App.state)
     receta.forEach((item) => {
         const matId = item.mat_id;
         const cant = parseFloat(item.cant || 0) || 0;
@@ -75,7 +74,7 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
         const mat = (App.state?.inventario || []).find(m => m.id === matId);
         if (mat) {
             mat.stock_real = (parseFloat(mat.stock_real || 0) || 0) + cant;
-            mat.stock_reservado = (parseFloat(mat.stock_reservado || 0) || 0) + cant; // Sincroniza apartado
+            mat.stock_reservado = (parseFloat(mat.stock_reservado || 0) || 0) + cant;
         }
     });
 
@@ -156,7 +155,7 @@ App.views.descontarMaterialesProduccion = async function (ordenId) {
         const reservadoActual = parseFloat(mat.stock_reservado || 0) || 0;
         
         const nuevoStock = stockActual - cant;
-        const nuevoReservado = Math.max(0, reservadoActual - cant); // Liberamos el stock apartado
+        const nuevoReservado = Math.max(0, reservadoActual - cant);
 
         if (nuevoStock < 0) {
             throw new Error(`Stock insuficiente: ${mat.nombre || matId}`);
@@ -210,7 +209,6 @@ App.views.descontarMaterialesProduccion = async function (ordenId) {
         throw new Error(res.message || 'No se pudieron descontar materiales');
     }
 
-    // === AQUÍ ESTÁ LA ACTUALIZACIÓN DE MEMORIA (App.state) ===
     receta.forEach((item) => {
         const matId = item.mat_id;
         const cant = parseFloat(item.cant || 0) || 0;
@@ -316,7 +314,11 @@ App.views.accionProduccion = function (button, ordenId, actionName) {
 App.views.accionAsignacionProduccion = function (button, ordenId, asignacionId, actionName) {
     const actions = {
         cancelar: {
-            fn: () => App.logic.cancelarAsignacionMultiArtesano(asignacionId),
+            fn: async () => {
+                const res = await App.logic.cancelarAsignacionMultiArtesano(asignacionId);
+                setTimeout(() => App.views.verDetallesProduccion(ordenId), 200);
+                return res;
+            },
             loadingText: 'Eliminando...',
             loaderMessage: 'Cancelando asignación...',
             successMessage: 'Asignación cancelada',
@@ -380,7 +382,6 @@ App.views._buildOrdenCard = function (o) {
     let costoMateriales = 0;
     const receta = App.views._getRecetaOrden(o);
     
-    // CORRECCIÓN: Sumamos el 100% de la receta sin recortar a 3 ítems
     receta.forEach(item => {
         const mat = (App.state?.inventario || []).find(m => m.id === item.mat_id);
         if (mat) {
@@ -523,7 +524,7 @@ App.views.verDetallesProduccion = function (ordenId) {
                         <div style="text-align:right;">
                             <strong>$${(parseFloat(a.pago_estimado || 0) || 0).toFixed(2)}</strong>
                             <div class="dm-list-card-actions" style="justify-content:flex-end; margin-top:8px;">
-                                <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formAsignacionMultiArtesano('${o.id}', '${a.id}'), 250);">✏️</button>
+                                <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formAsignacionMultiArtesano('${o.id}', '${a.id}')">✏️</button>
                                 <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionAsignacionProduccion(this, '${o.id}', '${a.id}', 'cancelar')">🗑️</button>
                             </div>
                         </div>
@@ -588,7 +589,7 @@ App.views.verDetallesProduccion = function (ordenId) {
         <div class="dm-row-between dm-mt-4">
             <button class="dm-btn dm-btn-secondary" onclick="App.ui.closeSheet()">Cerrar</button>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button class="dm-btn dm-btn-primary" onclick="App.ui.closeSheet(); setTimeout(()=>App.views.formAsignacionMultiArtesano('${o.id}'), 250);">+ Asignar artesano</button>
+                <button class="dm-btn dm-btn-primary" onclick="App.views.formAsignacionMultiArtesano('${o.id}')">+ Asignar artesano</button>
                 ${o.estado !== 'listo' ? `<button class="dm-btn dm-btn-ghost" style="border:1px solid var(--dm-border);" onclick="App.views.modalMateriaPrima('${o.id}')">🧶 Asignar Hilos</button>` : ''}
                 ${o.estado !== 'pendiente' ? `<button class="dm-btn dm-btn-secondary" onclick="App.views.accionProduccion(this, '${o.id}', 'regresarPendiente')">↩️ Pendiente</button>` : ''}
             </div>
@@ -672,8 +673,14 @@ App.views.formAsignacionMultiArtesano = function (ordenId, asignacionId = null) 
             loaderMessage: asignacion ? 'Guardando asignación...' : 'Guardando asignación de artesano...',
             successMessage: asignacion ? 'Asignación actualizada' : 'Asignación guardada',
             errorTitle: asignacion ? 'No se pudo actualizar la asignación' : 'No se pudo guardar la asignación',
-            closeSheetOnSuccess: true
-        }, async () => asignacion ? App.logic.editarAsignacionMultiArtesano(data) : App.logic.guardarAsignacionMultiArtesano(data));
+            closeSheetOnSuccess: true // <--- Cierra el modal de asignación
+        }, async () => {
+            const res = asignacion ? await App.logic.editarAsignacionMultiArtesano(data) : await App.logic.guardarAsignacionMultiArtesano(data);
+            
+            // RETORNO AUTOMÁTICO AL DETALLE DE LA ORDEN
+            setTimeout(() => App.views.verDetallesProduccion(ordenId), 200);
+            return res;
+        });
     });
 
     if (asignacion?.artesano_id) {
@@ -800,7 +807,6 @@ App.views.modalMateriaPrima = function (ordenId) {
                 ${htmlFilas}
             </div>
             <button type="button" class="dm-btn dm-btn-ghost dm-btn-block dm-mb-4" onclick="document.getElementById('hilos-wrapper-${uniqueId}').insertAdjacentHTML('beforeend', window._generarFilaHiloModal())">+ Añadir otro hilo</button>
-            <!-- AQUI SE CAMBIÓ EL TEXTO DEL BOTÓN -->
             <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">💾 Guardar Receta</button>
         </form>
     `;
@@ -823,7 +829,7 @@ App.views.modalMateriaPrima = function (ordenId) {
                     mat_id: mId, 
                     cant: c, 
                     uso: u,
-                    costo_unitario: parseFloat(mat?.costo_unitario || 0) // <--- Congela el costo si se edita en el modal
+                    costo_unitario: parseFloat(mat?.costo_unitario || 0)
                 });
             }
         });
@@ -835,12 +841,17 @@ App.views.modalMateriaPrima = function (ordenId) {
 
         return App.ui.runSafeAction({
             lockKey: `produccion:${ordenId}:receta:guardar`,
-            // AQUI SE CAMBIARON LOS MENSAJES PARA REFLEJAR SOLO EL GUARDADO
             loadingText: 'Guardando...',
             loaderMessage: 'Guardando receta y recalculando pago...',
             successMessage: 'Receta de hilos guardada correctamente',
             errorTitle: 'Error al guardar los hilos',
-            closeSheetOnSuccess: true
-        }, async () => App.logic.guardarRecetaProduccion(ordenId, recetaFinal));
+            closeSheetOnSuccess: true // <--- Cierra el modal de hilos
+        }, async () => {
+            const res = await App.logic.guardarRecetaProduccion(ordenId, recetaFinal);
+            
+            // RETORNO AUTOMÁTICO AL DETALLE DE LA ORDEN
+            setTimeout(() => App.views.verDetallesProduccion(ordenId), 200);
+            return res;
+        });
     });
 };
