@@ -55,5 +55,5 @@ App.logic.pagarComisionesVendedor = async function(vendedorId, pedidosIds, total
         console.error("Error pagando comisiones:", error);
         throw error;
     }
-};
+}
 };
