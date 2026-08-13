@@ -1421,6 +1421,9 @@ window.verificarStockInterno = function() {
 // ==========================================
 // REPORTE DE RENDIMIENTO DE VENDEDORES
 // ==========================================
+// ==========================================
+// REPORTE DE RENDIMIENTO DE VENDEDORES (FILTRANDO STOCK BODEGA)
+// ==========================================
 App.views._resumenRendimientoVendedores = function () {
     const vendedores = App.state.vendedores || [];
     const pedidos = App.state.pedidos || [];
@@ -1435,7 +1438,13 @@ App.views._resumenRendimientoVendedores = function () {
     ];
 
     listaVendedores.forEach(v => {
-        const pedVend = pedidos.filter(p => (p.vendedor_id || '') === v.id && String(p.estado || '').toLowerCase() !== 'cancelado');
+        // FILTRO CLAVE: Excluimos pedidos cancelados Y pedidos de STOCK_INTERNO
+        const pedVend = pedidos.filter(p => 
+            (p.vendedor_id || '') === v.id && 
+            String(p.estado || '').toLowerCase() !== 'cancelado' &&
+            p.cliente_id !== 'STOCK_INTERNO'
+        );
+
         const cotVend = cotizaciones.filter(c => (c.vendedor_id || '') === v.id);
 
         const ventasTotales = pedVend.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
@@ -1443,7 +1452,8 @@ App.views._resumenRendimientoVendedores = function () {
         const pzasVendidas = pedVend.length;
         const ticketPromedio = pzasVendidas > 0 ? (ventasTotales / pzasVendidas) : 0;
 
-        if (pzasVendidas > 0 || v.id !== '') {
+        // Solo mostramos vendedores reales o Venta Directa si tiene ventas comerciales válidas
+        if (pzasVendidas > 0 || (v.id !== '' && cotVend.length > 0)) {
             reporte.push({
                 id: v.id,
                 nombre: v.nombre,
