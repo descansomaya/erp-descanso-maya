@@ -1,5 +1,5 @@
 // ==========================================
-// VISTAS: INVENTARIO Y COMPRAS (FLUIDO, AUTO-RETORNO Y FASE 2)
+// VISTAS: INVENTARIO, COMPRAS Y BODEGA DE PRODUCTOS TERMINADOS (FASE 3)
 // ==========================================
 
 window.App = window.App || {};
@@ -85,9 +85,6 @@ App.views._resumenInventario = function () {
     return resumen;
 };
 
-// ==========================================
-// FASE 2: COMPONENTES DE ALERTA Y GENERADOR DE COMPRA SUGERIDA
-// ==========================================
 App.views._renderBannerStockCritico = function () {
     const r = App.views._resumenInventario();
     if (!r.topCriticos.length) return '';
@@ -123,7 +120,6 @@ App.views.generarCompraSugerida = function () {
         return;
     }
 
-    // Armamos la lista de renglones calculando la cantidad faltante para cubrir el mínimo
     let htmlFilasSugeridas = '';
     criticos.forEach(c => {
         const libre = Math.max(0, c.libre);
@@ -210,6 +206,94 @@ App.views._optionsMaterialCompraConSeleccion = function (selectedId) {
         htmlMat += `<option value="${m.id}" ${m.id === selectedId ? 'selected' : ''}>${App.ui.safe(m.nombre)} (${App.ui.safe(m.tipo || '')})</option>`; 
     });
     return htmlMat;
+};
+
+// ==========================================
+// FASE 3: BODEGA DE PRODUCTOS TERMINADOS Y REVENTA
+// ==========================================
+App.views._renderProductosTerminadosBodega = function () {
+    const productos = App.state.productos || [];
+    let html = `<div class="dm-list">`;
+
+    if (!productos.length) {
+        html += `<div class="dm-alert dm-alert-info">No hay productos registrados en el catálogo.</div>`;
+    } else {
+        productos.forEach(p => {
+            const stockDisponible = parseFloat(p.stock_disponible || p.stock_real || 0) || 0;
+            const esReventa = (p.categoria === 'reventa' || p.clasificacion === 'Reventa');
+            const tipoLabel = esReventa ? '🛒 Reventa Directa' : '🔨 Fabricación Taller';
+            const badgeClass = stockDisponible > 0 ? 'dm-badge-success' : 'dm-badge-warning';
+
+            html += `
+                <div class="dm-list-card tarj-prod-bodega">
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                        <div class="dm-row-between" style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
+                            <div style="flex:1; min-width:0;">
+                                <div class="dm-list-card-title" style="word-break:break-word;">${App.ui.escapeHTML(p.nombre)}</div>
+                                <div class="dm-list-card-subtitle">${tipoLabel}</div>
+                            </div>
+                            <div style="flex:0 0 auto;">
+                                <span class="dm-badge ${badgeClass}">Disponible: ${App.ui.number(stockDisponible, 0)} pzas</span>
+                            </div>
+                        </div>
+
+                        <div class="dm-card" style="background:var(--dm-surface-2); padding:10px;">
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(100px,1fr)); gap:10px; text-align:center;">
+                                <div><small class="dm-muted">Precio Venta</small><br><strong>${App.ui.money(p.precio_venta || 0)}</strong></div>
+                                <div><small class="dm-muted">Costo Base</small><br><strong>${App.ui.money(p.costo_unitario || p.costo || 0)}</strong></div>
+                            </div>
+                        </div>
+
+                        <div class="dm-list-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formAjusteStockProducto('${p.id}')">📦 Ajustar Stock Manual</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    html += `</div>`;
+    return html;
+};
+
+App.views.formAjusteStockProducto = function (productoId) {
+    const prod = (App.state.productos || []).find(p => p.id === productoId);
+    if (!prod) return;
+
+    const stockActual = parseFloat(prod.stock_disponible || prod.stock_real || 0) || 0;
+
+    const formHTML = `
+        <form id="dynamic-form">
+            <div class="dm-alert dm-alert-info dm-mb-3">
+                Ajustando inventario físico para: <strong>${App.ui.safe(prod.nombre)}</strong>
+            </div>
+            <div class="dm-form-group">
+                <label class="dm-label">Stock Disponible Actual</label>
+                <input type="number" class="dm-input" name="stock_disponible" value="${stockActual}" required min="0">
+            </div>
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">💾 Guardar Nuevo Stock</button>
+        </form>
+    `;
+
+    App.ui.openSheet('Ajuste de Stock Bodega', formHTML, async (data) => {
+        return App.ui.runSafeAction({
+            lockKey: `producto:${productoId}:stock:ajustar`,
+            loadingText: 'Actualizando...',
+            loaderMessage: 'Guardando nuevo stock de producto en bodega...',
+            successMessage: 'Stock de bodega actualizado',
+            closeSheetOnSuccess: true
+        }, async () => {
+            const nuevoStock = parseFloat(data.stock_disponible || 0) || 0;
+            const res = await App.logic.actualizarRegistroGenerico('productos', productoId, {
+                stock_disponible: nuevoStock
+            }, 'productos');
+
+            prod.stock_disponible = nuevoStock;
+            if (App.router?.handleRoute) App.router.handleRoute();
+            return res;
+        });
+    });
 };
 
 App.views._renderDashboardInventario = function () {
@@ -318,34 +402,50 @@ App.views.renderChartInventario = function () {
     });
 };
 
+App.views.setInventarioTab = function (tab) {
+    App.state.inventarioTab = tab || 'insumos';
+    App.router.handleRoute();
+};
+
 App.views.inventario = function() {
     const title = document.getElementById('app-header-title');
     const subtitle = document.getElementById('app-header-subtitle');
     const bottomNav = document.getElementById('bottom-nav');
-    if (title) title.innerText = 'Inventario';
-    if (subtitle) subtitle.innerText = 'Control ejecutivo y operativo';
+    if (title) title.innerText = 'Inventario y Bodega';
+    if (subtitle) subtitle.innerText = 'Control de insumos y hamacas/reventa listas';
     if (bottomNav) bottomNav.style.display = 'flex';
 
+    const tab = App.state.inventarioTab || 'insumos';
     const inventario = App.state.inventario || [];
     setTimeout(() => App.views.renderChartInventario(), 100);
 
-    let html = `
-        <div class="dm-section" style="padding-bottom:90px;">
-            ${App.views._renderDashboardInventario()}
-            <div class="dm-card dm-mb-4">
-                <div style="display:flex; flex-direction:column; gap:10px;">
-                    <div>
-                        <h3 class="dm-card-title">Inventario operativo</h3>
-                        <p class="dm-muted dm-mb-0" style="margin-top:6px;">Consulta stock físico, apartado y comprometido.</p>
-                    </div>
-                    <input type="text" id="bus-inv" class="dm-input" onkeyup="window.filtrarLista('bus-inv', 'tarj-inv')" placeholder="🔍 Buscar insumo...">
-                </div>
+    const activeTabInsumos = tab === 'insumos' ? 'dm-btn-primary' : 'dm-btn-secondary';
+    const activeTabBodega = tab === 'bodega' ? 'dm-btn-primary' : 'dm-btn-secondary';
+
+    const selectorTabs = `
+        <div class="dm-card dm-mb-4">
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="dm-btn ${activeTabInsumos}" onclick="App.views.setInventarioTab('insumos')">🧶 Insumos y Materia Prima</button>
+                <button class="dm-btn ${activeTabBodega}" onclick="App.views.setInventarioTab('bodega')">🏷️ Productos Terminados (Bodega)</button>
             </div>
-            <div class="dm-list">
+        </div>
+    `;
+
+    let htmlInsumos = `
+        <div class="dm-card dm-mb-4">
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <div>
+                    <h3 class="dm-card-title">Inventario operativo de insumos</h3>
+                    <p class="dm-muted dm-mb-0" style="margin-top:6px;">Consulta stock físico, apartado y comprometido de hilos/accesorios.</p>
+                </div>
+                <input type="text" id="bus-inv" class="dm-input" onkeyup="window.filtrarLista('bus-inv', 'tarj-inv')" placeholder="🔍 Buscar insumo...">
+            </div>
+        </div>
+        <div class="dm-list">
     `;
 
     if (!inventario.length) {
-        html += `<div class="dm-alert dm-alert-info">No hay insumos registrados.</div>`;
+        htmlInsumos += `<div class="dm-alert dm-alert-info">No hay insumos registrados.</div>`;
     } else {
         inventario.forEach(i => {
             const real = parseFloat(i.stock_real || 0);
@@ -355,7 +455,7 @@ App.views.inventario = function() {
             const minimo = parseFloat(i.stock_minimo || 0);
             const badgeClass = (minimo > 0 && libre <= minimo) ? 'dm-badge-danger' : 'dm-badge-success';
 
-            html += `
+            htmlInsumos += `
                 <div class="dm-list-card tarj-inv">
                     <div style="display:flex; flex-direction:column; gap:10px;">
                         <div class="dm-row-between" style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
@@ -384,8 +484,19 @@ App.views.inventario = function() {
         });
     }
 
-    html += `</div></div><button class="dm-fab" onclick="App.views.formMaterial()">+</button>`;
-    return html;
+    htmlInsumos += `</div>`;
+
+    const bodyContent = tab === 'bodega' ? App.views._renderProductosTerminadosBodega() : htmlInsumos;
+    const fabButton = tab === 'insumos' ? `<button class="dm-fab" onclick="App.views.formMaterial()">+</button>` : '';
+
+    return `
+        <div class="dm-section" style="padding-bottom:90px;">
+            ${App.views._renderDashboardInventario()}
+            ${selectorTabs}
+            ${bodyContent}
+        </div>
+        ${fabButton}
+    `;
 };
 
 App.views.compras = function() {
@@ -513,9 +624,6 @@ App.views.calcularTotalCompraForm = function () {
     if (totalInput) totalInput.value = total.toFixed(2);
 };
 
-// ==========================================
-// CREAR PROVEEDOR CON AUTO-SELECCIÓN Y CIERRE
-// ==========================================
 App.views.formProveedorCompra = function (callback = null) {
     const formHTML = `
         <form id="dynamic-form">
@@ -552,9 +660,6 @@ App.views.formProveedorCompra = function (callback = null) {
     });
 };
 
-// ==========================================
-// CREAR MATERIAL / REVENTA DESDE COMPRAS CON AUTO-SELECCIÓN Y CIERRE
-// ==========================================
 App.views.formMaterialCompra = function (callback = null) {
     const formHTML = `
         <form id="dynamic-form">
