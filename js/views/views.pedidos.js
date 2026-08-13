@@ -1373,3 +1373,87 @@ window.verificarStockInterno = function() {
         }
     }
 };
+
+// ==========================================
+// REPORTE DE RENDIMIENTO DE VENDEDORES
+// ==========================================
+App.views._resumenRendimientoVendedores = function () {
+    const vendedores = App.state.vendedores || [];
+    const pedidos = App.state.pedidos || [];
+    const cotizaciones = App.state.cotizaciones || [];
+
+    const reporte = [];
+
+    // Incluir opción de Venta Directa (Sin Vendedor asignado)
+    const listaVendedores = [
+        { id: '', nombre: 'Venta Directa / Sin Vendedor' },
+        ...vendedores
+    ];
+
+    listaVendedores.forEach(v => {
+        const pedVend = pedidos.filter(p => (p.vendedor_id || '') === v.id && String(p.estado || '').toLowerCase() !== 'cancelado');
+        const cotVend = cotizaciones.filter(c => (c.vendedor_id || '') === v.id);
+
+        const ventasTotales = pedVend.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+        const comisionesTotales = pedVend.reduce((acc, p) => acc + (parseFloat(p.comision || 0) || 0), 0);
+        const pzasVendidas = pedVend.length;
+        const ticketPromedio = pzasVendidas > 0 ? (ventasTotales / pzasVendidas) : 0;
+
+        if (pzasVendidas > 0 || v.id !== '') {
+            reporte.push({
+                id: v.id,
+                nombre: v.nombre,
+                pzasVendidas,
+                ventasTotales,
+                comisionesTotales,
+                ticketPromedio,
+                cotizacionesTotal: cotVend.length
+            });
+        }
+    });
+
+    return reporte.sort((a, b) => b.ventasTotales - a.ventasTotales);
+};
+
+App.views.modalRendimientoVendedores = function () {
+    const reporte = App.views._resumenRendimientoVendedores();
+
+    let html = `
+        <div class="dm-card dm-mb-4">
+            <h3 class="dm-card-title">Rendimiento de Ventas por Vendedor</h3>
+            <p class="dm-muted dm-mt-1" style="font-size:13px;">Resumen de volumen comercial, comisiones acumuladas y ticket promedio.</p>
+        </div>
+
+        <div class="dm-list">
+    `;
+
+    if (!reporte.length) {
+        html += `<div class="dm-alert dm-alert-info">No hay ventas registradas con vendedores asignados.</div>`;
+    } else {
+        reporte.forEach(v => {
+            html += `
+                <div class="dm-list-card dm-mb-3">
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                        <div class="dm-row-between" style="align-items:flex-start;">
+                            <div>
+                                <strong style="font-size:16px;">👔 ${App.ui.safe(v.nombre)}</strong>
+                            </div>
+                            <span class="dm-badge dm-badge-primary">${v.pzasVendidas} pedidos</span>
+                        </div>
+
+                        <div class="dm-card" style="background:var(--dm-surface-2); padding:10px;">
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(110px,1fr)); gap:10px; text-align:center;">
+                                <div><small class="dm-muted">Monto Vendido</small><br><strong style="color:var(--dm-success); font-size:15px;">${App.ui.money(v.ventasTotales)}</strong></div>
+                                <div><small class="dm-muted">Comisiones</small><br><strong style="color:#3182CE; font-size:15px;">${App.ui.money(v.comisionesTotales)}</strong></div>
+                                <div><small class="dm-muted">Ticket Promedio</small><br><strong>${App.ui.money(v.ticketPromedio)}</strong></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    html += `</div>`;
+    App.ui.openSheet('Rendimiento de Vendedores', html);
+};
