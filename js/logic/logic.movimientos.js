@@ -241,8 +241,8 @@ Object.assign(App.logic.movimientos, {
             idFila: m.id
         }));
     }
-})
-};
+}
+});
 
 
 
