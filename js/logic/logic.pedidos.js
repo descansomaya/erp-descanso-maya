@@ -1767,7 +1767,7 @@ async enviarWhatsApp(pedidoId, tipoMensaje = "cobro") {
     // COMPATIBILIDAD
     // ==========================================
 
-    enviarWhatsapp(pedidoId, tipoMensaje) {
+    enviarWhatsApp(pedidoId, tipoMensaje) {
         return this.enviarWhatsApp(pedidoId, tipoMensaje);
     }
 });
