@@ -11,8 +11,11 @@ Object.assign(App.logic, {
             App.ui.showLoader("Procesando pedido...");
 
             const pedidoId = "PED-" + Date.now();
-            const totalNum = parseFloat(datosFormulario.total) || 0;
-            const anticipoNum = parseFloat(datosFormulario.anticipo) || 0;
+            const esStockInterno = datosFormulario.cliente_id === "STOCK_INTERNO";
+            const totalNum = esStockInterno ? 0 : (parseFloat(datosFormulario.total) || 0);
+            const anticipoNum = esStockInterno ? 0 : (parseFloat(datosFormulario.anticipo) || 0);
+            const comisionNum = esStockInterno ? 0 : (parseFloat(datosFormulario.comision) || 0);
+            const vendedorId = esStockInterno ? "" : (datosFormulario.vendedor_id || "");
             const fechaC = datosFormulario.fecha_creacion
                 ? datosFormulario.fecha_creacion + "T12:00:00.000Z"
                 : new Date().toISOString();
@@ -44,6 +47,8 @@ Object.assign(App.logic, {
                 estado: estadoCalculado,
                 total: totalNum,
                 anticipo: anticipoNum,
+                vendedor_id: vendedorId,
+                comision: comisionNum,
                 notas: datosFormulario.notas || "",
                 fecha_entrega: datosFormulario.fecha_entrega || "",
                 fecha_creacion: fechaC
@@ -161,10 +166,16 @@ Object.assign(App.logic, {
                 App.state.movimientos_inventario.push(...nuevosMovs);
 
                 if (datosPedido.estado === "taller") {
-                    await App.logic.generarOrdenesDesdePedido(nuevosDetallesMemoria);
+                    const resTaller = await App.logic.generarOrdenesDesdePedido(nuevosDetallesMemoria);
+                    if (resTaller?.status !== "success") {
+                        console.error("El pedido se guardó, pero no se pudieron generar las órdenes de taller:", resTaller);
+                        App.ui.toast("Pedido guardado, pero hubo un problema al enviarlo al taller", "warning");
+                    }
                 }
 
-                App.ui.toast(todosReventa ? "Pedido guardado y stock apartado" : "Pedido guardado y hilos apartados");
+                App.ui.toast(esStockInterno
+                    ? "Pedido interno creado y enviado al taller"
+                    : (todosReventa ? "Pedido guardado y stock apartado" : "Pedido guardado y hilos apartados"));
                 App.router.handleRoute();
                 App.logic.revisarAlertasStock();
             } else {
@@ -174,6 +185,71 @@ Object.assign(App.logic, {
             console.error("Error en guardarNuevoPedido:", error);
             App.ui.hideLoader();
             App.ui.toast(error.message || "Error al procesar pedido", "danger");
+        }
+    },
+
+    // ==========================================
+    // GENERAR ÓRDENES DE PRODUCCIÓN DESDE PEDIDO
+    // ==========================================
+    async generarOrdenesDesdePedido(detallesArray) {
+        try {
+            const operaciones = [];
+            const nuevasOrdenes = [];
+
+            (detallesArray || []).forEach((det, idx) => {
+                const producto = (App.state.productos || []).find(p => p.id === det.producto_id);
+                if (!producto) return;
+
+                // Solo los productos fabricados pasan al taller.
+                if (String(producto.categoria || '').toLowerCase() === 'reventa') return;
+
+                const recetaBase = [];
+                const cantidadPedido = parseFloat(det.cantidad || 1) || 1;
+
+                for (let i = 1; i <= 20; i++) {
+                    const matId = producto[`mat_${i}`];
+                    const cantBase = parseFloat(producto[`cant_${i}`] || 0) || 0;
+                    if (matId && cantBase > 0) {
+                        recetaBase.push({
+                            mat_id: matId,
+                            cant: cantBase * cantidadPedido,
+                            uso: producto[`uso_${i}`] || "Cuerpo"
+                        });
+                    }
+                }
+
+                const idOrden = "ORD-" + Date.now() + "-" + idx;
+                const nuevaOrden = {
+                    id: idOrden,
+                    pedido_detalle_id: det.id,
+                    estado: "pendiente",
+                    receta_personalizada: JSON.stringify(recetaBase),
+                    fecha_creacion: new Date().toISOString()
+                };
+
+                nuevasOrdenes.push(nuevaOrden);
+                operaciones.push({
+                    action: "guardar_fila",
+                    nombreHoja: "ordenes_produccion",
+                    datos: nuevaOrden
+                });
+            });
+
+            if (!operaciones.length) {
+                return { status: "success", data: [] };
+            }
+
+            const res = await App.api.fetch("ejecutar_lote", { operaciones });
+
+            if (res.status === "success") {
+                if (!Array.isArray(App.state.ordenes_produccion)) App.state.ordenes_produccion = [];
+                App.state.ordenes_produccion.push(...nuevasOrdenes);
+            }
+
+            return res;
+        } catch (error) {
+            console.error("Error en generarOrdenesDesdePedido:", error);
+            return { status: "error", message: error.message || "Error al generar órdenes de producción" };
         }
     },
 
@@ -491,6 +567,11 @@ Object.assign(App.logic, {
                 return;
             }
 
+            if (pedido.cliente_id === "STOCK_INTERNO") {
+                App.ui.toast("Los pedidos de stock interno deben avanzar desde el taller; no se pueden marcar como listos manualmente desde Pedidos.", "warning");
+                return;
+            }
+
             if (pedido.estado === "listo para entregar") {
                 App.ui.toast("El pedido ya está listo para entregar", "warning");
                 return;
@@ -744,6 +825,11 @@ Object.assign(App.logic, {
             if (!esReparacion) {
                 const pedidoObj = (App.state.pedidos || []).find(p => p.id === registroId);
                 if (!pedidoObj) return;
+
+                if (pedidoObj.cliente_id === "STOCK_INTERNO") {
+                    App.ui.toast("Los pedidos de stock interno no generan cobros ni abonos.", "warning");
+                    return;
+                }
 
                 const abonosPrevios = (App.state.abonos || [])
                     .filter(a => a.pedido_id === pedidoObj.id)
