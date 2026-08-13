@@ -93,7 +93,6 @@ Object.assign(App.logic, {
                 });
                 nuevosDetallesMemoria.push(datosDetalle);
 
-                const producto = (App.state.productos || []).find(p => p.id === itemCarro.producto_id);
 
                 if (producto) { 
                     for (let i = 1; i <= 20; i++) {
