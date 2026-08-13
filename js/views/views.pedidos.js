@@ -17,6 +17,59 @@ App.views.runPedidoAction = async function (button, pedidoId, actionName, action
     }, async () => actionFn());
 };
 
+App.views.accionPedido = async function (button, pedidoId, actionName) {
+
+    switch (actionName) {
+
+        case 'cancelarPedido':
+            return App.views.runPedidoAction(
+                button,
+                pedidoId,
+                actionName,
+                () => App.logic.cancelarPedido(pedidoId),
+                {
+                    loadingText: 'Cancelando...',
+                    loaderMessage: 'Cancelando pedido y revirtiendo inventario...',
+                    successMessage: 'Pedido cancelado correctamente',
+                    errorTitle: 'No se pudo cancelar el pedido'
+                }
+            );
+
+        case 'devolverPedido':
+            return App.views.runPedidoAction(
+                button,
+                pedidoId,
+                actionName,
+                () => App.logic.devolverPedido(pedidoId),
+                {
+                    loadingText: 'Devolviendo...',
+                    loaderMessage: 'Registrando devolución...',
+                    successMessage: 'Devolución registrada correctamente',
+                    errorTitle: 'No se pudo registrar la devolución'
+                }
+            );
+
+        case 'marcarPedidoEntregado':
+            return App.views.runPedidoAction(
+                button,
+                pedidoId,
+                actionName,
+                () => App.logic.marcarPedidoEntregado(pedidoId),
+                {
+                    loadingText: 'Entregando...',
+                    loaderMessage: 'Registrando entrega física...',
+                    successMessage: 'Pedido entregado correctamente',
+                    errorTitle: 'No se pudo registrar la entrega'
+                }
+            );
+
+        default:
+            console.warn('Acción de pedido no disponible:', actionName);
+            App.ui.toast('Acción no disponible', 'warning');
+            return false;
+    }
+};
+
 // ==========================================
 // FUNCIONES AUXILIARES DE COTIZACIONES
 // ==========================================
