@@ -290,7 +290,6 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
     const dataBase = Object.assign({ cantidad: 1, anticipo: 0, comision: 0, vendedor_id: '' }, prefill || {}, obj || {});
 
     if (!obj) {
-        // Carga el carrito precargado si proviene de una cotización
         window._carritoTemp = Array.isArray(dataBase.carrito) ? [...dataBase.carrito] : [];
     }
 
@@ -1359,12 +1358,22 @@ App.views.modalDetallesPedido = function(pedidoId) {
     App.ui.openSheet(`Detalles del Pedido: ${pedidoId}`, html, () => App.ui.closeSheet());
 };
 
+// ==========================================
+// CÓDIGO OCULTAR VENDEDOR Y COMISIÓN EN STOCK BODEGA
+// ==========================================
 window.verificarStockInterno = function() {
     const clienteSel = document.querySelector('#dynamic-form select[name="cliente_id"]');
+    const vendedorSel = document.querySelector('#dynamic-form select[name="vendedor_id"]');
+    const comisionInp = document.querySelector('#dynamic-form input[name="comision"]');
     const totalInp = document.querySelector('#dynamic-form input[name="total"]');
     const antInp = document.querySelector('#dynamic-form input[name="anticipo"]');
     
+    // Búsqueda de contenedores padres
+    const vendedorWrap = vendedorSel ? vendedorSel.closest('.dm-form-group') : null;
+    const comisionWrap = comisionInp ? comisionInp.closest('.dm-form-row') : null;
+
     if (clienteSel && clienteSel.value === 'STOCK_INTERNO') {
+        // 1. Bloquear y resetear Totales y Anticipos
         if (totalInp) { 
             totalInp.value = 0; 
             totalInp.readOnly = true; 
@@ -1379,7 +1388,16 @@ window.verificarStockInterno = function() {
             antInp.style.color = '#6b7280';
             antInp.style.cursor = 'not-allowed';
         }
+
+        // 2. Ocultar y resetear Vendedor y Comisión
+        if (vendedorSel) vendedorSel.value = '';
+        if (comisionInp) comisionInp.value = 0;
+
+        if (vendedorWrap) vendedorWrap.style.display = 'none';
+        if (comisionWrap) comisionWrap.style.display = 'none';
+
     } else {
+        // Restaurar para ventas a Clientes
         if (totalInp) { 
             totalInp.readOnly = window._carritoTemp ? true : false; 
             totalInp.style.backgroundColor = window._carritoTemp ? '#e5e7eb' : ''; 
@@ -1393,6 +1411,10 @@ window.verificarStockInterno = function() {
             antInp.style.color = '';
             antInp.style.cursor = '';
         }
+
+        // Mostrar de nuevo los campos
+        if (vendedorWrap) vendedorWrap.style.display = '';
+        if (comisionWrap) comisionWrap.style.display = '';
     }
 };
 
