@@ -277,14 +277,24 @@ App.views.accionProduccion = function (button, ordenId, actionName) {
         },
         terminar: {
             fn: async () => {
+                // 1. Cambiar estado en Taller
                 const res = await App.logic.cambiarEstadoProduccion(ordenId, 'listo');
                 
-                // FASE 3: Si la orden es para STOCK BODEGA, incrementa el producto en bodega automáticamente
                 const orden = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
                 if (orden) {
                     const pedDet = (App.state?.pedido_detalle || []).find(d => d.id === orden.pedido_detalle_id);
                     const pedido = (App.state?.pedidos || []).find(p => p.id === pedDet?.pedido_id);
                     
+                    // 2. SINCRONIZACIÓN CON PEDIDOS: Si es cliente real, marcar pedido como "listo para entregar"
+                    if (pedido && pedido.cliente_id !== 'STOCK_INTERNO') {
+                        await App.logic.actualizarRegistroGenerico('pedidos', pedido.id, {
+                            estado: 'listo para entregar'
+                        }, 'pedidos');
+                        pedido.estado = 'listo para entregar';
+                        App.ui.toast(`Pedido ${pedido.id} actualizado a "Listo para entregar"`, 'info');
+                    }
+
+                    // FASE 3: Si es STOCK BODEGA, sumar piezas automáticamente al catálogo de bodega
                     if (pedido && pedido.cliente_id === 'STOCK_INTERNO' && pedDet?.producto_id) {
                         const prod = (App.state?.productos || []).find(p => p.id === pedDet.producto_id);
                         if (prod) {
@@ -301,11 +311,12 @@ App.views.accionProduccion = function (button, ordenId, actionName) {
                     }
                 }
 
+                if (App.router?.handleRoute) App.router.handleRoute();
                 return res;
             },
             loadingText: 'Terminando...',
-            loaderMessage: 'Marcando orden como lista e ingresando a bodega...',
-            successMessage: 'Orden terminada e inventario de bodega actualizado',
+            loaderMessage: 'Marcando orden como lista y actualizando pedido...',
+            successMessage: 'Orden terminada y sincronizada con Pedidos',
             errorTitle: 'No se pudo terminar la orden'
         },
         regresarPendiente: {
@@ -470,11 +481,6 @@ App.views._renderProduccionColumn = function (estado, titulo, icono, badgeClass)
 
     const totalOrdenes = ordenes.length;
 
-    // Si es la columna de "Listas", mostramos las 6 más recientes para no saturar la pantalla
-    if (estado === 'listo' && ordenes.length > 6) {
-        ordenes = ordenes.slice(0, 6);
-    }
-
     const contenido = ordenes.length 
         ? ordenes.map(o => App.views._buildOrdenCard(o)).join('') 
         : `<div class="dm-alert dm-alert-info">No hay órdenes en esta sección.</div>`;
@@ -486,7 +492,6 @@ App.views._renderProduccionColumn = function (estado, titulo, icono, badgeClass)
                 <span class="dm-badge ${badgeClass}">${totalOrdenes}</span>
             </div>
             <div class="dm-list">${contenido}</div>
-            ${estado === 'listo' && totalOrdenes > 6 ? `<small class="dm-muted dm-mt-2" style="display:block; text-align:center;">*Mostrando las 6 más recientes de ${totalOrdenes}</small>` : ''}
         </div>
     `;
 };
@@ -500,17 +505,34 @@ App.views.produccion = function () {
     if (bottomNav) bottomNav.style.display = 'flex';
 
     const ordenes = App.state?.ordenes_produccion || [];
+    const mostrarCompletadas = App.state.mostrarCompletadasTaller || false;
+
     const pendientes = ordenes.filter(o => o.estado === 'pendiente').length;
     const proceso = ordenes.filter(o => o.estado === 'proceso').length;
     const listas = ordenes.filter(o => o.estado === 'listo').length;
+
+    const columnasHTML = mostrarCompletadas ? `
+        <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px,1fr)); gap:12px; align-items:start;">
+            ${App.views._renderProduccionColumn('pendiente', 'En cola', '🕒', 'dm-badge-info')}
+            ${App.views._renderProduccionColumn('proceso', 'En proceso', '🔥', 'dm-badge-warning')}
+            ${App.views._renderProduccionColumn('listo', 'Listas / Terminadas', '✅', 'dm-badge-success')}
+        </div>
+    ` : `
+        <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px,1fr)); gap:12px; align-items:start;">
+            ${App.views._renderProduccionColumn('pendiente', 'En cola', '🕒', 'dm-badge-info')}
+            ${App.views._renderProduccionColumn('proceso', 'En proceso', '🔥', 'dm-badge-warning')}
+        </div>
+    `;
 
     return `
         <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4" style="background:linear-gradient(135deg, #ffffff 0%, #faf7ff 100%);">
                 <div style="display:flex; flex-direction:column; gap:10px;">
-                    <div>
-                        <h3 class="dm-card-title">Producción</h3>
-                        <p class="dm-muted" style="margin-top:6px;">Control visual del taller, carga operativa y avance por orden sin perder la lógica actual.</p>
+                    <div class="dm-row-between" style="align-items:center; flex-wrap:wrap; gap:10px;">
+                        <h3 class="dm-card-title">Producción Taller</h3>
+                        <button class="dm-btn ${mostrarCompletadas ? 'dm-btn-primary' : 'dm-btn-ghost'} dm-btn-sm" style="border:1px solid var(--dm-border);" onclick="App.state.mostrarCompletadasTaller = !App.state.mostrarCompletadasTaller; App.router.handleRoute();">
+                            ${mostrarCompletadas ? '🔥 Ver Solo Activas' : '✅ Mostrar Listas (' + listas + ')'}
+                        </button>
                     </div>
                     <input type="text" id="bus-prod-pro" class="dm-input" onkeyup="window.filtrarLista('bus-prod-pro', 'dm-list-card')" placeholder="🔍 Buscar orden, producto o artesano...">
                 </div>
@@ -522,11 +544,7 @@ App.views.produccion = function () {
                 <div class="dm-card"><small class="dm-muted">Listas</small><div class="dm-text-xl dm-fw-bold" style="color:var(--dm-success);">${listas}</div></div>
             </div>
 
-            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px,1fr)); gap:12px; align-items:start;">
-                ${App.views._renderProduccionColumn('pendiente', 'En cola', '🕒', 'dm-badge-info')}
-                ${App.views._renderProduccionColumn('proceso', 'En proceso', '🔥', 'dm-badge-warning')}
-                ${App.views._renderProduccionColumn('listo', 'Listas', '✅', 'dm-badge-success')}
-            </div>
+            ${columnasHTML}
         </div>
     `;
 };
