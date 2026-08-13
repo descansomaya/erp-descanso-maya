@@ -1554,6 +1554,5 @@ Object.assign(App.logic, {
                 "danger"
             );
         }
-    },
-
-   
+    } // <--- Cierre de la función enviarWhatsApp
+}); // <--- Cierre del Object.assign(App.logic, { ...
