@@ -299,290 +299,83 @@ Object.assign(App.logic, {
 // WHATSAPP - PEDIDOS
 // ==========================================
 
-async enviarWhatsApp(pedidoId, tipoMensaje = "cobro") {
+    async enviarWhatsApp(pedidoId, tipoMensaje = "cobro") {
+        try {
+            const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId)
+                || (App.state.reparaciones || []).find(r => r.id === pedidoId);
 
-    try {
+            if (!pedido) {
+                App.ui.toast("Registro no encontrado", "danger");
+                return false;
+            }
 
-        const pedido =
-            (App.state.pedidos || [])
-                .find(p => p.id === pedidoId);
+            const cliente = (App.state.clientes || []).find(c => c.id === pedido.cliente_id);
+            if (!cliente || !cliente.telefono) {
+                App.ui.toast("El cliente no tiene teléfono registrado", "warning");
+                return false;
+            }
 
-        if (!pedido) {
-            throw new Error("Pedido no encontrado");
-        }
+            let telefono = String(cliente.telefono).replace(/\D/g, "");
+            if (!telefono) {
+                App.ui.toast("Teléfono inválido", "warning");
+                return false;
+            }
 
+            if (telefono.length === 10) {
+                telefono = "52" + telefono;
+            }
 
-        // ------------------------------------------
-        // CLIENTE
-        // ------------------------------------------
+            const esReparacion = String(pedido.id || "").startsWith("REP-");
+            const resumen = this._getResumenFinancieroRegistro(pedido.id);
+            const saldo = resumen ? parseFloat(resumen.saldo || 0) : 0;
+            const total = resumen ? parseFloat(resumen.total || 0) : 0;
+            const anticipo = resumen ? parseFloat(resumen.anticipo || 0) : 0;
 
-        const cliente =
-            (App.state.clientes || [])
-                .find(c => c.id === pedido.cliente_id);
+            let mensaje = "";
+            const nombreCliente = cliente.nombre || "cliente";
 
-        if (!cliente) {
-            throw new Error(
-                "No se encontró el cliente del pedido"
-            );
-        }
+            if (tipoMensaje === "listo") {
+                mensaje = `Hola ${nombreCliente} 👋\n\n` +
+                    `Te contactamos de *Descanso Maya*.\n\n` +
+                    `Tu ${esReparacion ? "reparación" : "pedido"} *${pedido.id}* ya está listo para entregar. 📦\n\n`;
 
+                if (saldo > 0.05) {
+                    mensaje += `*Saldo pendiente:* $${saldo.toFixed(2)} MXN\n\n`;
+                } else {
+                    mensaje += `Tu registro se encuentra liquidado. ✅\n\n`;
+                }
 
-        // ------------------------------------------
-        // TELÉFONO
-        // ------------------------------------------
+                mensaje += `Quedamos atentos para coordinar la entrega.\n\n` +
+                    `Gracias por tu preferencia. ❤️\n` +
+                    `*Descanso Maya*`;
+            } else {
+                mensaje = `Hola ${nombreCliente} 👋\n\n` +
+                    `Te contactamos de *Descanso Maya* respecto a tu ${esReparacion ? "reparación" : "pedido"} *${pedido.id}*.\n\n` +
+                    `*Total:* $${total.toFixed(2)} MXN\n` +
+                    `*Anticipo/Abonos:* $${(anticipo + (resumen ? resumen.abonos : 0)).toFixed(2)} MXN\n` +
+                    `*Saldo:* $${saldo.toFixed(2)} MXN\n\n`;
 
-        let telefono =
-            String(
-                cliente.telefono ||
-                cliente.celular ||
-                cliente.whatsapp ||
-                ""
-            )
-            .replace(/\D/g, "");
+                if (saldo > 0.05) {
+                    mensaje += `Quedamos atentos para cualquier duda o coordinar tu pago.\n\n`;
+                } else {
+                    mensaje += `Tu pedido se encuentra liquidado. ✅\n\n`;
+                }
 
+                mensaje += `Gracias por tu preferencia. ❤️\n` +
+                    `*Descanso Maya*`;
+            }
 
-        if (!telefono) {
+            const waUrl = `https://wa.me/${telefono}?text=${encodeURIComponent(mensaje)}`;
+            window.open(waUrl, "_blank");
+            return true;
 
-            App.ui.toast(
-                "El cliente no tiene teléfono registrado",
-                "warning"
-            );
-
+        } catch (error) {
+            console.error("Error en enviarWhatsApp:", error);
+            App.ui.toast(error.message || "Error al abrir WhatsApp", "danger");
             return false;
         }
-
-
-        // México
-        if (
-            telefono.length === 10
-        ) {
-            telefono =
-                "52" + telefono;
-        }
-
-
-        // ------------------------------------------
-        // DETALLES DEL PEDIDO
-        // ------------------------------------------
-
-        const detalles =
-            (App.state.pedido_detalle || [])
-                .filter(
-                    d =>
-                        d.pedido_id === pedidoId
-                );
-
-
-        const productos =
-            detalles.map(detalle => {
-
-                const producto =
-                    (App.state.productos || [])
-                        .find(
-                            p =>
-                                p.id === detalle.producto_id
-                        );
-
-                const cantidad =
-                    parseInt(
-                        detalle.cantidad || 1
-                    ) || 1;
-
-                return {
-                    nombre:
-                        producto?.nombre ||
-                        "Producto",
-
-                    cantidad
-                };
-
-            });
-
-
-        // ------------------------------------------
-        // IMPORTES
-        // ------------------------------------------
-
-        const total =
-            parseFloat(
-                pedido.total || 0
-            ) || 0;
-
-
-        const anticipo =
-            parseFloat(
-                pedido.anticipo || 0
-            ) || 0;
-
-
-        const abonos =
-            (App.state.abonos || [])
-                .filter(
-                    a =>
-                        a.pedido_id === pedidoId
-                )
-                .reduce(
-                    (totalAbonos, abono) =>
-                        totalAbonos +
-                        (
-                            parseFloat(
-                                abono.monto || 0
-                            ) || 0
-                        ),
-                    0
-                );
-
-
-        const saldo =
-            Math.max(
-                0,
-                total -
-                anticipo -
-                abonos
-            );
-
-
-        // ------------------------------------------
-        // NOMBRE
-        // ------------------------------------------
-
-        const nombreCliente =
-            cliente.nombre ||
-            cliente.razon_social ||
-            "cliente";
-
-
-        // ------------------------------------------
-        // PRODUCTOS TEXTO
-        // ------------------------------------------
-
-        let textoProductos = "";
-
-        if (productos.length > 0) {
-
-            textoProductos =
-                productos
-                    .map(
-                        p =>
-                            `• ${p.nombre} x${p.cantidad}`
-                    )
-                    .join("\n");
-
-        }
-
-
-        // ------------------------------------------
-        // MENSAJE
-        // ------------------------------------------
-
-        let mensaje = "";
-
-
-        if (
-            tipoMensaje === "listo"
-        ) {
-
-            mensaje =
-                `Hola ${nombreCliente} 👋\n\n` +
-                `Te contactamos de *Descanso Maya*.\n\n` +
-                `Tu pedido *${pedidoId}* ` +
-                `ya está listo para entregar. 📦\n\n`;
-
-            if (textoProductos) {
-
-                mensaje +=
-                    `*Pedido:*\n` +
-                    `${textoProductos}\n\n`;
-
-            }
-
-
-            if (saldo > 0.05) {
-
-                mensaje +=
-                    `*Saldo pendiente:* ` +
-                    `$${saldo.toFixed(2)} MXN\n\n`;
-
-            } else {
-
-                mensaje +=
-                    `Tu pedido se encuentra ` +
-                    `liquidado. ✅\n\n`;
-
-            }
-
-
-            mensaje +=
-                `Quedamos atentos para ` +
-                `coordinar tu entrega.\n\n` +
-                `Gracias por tu preferencia. ❤️\n` +
-                `*Descanso Maya*`;
-
-        } else {
-
-            mensaje =
-                `Hola ${nombreCliente} 👋\n\n` +
-                `Te contactamos de *Descanso Maya* ` +
-                `respecto a tu pedido *${pedidoId}*.\n\n`;
-
-            if (textoProductos) {
-
-                mensaje +=
-                    `*Pedido:*\n` +
-                    `${textoProductos}\n\n`;
-
-            }
-
-
-            mensaje +=
-                `*Total:* ` +
-                `$${total.toFixed(2)} MXN\n`;
-
-
-            mensaje +=
-                `*Anticipo:* ` +
-                `$${anticipo.toFixed(2)} MXN\n`;
-
-
-            if (abonos > 0.05) {
-
-                mensaje +=
-                    `*Abonos:* ` +
-                    `$${abonos.toFixed(2)} MXN\n`;
-
-            }
-
-
-            mensaje +=
-                `*Saldo:* ` +
-                `$${saldo.toFixed(2)} MXN\n\n`;
-
-
-            if (saldo > 0.05) {
-
-                mensaje +=
-                    `Quedamos atentos para ` +
-                    `cualquier duda o para ` +
-                    `coordinar tu pago.\n\n`;
-
-            } else {
-
-                mensaje +=
-                    `Tu pedido se encuentra ` +
-                    `liquidado. ✅\n\n`;
-
-            }
-
-
-            mensaje +=
-                `Gracias por tu preferencia. ❤️\n` +
-                `*Descanso Maya*`;
-
-        }
-
-
-  
-
+    },
+    
     async entregarDeBodega(pedidoId) {
         try {
             const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
@@ -806,7 +599,7 @@ async enviarWhatsApp(pedidoId, tipoMensaje = "cobro") {
             App.ui.toast(error.message || "Error al cerrar pedido", "danger");
         }
     },
-
+    
     async marcarReparacionLista(reparacionId) {
         try {
             const reparacion = (App.state.reparaciones || []).find(r => r.id === reparacionId);
