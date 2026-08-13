@@ -1639,27 +1639,8 @@ App.views.imprimirCotizacion = function (
 
 App.views.accionPedido = function (button, pedidoId, actionName) {
     const actions = {
-        cancelarPedido: {
-            fn: () => App.logic.cancelarPedido(pedidoId),
-            loadingText: "Cancelando...",
-            loaderMessage: "Cancelando pedido y revirtiendo inventario...",
-            successMessage: "Pedido cancelado correctamente",
-            errorTitle: "No se pudo cancelar el pedido"
-        },
-        devolverPedido: {
-            fn: () => App.logic.devolverPedido(pedidoId),
-            loadingText: "Devolviendo...",
-            loaderMessage: "Registrando devolución...",
-            successMessage: "Devolución registrada correctamente",
-            errorTitle: "No se pudo registrar la devolución"
-        },
-        marcarPedidoEntregado: {
-            fn: () => App.logic.marcarPedidoEntregado(pedidoId),
-            loadingText: "Entregando...",
-            loaderMessage: "Registrando entrega física...",
-            successMessage: "Pedido entregado correctamente",
-            errorTitle: "No se pudo registrar la entrega"
-        },
+        cancelarPedido: { fn: () => App.logic.cancelarPedido(pedidoId), loadingText: "Cancelando...", loaderMessage: "Cancelando pedido y revirtiendo inventario...", successMessage: "Pedido cancelado", errorTitle: "No se pudo cancelar el pedido" },
+        devolverPedido: { fn: () => App.logic.devolverPedido(pedidoId), loadingText: "Devolviendo...", loaderMessage: "Registrando devolución...", successMessage: "Devolución registrada", errorTitle: "No se pudo registrar la devolución" },
         marcarListo: {
             fn: () => App.logic.marcarPedidoListo(pedidoId),
             loadingText: "Marcando...",
@@ -1696,14 +1677,14 @@ App.views.accionPedido = function (button, pedidoId, actionName) {
             errorTitle: "No se pudo generar la liquidación"
         },
         whatsappCobro: {
-            fn: () => App.logic.enviarWhatsApp(pedidoId, "cobro"),
+            fn: () => App.logic.enviarWhatsApp(pedidoId, 'cobro'),
             loadingText: "Preparando...",
             loaderMessage: "Preparando mensaje de WhatsApp...",
             successMessage: "Mensaje preparado",
             errorTitle: "No se pudo preparar WhatsApp"
         },
         whatsappListo: {
-            fn: () => App.logic.enviarWhatsApp(pedidoId, "listo"),
+            fn: () => App.logic.enviarWhatsApp(pedidoId, 'listo'),
             loadingText: "Preparando...",
             loaderMessage: "Preparando mensaje de WhatsApp...",
             successMessage: "Mensaje preparado",
@@ -1713,15 +1694,14 @@ App.views.accionPedido = function (button, pedidoId, actionName) {
             fn: () => App.logic.eliminarPedido(pedidoId),
             loadingText: "Eliminando...",
             loaderMessage: "Validando taller y eliminando pedido...",
-            successMessage: "Pedido eliminado",
-            errorTitle: "No se pudo eliminar el pedido",
-            toastOnSuccess: false
+            toastOnSuccess: false,
+            errorTitle: "No se pudo eliminar el pedido"
         }
     };
 
     const config = actions[actionName];
     if (!config) {
-        App.ui.toast("Acción no disponible", "warning");
+        App.ui.toast('Acción no disponible', 'warning');
         return;
     }
 
@@ -1731,14 +1711,7 @@ App.views.accionPedido = function (button, pedidoId, actionName) {
 App.views.accionAbono = function (button, abonoId, actionName) {
     const actions = {
         imprimirRecibo: {
-            fn: () => {
-                const abono = (App.state.abonos || []).find(a => a.id === abonoId);
-                if (!abono?.pedido_id) {
-                    App.ui.toast("No se encontró el pedido asociado al abono", "danger");
-                    return false;
-                }
-                return App.views.imprimirNotaPedido(abono.pedido_id);
-            },
+            fn: () => App.views.imprimirNotaPedido(abonoId),
             loadingText: "Generando...",
             loaderMessage: "Generando recibo de abono...",
             successMessage: "Recibo generado",
@@ -1777,22 +1750,24 @@ App.views.pedidos = function() {
     const mostrarHistorico = App.state.mostrarHistoricoPedidos || false;
 
     const activos = todosPedidos.filter(p => {
-        const est = String(p.estado || '').toLowerCase();
-        return est !== 'entregado' && est !== 'pagado' && est !== 'cerrado';
+        const est = String(p.estado || '').toLowerCase().trim();
+        return !['entregado','pagado','cerrado','cancelado','devuelto'].includes(est);
     });
 
     const entregados = todosPedidos.filter(p => {
-        const est = String(p.estado || '').toLowerCase();
-        return est === 'entregado' || est === 'pagado' || est === 'cerrado';
+        const est = String(p.estado || '').toLowerCase().trim();
+        return ['entregado','pagado','cerrado','cancelado','devuelto'].includes(est);
     });
 
     const listaAMostrar = mostrarHistorico ? todosPedidos : activos;
 
     const getColorEstado = (estado) => {
         estado = String(estado || '').toLowerCase();
-        if (estado.includes('produccion')) return 'var(--dm-primary)';
+        if (estado.includes('produccion') || estado.includes('taller')) return 'var(--dm-primary)';
         if (estado.includes('listo')) return '#D69E2E';
         if (estado.includes('entregado') || estado.includes('pagado')) return 'var(--dm-success)';
+        if (estado.includes('cancelado')) return '#dc2626';
+        if (estado.includes('devuelto')) return '#f59e0b';
         return 'var(--dm-muted)';
     };
 
@@ -1844,8 +1819,8 @@ App.views.pedidos = function() {
 
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
                         <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.modalDetallesPedido('${p.id}')">👁️ Ver</button>
-                        ${!esInterno && p.estado !== 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💰 Cobrar</button>` : ''}
-                        <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'eliminarPedido')">🗑️ Eliminar</button>
+                        ${!esInterno && !['pagado','cancelado','devuelto','entregado'].includes(String(p.estado || '').toLowerCase()) ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💰 Cobrar</button>` : ''}
+                        ${!['cancelado','devuelto','entregado','pagado'].includes(String(p.estado || '').toLowerCase()) ? `<button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'eliminarPedido')">🗑️ Eliminar</button>` : ''}
                     </div>
                 </div>
             </div>
@@ -1975,7 +1950,7 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
                         <select id="cart-prod-select" class="dm-select" style="flex:1; min-width:180px;" onchange="document.getElementById('cart-price').value = this.options[this.selectedIndex].getAttribute('data-precio') || 0;">
                             ${htmlProductos}
                         </select>
-                        <button type="button" class="dm-btn dm-btn-secondary" style="padding: 0 12px;" onclick="App.views.formProductoRapidoDesdeCotizacion()">+ Producto</button>
+                        <button type="button" class="dm-btn dm-btn-secondary" style="padding: 0 12px;" onclick="App.views.formProductoRapidoDesdeCotizacion()">+ Prod</button>
                     </div>
                     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
                         <div style="width:70px;">
@@ -2588,29 +2563,20 @@ App.views.autoConvertirCotizacion = async function (cotizacionId) {
                 Convirtiendo cotización <strong>${App.ui.safe(c.id)}</strong> (${App.ui.safe(c.cliente_nombre || 'Cliente')}) por <strong>${App.ui.money(c.total || 0)}</strong>.
             </div>
             
-            ${c.cliente_id === 'STOCK_INTERNO' ? `
-                <div class="dm-alert dm-alert-success dm-mb-3">
-                    <strong>Producción interna / Stock Bodega</strong><br>
-                    Este movimiento no es una venta. No se solicitará anticipo ni método de pago y el pedido pasará directamente al taller.
+            <div class="dm-form-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:12px;">
+                <div class="dm-form-group">
+                    <label class="dm-label">Anticipo Recibido ($)</label>
+                    <input type="number" step="0.01" class="dm-input" name="anticipo" value="0" max="${c.total || 0}">
                 </div>
-                <input type="hidden" name="anticipo" value="0">
-                <input type="hidden" name="metodo_pago" value="">
-            ` : `
-                <div class="dm-form-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:12px;">
-                    <div class="dm-form-group">
-                        <label class="dm-label">Anticipo Recibido ($)</label>
-                        <input type="number" step="0.01" class="dm-input" name="anticipo" value="0" max="${c.total || 0}">
-                    </div>
-                    <div class="dm-form-group">
-                        <label class="dm-label">Método de Pago</label>
-                        <select class="dm-select" name="metodo_pago">
-                            <option value="Efectivo">Efectivo</option>
-                            <option value="Transferencia">Transferencia</option>
-                            <option value="Tarjeta">Tarjeta</option>
-                        </select>
-                    </div>
+                <div class="dm-form-group">
+                    <label class="dm-label">Método de Pago</label>
+                    <select class="dm-select" name="metodo_pago">
+                        <option value="Efectivo">Efectivo</option>
+                        <option value="Transferencia">Transferencia</option>
+                        <option value="Tarjeta">Tarjeta</option>
+                    </select>
                 </div>
-            `}
+            </div>
 
             <button type="submit" class="dm-btn dm-btn-success dm-btn-block">⚡ Confirmar y Convertir</button>
         </form>
@@ -2624,9 +2590,8 @@ App.views.autoConvertirCotizacion = async function (cotizacionId) {
             successMessage: 'Cotización convertida con éxito',
             closeSheetOnSuccess: true
         }, async () => {
-            const esStockInterno = c.cliente_id === 'STOCK_INTERNO';
-            const anticipoMonto = esStockInterno ? 0 : (parseFloat(data.anticipo || 0) || 0);
-            const metodoPago = esStockInterno ? '' : (data.metodo_pago || 'Efectivo');
+            const anticipoMonto = parseFloat(data.anticipo || 0) || 0;
+            const metodoPago = data.metodo_pago || 'Efectivo';
             const ahora = new Date().toISOString();
 
             if (tipo === 'reparacion') {
@@ -2661,8 +2626,6 @@ App.views.autoConvertirCotizacion = async function (cotizacionId) {
                     total: totalCot,
                     anticipo: anticipoMonto,
                     fecha_entrega: new Date().toISOString().split('T')[0],
-                    vendedor_id: '',
-                    comision: 0,
                     carrito: c.producto_id ? [{
                         producto_id: c.producto_id,
                         nombre: prod ? prod.nombre : (c.concepto || 'Producto Cotizado'),
@@ -2810,7 +2773,7 @@ App.views.modalDetallesPedido = function(pedidoId) {
             </div>
             <div style="display:flex; justify-content:space-between;">
                 <span class="dm-text-sm dm-muted">Estado:</span>
-                <span class="dm-badge dm-badge-primary" style="background: var(--dm-primary); color: white;">${App.ui.escapeHTML((pedido.estado || '').toUpperCase())}</span>
+                <span class="dm-badge" style="background: ${estado.includes('cancelado') ? '#dc2626' : estado.includes('devuelto') ? '#f59e0b' : estado.includes('entregado') || estado.includes('pagado') ? 'var(--dm-success)' : estado.includes('listo') ? '#D69E2E' : 'var(--dm-primary)'}; color:white;">${App.ui.escapeHTML((pedido.estado || '').toUpperCase())}</span>
             </div>
         </div>
         <h4 class="dm-label dm-mb-2">Artículos del pedido:</h4>
@@ -2831,16 +2794,18 @@ App.views.modalDetallesPedido = function(pedidoId) {
     html += `
         </div>
         <div class="dm-list-card-actions dm-mt-3" style="flex-wrap:wrap;">
-            ${!esInterno ? `
+            ${!esInterno && !['cancelado','devuelto'].includes(estado) ? `
                 <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'imprimirNota')">🖨️ Imprimir Nota</button>
                 ${ultimoAbono ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionAbono(this, '${ultimoAbono.id}', 'imprimirRecibo')">🧾 Últ. abono</button>` : ''}
                 <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'imprimirLiquidacion')">✅ Liquidación</button>
                 <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', '${whatsappAction}')">💬 WhatsApp</button>
-                ${estado !== 'listo para entregar' && estado !== 'entregado' && estado !== 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'marcarListo')">📦 Listo</button>` : ''}
-                ${estado === 'listo para entregar' || estado === 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'marcarEntregado')">🚚 Entregado</button>` : ''}
-                ${saldo <= 0.05 && estado !== 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'cerrarPedido')">🔒 Cerrar</button>` : ''}
             ` : ''}
-            <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'eliminarPedido')">🗑️ Eliminar</button>
+            ${!['cancelado','devuelto','entregado','pagado'].includes(estado) ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'marcarListo')">📦 Listo</button>` : ''}
+            ${estado === 'listo para entregar' || estado === 'pagado' ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'marcarPedidoEntregado')">🚚 Entregar</button>` : ''}
+            ${estado === 'listo para entregar' ? `<button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'cancelarPedido')">🚫 Cancelar</button>` : ''}
+            ${estado === 'entregado' ? `<button class="dm-btn dm-btn-warning dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'devolverPedido')">↩️ Devolver</button>` : ''}
+            ${saldo <= 0.05 && !['pagado','entregado','cancelado','devuelto'].includes(estado) ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'cerrarPedido')">🔒 Cerrar</button>` : ''}
+            ${!['entregado','pagado','cancelado','devuelto'].includes(estado) ? `<button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'eliminarPedido')">🗑️ Eliminar</button>` : ''}
         </div>
     `;
 
