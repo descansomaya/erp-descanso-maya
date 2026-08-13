@@ -36,6 +36,6 @@ App.state = {
     movimientos_inventario: [],
     abonos_proveedores: [],
     ordenes_produccion_artesanos: [],
-
-    cotizaciones: []
+    cotizaciones: [],
+    vendedores: []
 };
