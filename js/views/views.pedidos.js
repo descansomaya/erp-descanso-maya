@@ -1,5 +1,5 @@
 // ==========================================
-// VISTAS: PEDIDOS Y COTIZACIONES (CORREGIDO CON IMPRESIÓN NATIVA)
+// VISTAS: PEDIDOS Y COTIZACIONES (FORMATO IMPRESIÓN OFICIAL)
 // ==========================================
 
 window.App = window.App || {};
@@ -18,8 +18,107 @@ App.views.runPedidoAction = async function (button, pedidoId, actionName, action
 };
 
 // ==========================================
-// IMPRESIÓN NATIVA DE NOTAS Y LIQUIDACIONES
+// IMPRESIÓN CON FORMATO OFICIAL DESCANSO MAYA
 // ==========================================
+App.views._generarHTMLDocumentoOficial = function ({ tituloDoc, folio, fecha, clienteNombre, fechaEntrega, estado, filasTabla, total, anticipo, abonos, saldo }) {
+    return `
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            <title>${tituloDoc} - ${App.ui.safe(folio)}</title>
+            <style>
+                * { box-sizing: border-box; margin: 0; padding: 0; }
+                body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #333; background: #fff; font-size: 14px; }
+                .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 25px; border-bottom: 2px solid #6b46c1; padding-bottom: 15px; }
+                .brand { font-size: 24px; font-weight: bold; color: #6b46c1; letter-spacing: 0.5px; }
+                .sub-brand { font-size: 13px; color: #666; margin-top: 3px; }
+                .doc-title { text-align: right; }
+                .doc-title h2 { font-size: 18px; color: #2d3748; text-transform: uppercase; }
+                .doc-meta { font-size: 12px; color: #718096; margin-top: 4px; }
+                
+                .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 25px; }
+                .info-item { display: flex; flex-direction: column; }
+                .info-label { font-size: 11px; text-transform: uppercase; color: #a0aec0; font-weight: bold; margin-bottom: 2px; }
+                .info-value { font-size: 14px; color: #2d3748; font-weight: 600; }
+                
+                table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
+                th { background: #f1f5f9; color: #4a5568; font-size: 12px; text-transform: uppercase; padding: 10px 12px; text-align: left; border-bottom: 2px solid #cbd5e1; }
+                td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+                .text-right { text-align: right; }
+                .text-center { text-align: center; }
+
+                .totals-container { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px; }
+                .footer-notes { flex: 1; max-width: 55%; font-size: 12px; color: #718096; line-height: 1.5; padding-right: 20px; }
+                .totals-box { width: 250px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 15px; }
+                .total-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; }
+                .total-row.grand-total { border-top: 2px solid #cbd5e1; margin-top: 5px; padding-top: 8px; font-weight: bold; font-size: 15px; color: #2b6cb0; }
+                
+                .footer-brand { margin-top: 40px; text-align: center; border-top: 1px solid #edf2f7; padding-top: 15px; font-size: 12px; color: #a0aec0; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div>
+                    <div class="brand">DESCANSO MAYA</div>
+                    <div class="sub-brand">Hamacas y Accesorios Artesanales</div>
+                </div>
+                <div class="doc-title">
+                    <h2>${tituloDoc}</h2>
+                    <div class="doc-meta">Fecha: <strong>${fecha}</strong></div>
+                    <div class="doc-meta">Folio: <strong>${App.ui.safe(folio)}</strong></div>
+                </div>
+            </div>
+
+            <div class="info-grid">
+                <div class="info-item"><span class="info-label">Cliente</span><span class="info-value">${App.ui.safe(clienteNombre)}</span></div>
+                <div class="info-item"><span class="info-label">Comprobante / Estado</span><span class="info-value">${App.ui.safe((estado || 'PENDIENTE').toUpperCase())}</span></div>
+                ${fechaEntrega ? `<div class="info-item" style="grid-column: span 2;"><span class="info-label">Fecha de Entrega Estimada</span><span class="info-value">${fechaEntrega}</span></div>` : ''}
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th class="text-center" style="width: 40px;">#</th>
+                        <th>Concepto</th>
+                        <th class="text-center" style="width: 70px;">Cant.</th>
+                        <th class="text-right" style="width: 100px;">Unitario</th>
+                        <th class="text-right" style="width: 110px;">Importe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${filasTabla}
+                </tbody>
+            </table>
+
+            <div class="totals-container">
+                <div class="footer-notes">
+                    <strong style="color:#4a5568;">Gracias por su preferencia</strong><br>
+                    Conserva este comprobante para cualquier aclaración o seguimiento de tu pedido.
+                </div>
+                <div class="totals-box">
+                    <div class="total-row"><span>Total</span><strong>${App.ui.money(total)}</strong></div>
+                    <div class="total-row"><span>Anticipo</span><span>${App.ui.money(anticipo)}</span></div>
+                    ${abonos > 0 ? `<div class="total-row"><span>Abonos</span><span>${App.ui.money(abonos)}</span></div>` : ''}
+                    <div class="total-row grand-total"><span>Saldo</span><span>${App.ui.money(saldo)}</span></div>
+                </div>
+            </div>
+
+            <div class="footer-brand">
+                facebook.com/descansomaya.mx
+            </div>
+
+            <script>
+                window.onload = function() {
+                    window.print();
+                    window.onafterprint = function() { window.close(); };
+                };
+            </script>
+        </body>
+        </html>
+    `;
+};
+
 App.views.imprimirNotaPedido = function (pedidoId) {
     const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
     if (!pedido) {
@@ -31,88 +130,84 @@ App.views.imprimirNotaPedido = function (pedidoId) {
     const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
     const abonosLista = (App.state.abonos || []).filter(a => a.pedido_id === pedidoId);
     const totalAbonos = abonosLista.reduce((s, a) => s + parseFloat(a.monto || 0), 0);
-    const saldo = parseFloat(pedido.total || 0) - parseFloat(pedido.anticipo || 0) - totalAbonos;
+    const totalPed = parseFloat(pedido.total || 0);
+    const anticipoPed = parseFloat(pedido.anticipo || 0);
+    const saldo = Math.max(0, totalPed - anticipoPed - totalAbonos);
 
-    let filasItems = '';
-    detalles.forEach(d => {
+    let filasTabla = '';
+    detalles.forEach((d, idx) => {
         const prod = (App.state.productos || []).find(p => p.id === d.producto_id);
-        const sub = parseFloat(d.precio_unitario || 0) * parseFloat(d.cantidad || 1);
-        filasItems += `
+        const cant = parseFloat(d.cantidad || 1);
+        const unit = parseFloat(d.precio_unitario || 0);
+        const sub = cant * unit;
+
+        filasTabla += `
             <tr>
-                <td style="padding: 8px; border-bottom: 1px solid #eee;">${App.ui.safe(d.cantidad)}x ${App.ui.safe(prod ? prod.nombre : 'Producto')}</td>
-                <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${App.ui.money(d.precio_unitario || 0)}</td>
-                <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${App.ui.money(sub)}</td>
+                <td class="text-center">${idx + 1}</td>
+                <td>${App.ui.safe(prod ? prod.nombre : 'Artículo')}</td>
+                <td class="text-center">${cant}</td>
+                <td class="text-right">${App.ui.money(unit)}</td>
+                <td class="text-right">${App.ui.money(sub)}</td>
             </tr>
         `;
     });
 
-    const html = `
-        <html>
-        <head>
-            <title>Nota de Venta - ${App.ui.safe(pedido.id)}</title>
-            <style>
-                body { font-family: Arial, sans-serif; padding: 24px; color: #222; }
-                .head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
-                .box { border:1px solid #ddd; border-radius:10px; padding:14px; margin-bottom:14px; }
-                .muted { color:#666; }
-                table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-                .row { display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
-            </style>
-        </head>
-        <body>
-            <div class="head">
-                <div>
-                    <h1 style="margin:0;">Descanso Maya</h1>
-                    <p class="muted" style="margin:4px 0 0 0;">Nota de Venta / Pedido</p>
-                </div>
-                <div style="text-align:right;">
-                    <strong style="font-size: 18px;">${App.ui.safe(pedido.id)}</strong><br>
-                    <span class="muted">${String(pedido.fecha_creacion || '').split('T')[0]}</span>
-                </div>
-            </div>
-
-            <div class="box">
-                <div class="row"><strong>Cliente:</strong><span>${App.ui.safe(cliente.nombre || pedido.cliente_nombre || 'Cliente')}</span></div>
-                <div class="row"><strong>Teléfono:</strong><span>${App.ui.safe(cliente.telefono || 'N/A')}</span></div>
-                <div class="row"><strong>Estado:</strong><span>${App.ui.safe((pedido.estado || '').toUpperCase())}</span></div>
-            </div>
-
-            <div class="box">
-                <strong>Detalle de Artículos:</strong>
-                <table>
-                    <thead>
-                        <tr style="background: #f5f5f5;">
-                            <th style="padding: 8px; text-align: left;">Descripción</th>
-                            <th style="padding: 8px; text-align: right;">P. Unit.</th>
-                            <th style="padding: 8px; text-align: right;">Subtotal</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${filasItems || '<tr><td colspan="3" style="padding:8px;">Sin detalles</td></tr>'}
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="box" style="background: #fafafa;">
-                <div class="row"><strong>Total Pedido:</strong><strong>${App.ui.money(pedido.total || 0)}</strong></div>
-                <div class="row"><strong>Anticipo:</strong><span>${App.ui.money(pedido.anticipo || 0)}</span></div>
-                <div class="row"><strong>Abonos:</strong><span>${App.ui.money(totalAbonos)}</span></div>
-                <div class="row" style="font-size: 16px; margin-top: 10px; border-top: 1px solid #ddd; padding-top: 8px;">
-                    <strong>Saldo Pendiente:</strong>
-                    <strong style="color: ${saldo > 0 ? '#c53030' : '#2f855a'};">${App.ui.money(saldo)}</strong>
-                </div>
-            </div>
-
-            <script>window.onload = function(){ window.print(); window.onafterprint = function(){ window.close(); }; };</script>
-        </body>
-        </html>
-    `;
+    const html = App.views._generarHTMLDocumentoOficial({
+        tituloDoc: 'Nota de pedido',
+        folio: pedido.id,
+        fecha: String(pedido.fecha_creacion || '').split('T')[0] || new Date().toISOString().split('T')[0],
+        clienteNombre: cliente.nombre || pedido.cliente_nombre || 'Cliente General',
+        fechaEntrega: pedido.fecha_entrega ? String(pedido.fecha_entrega).split('T')[0] : '',
+        estado: pedido.estado || 'Pendiente',
+        filasTabla: filasTabla || '<tr><td colspan="5" class="text-center">Sin detalles</td></tr>',
+        total: totalPed,
+        anticipo: anticipoPed,
+        abonos: totalAbonos,
+        saldo: saldo
+    });
 
     const w = window.open('', '_blank');
-    if (!w) {
-        App.ui.toast('El navegador bloqueó la ventana de impresión', 'warning');
-        return;
-    }
+    if (!w) { App.ui.toast('El navegador bloqueó la ventana de impresión', 'warning'); return; }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+};
+
+App.views.imprimirCotizacion = function (cotizacionId) {
+    const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
+    if (!c) { App.ui.toast('Cotización no encontrada', 'danger'); return; }
+
+    const prod = (App.state.productos || []).find(p => p.id === c.producto_id);
+    const cant = parseFloat(c.cantidad || 1);
+    const totalCot = parseFloat(c.total || 0);
+    const unit = cant > 0 ? (totalCot / cant) : totalCot;
+
+    const filasTabla = `
+        <tr>
+            <td class="text-center">1</td>
+            <td>${App.ui.safe(c.concepto || (prod ? prod.nombre : 'Cotización'))}</td>
+            <td class="text-center">${cant}</td>
+            <td class="text-right">${App.ui.money(unit)}</td>
+            <td class="text-right">${App.ui.money(totalCot)}</td>
+        </tr>
+    `;
+
+    const html = App.views._generarHTMLDocumentoOficial({
+        tituloDoc: 'Cotización',
+        folio: c.id,
+        fecha: String(c.fecha || c.fecha_creacion || '').split('T')[0] || new Date().toISOString().split('T')[0],
+        clienteNombre: c.cliente_nombre || 'Cliente General',
+        fechaEntrega: '',
+        estado: String(c.estado_conversion || '').toLowerCase() === 'convertida' ? 'CONVERTIDA A PEDIDO' : 'COTIZACIÓN PENDIENTE',
+        filasTabla: filasTabla,
+        total: totalCot,
+        anticipo: 0,
+        abonos: 0,
+        saldo: totalCot
+    });
+
+    const w = window.open('', '_blank');
+    if (!w) { App.ui.toast('El navegador bloqueó la ventana de impresión', 'warning'); return; }
     w.document.open();
     w.document.write(html);
     w.document.close();
@@ -222,7 +317,7 @@ App.views.accionAbono = function (button, abonoId, actionName) {
 };
 
 // ==========================================
-// PEDIDOS
+// PEDIDOS Y COTIZACIONES
 // ==========================================
 App.views.pedidos = function() {
     const todosPedidos = App.state.pedidos || [];
@@ -308,84 +403,89 @@ App.views.pedidos = function() {
     return html;
 };
 
-window.generarListaPedidos = function(tipo) {
-    let pedidos = (App.state.pedidos || []).filter(p => {
-        const estado = String(p.estado || '').toLowerCase();
-        if (tipo === 'activos') return estado !== 'entregado' && estado !== 'listo para entregar' && estado !== 'pagado';
-        if (tipo === 'listos') return estado === 'listo para entregar';
-        return estado === 'entregado' || estado === 'pagado';
-    });
+App.views.cotizaciones = function() {
+    const cotizaciones = [...(App.state.cotizaciones || [])].sort((a, b) => new Date(b.fecha || b.fecha_creacion || 0) - new Date(a.fecha || a.fecha_creacion || 0));
+    const resumen = App.views._resumenConversionCotizaciones();
+    const fabricado = cotizaciones.filter(c => String(c.tipo || '').toLowerCase() === 'fabricado').length;
+    const reventa = cotizaciones.filter(c => String(c.tipo || '').toLowerCase() === 'reventa').length;
+    const reparacion = cotizaciones.filter(c => String(c.tipo || '').toLowerCase() === 'reparacion').length;
 
-    if (pedidos.length === 0) return `<div class="dm-alert dm-alert-info">No hay pedidos aquí.</div>`;
-    pedidos.sort((a, b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion));
+    let html = `
+        <div class="dm-section" style="padding-bottom:90px;">
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
+                <div class="dm-card"><small class="dm-muted">Total cotizado</small><div class="dm-text-xl dm-fw-bold">${App.ui.money(resumen.montoCotizado)}</div></div>
+                <div class="dm-card"><small class="dm-muted">Monto convertido</small><div class="dm-text-xl dm-fw-bold" style="color:var(--dm-success);">${App.ui.money(resumen.montoConvertido)}</div></div>
+                <div class="dm-card"><small class="dm-muted">Tasa conversión</small><div class="dm-text-xl dm-fw-bold">${resumen.tasa.toFixed(1)}%</div></div>
+                <div class="dm-card"><small class="dm-muted">Pendientes</small><div class="dm-text-xl dm-fw-bold" style="color:${resumen.pendientes > 0 ? 'var(--dm-warning)' : 'var(--dm-success)'};">${resumen.pendientes}</div></div>
+            </div>
 
-    let html = `<div class="dm-list">`;
+            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
+                <div class="dm-card"><small class="dm-muted">Fabricado</small><div class="dm-text-xl dm-fw-bold">${fabricado}</div></div>
+                <div class="dm-card"><small class="dm-muted">Reventa</small><div class="dm-text-xl dm-fw-bold">${reventa}</div></div>
+                <div class="dm-card"><small class="dm-muted">Reparación</small><div class="dm-text-xl dm-fw-bold">${reparacion}</div></div>
+                <div class="dm-card"><small class="dm-muted">Convertidas</small><div class="dm-text-xl dm-fw-bold" style="color:var(--dm-success);">${resumen.convertidas}</div></div>
+            </div>
 
-    pedidos.forEach(p => {
-        const cliente = (App.state.clientes || []).find(x => x.id === p.cliente_id) || {};
-        const abonosLista = (App.state.abonos || []).filter(a => a.pedido_id === p.id);
-        const abonos = abonosLista.reduce((s, a) => s + parseFloat(a.monto || 0), 0);
-        const ultimoAbono = abonosLista.length ? [...abonosLista].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))[0] : null;
-
-        const saldo = parseFloat(p.total || 0) - parseFloat(p.anticipo || 0) - abonos;
-        const estado = String(p.estado || '').toLowerCase();
-        const fecha = p.fecha_creacion ? String(p.fecha_creacion).split('T')[0] : '';
-        const whatsappAction = p.estado === 'listo para entregar' ? 'whatsappListo' : 'whatsappCobro';
-        const esInterno = p.cliente_id === 'STOCK_INTERNO';
-
-        let estColor = 'dm-badge-primary';
-        if (estado === 'entregado' || estado === 'pagado') estColor = 'dm-badge-success';
-        else if (estado === 'listo para entregar') estColor = 'dm-badge-warning';
-
-        const accionesOperativas = `
-            ${estado !== 'listo para entregar' && estado !== 'entregado' && estado !== 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'marcarListo')">📦 Listo</button>` : ''}
-            ${estado === 'listo para entregar' || estado === 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'marcarEntregado')">🚚 Entregado</button>` : ''}
-            ${!esInterno && saldo <= 0.05 && estado !== 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'cerrarPedido')">🔒 Cerrar</button>` : ''}
-        `;
-
-        html += `
-            <div class="dm-list-card">
-                <div class="dm-row-between" style="align-items:flex-start; gap:12px;">
-                    <div style="flex:1; min-width:0;">
-                        <div class="dm-list-card-title">${App.ui.safe(p.id || '')} - ${App.ui.safe(esInterno ? 'STOCK BODEGA' : (cliente.nombre || 'Desconocido'))}</div>
-                        <div class="dm-list-card-subtitle dm-mt-2">
-                            <span class="dm-badge ${estColor}">${App.ui.safe((p.estado || '').toUpperCase())}</span>
-                            ${fecha ? `<span class="dm-text-sm dm-muted" style="display:inline-block; margin-left:8px;">${fecha}</span>` : ''}
-                        </div>
+            <div class="dm-card dm-mb-4">
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <div>
+                        <h3 class="dm-card-title">Cotizaciones PRO</h3>
+                        <p class="dm-muted" style="margin-top:6px;">Cotiza fabricado, reventa y reparación desde un solo módulo.</p>
                     </div>
-                    <div style="text-align:right; flex:0 0 auto;">
-                        <div class="dm-fw-bold dm-text-lg">$${parseFloat(p.total || 0).toFixed(2)}</div>
-                        <div class="dm-text-sm dm-muted">Saldo: <strong style="color:${saldo > 0 ? 'var(--dm-danger)' : 'var(--dm-success)'};">$${saldo.toFixed(2)}</strong></div>
-                    </div>
-                </div>
-
-                <div class="dm-card dm-mt-3" style="background:var(--dm-surface-2); padding:10px;">
-                    <div class="dm-row-between dm-text-sm"><span class="dm-muted">Anticipo:</span><strong>$${parseFloat(p.anticipo || 0).toFixed(2)}</strong></div>
-                    <div class="dm-row-between dm-text-sm"><span class="dm-muted">Abonos:</span><strong>$${abonos.toFixed(2)}</strong></div>
-                </div>
-
-                <div class="dm-list-card-actions" style="flex-wrap:wrap;">
-                    <button class="dm-btn dm-btn-info dm-btn-sm" onclick="App.views.modalDetallesPedido('${p.id}')">📦 Detalles</button>
-                    <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formPedido('${p.id}')">✏️ Editar</button>
-                    ${!esInterno && p.estado !== 'pagado' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalAbonos('${p.id}')">💳 Abonos</button>` : ''}
-                    ${!esInterno ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'imprimirNota')">🖨️ Nota</button>` : ''}
-                    ${!esInterno && ultimoAbono ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionAbono(this, '${ultimoAbono.id}', 'imprimirRecibo')">🧾 Últ. abono</button>` : ''}
-                    ${!esInterno ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'imprimirLiquidacion')">✅ Liquidación</button>` : ''}
-                    ${!esInterno ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', '${whatsappAction}')">💬 WhatsApp</button>` : ''}
-                    ${accionesOperativas}
-                    <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${p.id}', 'eliminarPedido')">🗑️ Eliminar</button>
+                    <input type="text" id="bus-cot" class="dm-input" onkeyup="window.filtrarLista('bus-cot', 'tarj-cot')" placeholder="🔍 Buscar cotización o cliente...">
                 </div>
             </div>
-        `;
-    });
 
-    html += `</div>`;
+            <div class="dm-list">
+    `;
+
+    if (!cotizaciones.length) {
+        html += `<div class="dm-alert dm-alert-info">No hay cotizaciones registradas.</div>`;
+    } else {
+        cotizaciones.forEach(c => {
+            const fecha = String(c.fecha || c.fecha_creacion || '').split('T')[0];
+            const tipo = String(c.tipo || 'general').toLowerCase();
+            const badgeClass = tipo === 'fabricado' ? 'dm-badge-primary' : tipo === 'reventa' ? 'dm-badge-success' : 'dm-badge-warning';
+            const yaConvertida = String(c.estado_conversion || '').toLowerCase() === 'convertida';
+
+            html += `
+                <div class="dm-list-card tarj-cot">
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                        <div class="dm-row-between" style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
+                            <div style="flex:1; min-width:0;">
+                                <div class="dm-list-card-title">${App.ui.safe(c.id || '')}</div>
+                                <div class="dm-list-card-subtitle">${App.ui.safe(c.cliente_nombre || 'Cliente')}</div>
+                                <div class="dm-text-sm dm-muted">${fecha}</div>
+                            </div>
+                            <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+                                <span class="dm-badge ${badgeClass}">${App.ui.safe((c.tipo || 'general').toUpperCase())}</span>
+                                ${yaConvertida ? `<span class="dm-badge dm-badge-success">CONVERTIDA</span>` : `<span class="dm-badge dm-badge-warning">PENDIENTE</span>`}
+                            </div>
+                        </div>
+
+                        <div class="dm-card" style="background:var(--dm-surface-2); padding:10px;">
+                            <div class="dm-row-between"><small class="dm-muted">Concepto</small><strong>${App.ui.safe(c.concepto || c.detalles || 'Cotización')}</strong></div>
+                            <div class="dm-row-between"><small class="dm-muted">Total</small><strong>${App.ui.money(c.total || 0)}</strong></div>
+                        </div>
+
+                        <div class="dm-list-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verCotizacion('${c.id}')">👁️ Ver</button>
+                            <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formCotizacion('${c.id}')">✏️ Editar</button>
+                            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.imprimirCotizacion('${c.id}')">🖨️ Imprimir</button>
+                            <button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.convertirCotizacion('${c.id}')">🔁 Convertir</button>
+                            ${!yaConvertida ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.autoConvertirCotizacion('${c.id}')">⚡ Directo</button>` : ''}
+                            <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.eliminarCotizacion('${c.id}')">🗑️ Eliminar</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    html += `</div></div><button class="dm-fab" onclick="App.views.formCotizacion()">+</button>`;
     return html;
 };
 
-// ==========================================
-// CARRITO Y CREACIÓN DE PEDIDOS MÚLTIPLES
-// ==========================================
 App.views._formPedidoInterno = function(obj = null, prefill = null) {
     const dataBase = Object.assign({ cantidad: 1, anticipo: 0, comision: 0, vendedor_id: '' }, prefill || {}, obj || {});
 
@@ -693,109 +793,6 @@ App.views.modalAbonos = function(pedidoId) {
     });
 };
 
-// ==========================================
-// COTIZACIONES Y CREACIÓN RÁPIDA CON AUTO-SELECCIÓN
-// ==========================================
-App.views._resumenConversionCotizaciones = function () {
-    const cotizaciones = App.state.cotizaciones || [];
-    const total = cotizaciones.length;
-    const convertidas = cotizaciones.filter(c => String(c.estado_conversion || '').toLowerCase() === 'convertida').length;
-    const pendientes = total - convertidas;
-    const montoCotizado = cotizaciones.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
-    const montoConvertido = cotizaciones
-        .filter(c => String(c.estado_conversion || '').toLowerCase() === 'convertida')
-        .reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
-    const tasa = total > 0 ? (convertidas / total) * 100 : 0;
-    return { total, convertidas, pendientes, montoCotizado, montoConvertido, tasa };
-};
-
-App.views._cotizacionPuedeImprimir = function () {
-    return !!(App.logic && (App.logic.imprimirCotizacion || App.logic.imprimirNota || App.logic.imprimirReciboLiquidacion));
-};
-
-App.views.cotizaciones = function() {
-    const cotizaciones = [...(App.state.cotizaciones || [])].sort((a, b) => new Date(b.fecha || b.fecha_creacion || 0) - new Date(a.fecha || a.fecha_creacion || 0));
-    const resumen = App.views._resumenConversionCotizaciones();
-    const fabricado = cotizaciones.filter(c => String(c.tipo || '').toLowerCase() === 'fabricado').length;
-    const reventa = cotizaciones.filter(c => String(c.tipo || '').toLowerCase() === 'reventa').length;
-    const reparacion = cotizaciones.filter(c => String(c.tipo || '').toLowerCase() === 'reparacion').length;
-
-    let html = `
-        <div class="dm-section" style="padding-bottom:90px;">
-            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
-                <div class="dm-card"><small class="dm-muted">Total cotizado</small><div class="dm-text-xl dm-fw-bold">${App.ui.money(resumen.montoCotizado)}</div></div>
-                <div class="dm-card"><small class="dm-muted">Monto convertido</small><div class="dm-text-xl dm-fw-bold" style="color:var(--dm-success);">${App.ui.money(resumen.montoConvertido)}</div></div>
-                <div class="dm-card"><small class="dm-muted">Tasa conversión</small><div class="dm-text-xl dm-fw-bold">${resumen.tasa.toFixed(1)}%</div></div>
-                <div class="dm-card"><small class="dm-muted">Pendientes</small><div class="dm-text-xl dm-fw-bold" style="color:${resumen.pendientes > 0 ? 'var(--dm-warning)' : 'var(--dm-success)'};">${resumen.pendientes}</div></div>
-            </div>
-
-            <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
-                <div class="dm-card"><small class="dm-muted">Fabricado</small><div class="dm-text-xl dm-fw-bold">${fabricado}</div></div>
-                <div class="dm-card"><small class="dm-muted">Reventa</small><div class="dm-text-xl dm-fw-bold">${reventa}</div></div>
-                <div class="dm-card"><small class="dm-muted">Reparación</small><div class="dm-text-xl dm-fw-bold">${reparacion}</div></div>
-                <div class="dm-card"><small class="dm-muted">Convertidas</small><div class="dm-text-xl dm-fw-bold" style="color:var(--dm-success);">${resumen.convertidas}</div></div>
-            </div>
-
-            <div class="dm-card dm-mb-4">
-                <div style="display:flex; flex-direction:column; gap:10px;">
-                    <div>
-                        <h3 class="dm-card-title">Cotizaciones PRO</h3>
-                        <p class="dm-muted" style="margin-top:6px;">Cotiza fabricado, reventa y reparación desde un solo módulo.</p>
-                    </div>
-                    <input type="text" id="bus-cot" class="dm-input" onkeyup="window.filtrarLista('bus-cot', 'tarj-cot')" placeholder="🔍 Buscar cotización o cliente...">
-                </div>
-            </div>
-
-            <div class="dm-list">
-    `;
-
-    if (!cotizaciones.length) {
-        html += `<div class="dm-alert dm-alert-info">No hay cotizaciones registradas.</div>`;
-    } else {
-        cotizaciones.forEach(c => {
-            const fecha = String(c.fecha || c.fecha_creacion || '').split('T')[0];
-            const tipo = String(c.tipo || 'general').toLowerCase();
-            const badgeClass = tipo === 'fabricado' ? 'dm-badge-primary' : tipo === 'reventa' ? 'dm-badge-success' : 'dm-badge-warning';
-            const yaConvertida = String(c.estado_conversion || '').toLowerCase() === 'convertida';
-
-            html += `
-                <div class="dm-list-card tarj-cot">
-                    <div style="display:flex; flex-direction:column; gap:10px;">
-                        <div class="dm-row-between" style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
-                            <div style="flex:1; min-width:0;">
-                                <div class="dm-list-card-title">${App.ui.safe(c.id || '')}</div>
-                                <div class="dm-list-card-subtitle">${App.ui.safe(c.cliente_nombre || 'Cliente')}</div>
-                                <div class="dm-text-sm dm-muted">${fecha}</div>
-                            </div>
-                            <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
-                                <span class="dm-badge ${badgeClass}">${App.ui.safe((c.tipo || 'general').toUpperCase())}</span>
-                                ${yaConvertida ? `<span class="dm-badge dm-badge-success">CONVERTIDA</span>` : `<span class="dm-badge dm-badge-warning">PENDIENTE</span>`}
-                            </div>
-                        </div>
-
-                        <div class="dm-card" style="background:var(--dm-surface-2); padding:10px;">
-                            <div class="dm-row-between"><small class="dm-muted">Concepto</small><strong>${App.ui.safe(c.concepto || c.detalles || 'Cotización')}</strong></div>
-                            <div class="dm-row-between"><small class="dm-muted">Total</small><strong>${App.ui.money(c.total || 0)}</strong></div>
-                        </div>
-
-                        <div class="dm-list-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
-                            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verCotizacion('${c.id}')">👁️ Ver</button>
-                            <button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.formCotizacion('${c.id}')">✏️ Editar</button>
-                            ${App.views._cotizacionPuedeImprimir() ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.imprimirCotizacion('${c.id}')">🖨️ Imprimir</button>` : ''}
-                            <button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.convertirCotizacion('${c.id}')">🔁 Convertir</button>
-                            ${!yaConvertida ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.autoConvertirCotizacion('${c.id}')">⚡ Directo</button>` : ''}
-                            <button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.eliminarCotizacion('${c.id}')">🗑️ Eliminar</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-    }
-
-    html += `</div></div><button class="dm-fab" onclick="App.views.formCotizacion()">+</button>`;
-    return html;
-};
-
 App.views.syncCotizacionCliente = function () {
     const select = document.querySelector('#dynamic-form select[name="cliente_id"]');
     const input = document.querySelector('#dynamic-form input[name="cliente_nombre"]');
@@ -1070,13 +1067,6 @@ App.views.formCotizacion = function(id = null) {
         App.views.syncCotizacionProducto();
         App.views.toggleCamposCotizacion();
     }, 150);
-};
-
-App.views.imprimirCotizacion = async function (cotizacionId) {
-    const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
-    if (!c) return;
-
-    App.views.imprimirNotaPedido(cotizacionId);
 };
 
 App.views.eliminarCotizacion = async function (cotizacionId) {
