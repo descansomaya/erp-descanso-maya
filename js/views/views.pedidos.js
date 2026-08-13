@@ -1,5 +1,5 @@
 // ==========================================
-// VISTAS: PEDIDOS Y COTIZACIONES (REPLICACIÓN FIEL PDF DESCANSO MAYA)
+// VISTAS: PEDIDOS Y COTIZACIONES (CORREGIDO Y OFICIAL)
 // ==========================================
 
 window.App = window.App || {};
@@ -18,9 +18,29 @@ App.views.runPedidoAction = async function (button, pedidoId, actionName, action
 };
 
 // ==========================================
-// PLANTILLA IDÉNTICA AL PDF OFICIAL (CON LOGO Y DESGLOSE)
+// FUNCIONES AUXILIARES DE COTIZACIONES
 // ==========================================
-App.views._generarHTMLDocumentoOficial = function ({ tituloDoc, folio, fecha, clienteNombre, fechaEntrega, estado, filasTabla, total, anticipo, saldo }) {
+App.views._resumenConversionCotizaciones = function () {
+    const cotizaciones = App.state.cotizaciones || [];
+    const total = cotizaciones.length;
+    const convertidas = cotizaciones.filter(c => String(c.estado_conversion || '').toLowerCase() === 'convertida').length;
+    const pendientes = total - convertidas;
+    const montoCotizado = cotizaciones.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
+    const montoConvertido = cotizaciones
+        .filter(c => String(c.estado_conversion || '').toLowerCase() === 'convertida')
+        .reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
+    const tasa = total > 0 ? (convertidas / total) * 100 : 0;
+    return { total, convertidas, pendientes, montoCotizado, montoConvertido, tasa };
+};
+
+App.views._cotizacionPuedeImprimir = function () {
+    return !!(App.logic && (App.logic.imprimirCotizacion || App.logic.imprimirNota || App.logic.imprimirReciboLiquidacion));
+};
+
+// ==========================================
+// PLANTILLA DE IMPRESIÓN OFICIAL DESCANSO MAYA
+// ==========================================
+App.views._generarHTMLDocumentoOficial = function ({ tituloDoc, folio, fecha, clienteNombre, fechaEntrega, estado, filasTabla, total, anticipo, abonos, saldo }) {
     return `
         <!DOCTYPE html>
         <html lang="es">
@@ -50,7 +70,7 @@ App.views._generarHTMLDocumentoOficial = function ({ tituloDoc, folio, fecha, cl
                 .status-pendiente { background: #feebc8; color: #744210; }
 
                 table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-                th { background: #f1f5f9; color: #4a5568; font-size: 11px; text-transform: uppercase; padding: 8px 10px; border-bottom: 2px solid #cbd5e1; }
+                th { background: #f1f5f9; color: #4a5568; font-size: 11px; text-transform: uppercase; padding: 8px 10px; text-align: left; border-bottom: 2px solid #cbd5e1; }
                 td { padding: 10px; border-bottom: 1px solid #edf2f7; font-size: 13px; }
                 .text-center { text-align: center; }
                 .text-right { text-align: right; }
