@@ -41,7 +41,7 @@ App.logic = App.logic || {};
             if (!pedido) throw new Error("Pedido no encontrado");
 
             const estado = normalizar(pedido.estado);
-            const estadosNoCancelables = ["entregado", "devuelto", "cancelado", "pagado", "listo para entregar"];
+            const estadosNoCancelables = ["entregado", "devuelto", "cancelado", "pagado"];
             if (estadosNoCancelables.includes(estado)) {
                 throw new Error("Este pedido ya no puede cancelarse desde esta etapa. Use Devolver si ya fue entregado.");
             }
