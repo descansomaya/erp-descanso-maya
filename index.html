@@ -7,7 +7,6 @@
     <title>Descanso Maya ERP</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#6B46C1">
-
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css?v=2084">
 </head>
@@ -21,7 +20,6 @@
                     <div class="dm-sidebar-subtitle">ERP Operativo</div>
                 </div>
             </div>
-
             <nav class="dm-sidebar-nav">
                 <a href="javascript:void(0)" class="dm-sidebar-link active" onclick="App.router.navigate('inicio')">🏠 Dashboard</a>
                 <a href="javascript:void(0)" class="dm-sidebar-link" onclick="App.router.navigate('pedidos')">📦 Pedidos</a>
@@ -31,24 +29,13 @@
                 <a href="javascript:void(0)" class="dm-sidebar-link" onclick="App.router.navigate('mas')">⚙️ Más</a>
             </nav>
         </aside>
-
         <main class="dm-main">
             <header class="dm-header">
-                <div class="dm-header-left">
-                    <div>
-                        <h1 class="dm-header-title" id="app-header-title">Inicio</h1>
-                        <p class="dm-header-subtitle" id="app-header-subtitle">Resumen general</p>
-                    </div>
-                </div>
-
-                <div class="dm-header-right">
-                    <button class="dm-btn dm-btn-ghost" onclick="App.views.modalBuscadorGlobal()">🔍 Buscar</button>
-                </div>
+                <div class="dm-header-left"><div><h1 class="dm-header-title" id="app-header-title">Inicio</h1><p class="dm-header-subtitle" id="app-header-subtitle">Resumen general</p></div></div>
+                <div class="dm-header-right"><button class="dm-btn dm-btn-ghost" onclick="App.views.modalBuscadorGlobal()">🔍 Buscar</button></div>
             </header>
-
             <div class="dm-content" id="app-content"></div>
         </main>
-
         <nav class="dm-bottom-nav" id="bottom-nav">
             <a href="javascript:void(0)" onclick="App.router.navigate('inicio')"><span>🏠</span>Inicio</a>
             <a href="javascript:void(0)" onclick="App.router.navigate('pedidos')"><span>📦</span>Pedidos</a>
@@ -56,30 +43,22 @@
             <a href="javascript:void(0)" onclick="App.router.navigate('mas')"><span>⚙️</span>Más</a>
         </nav>
     </div>
-
     <div id="loader" class="dm-modal-backdrop hidden" style="z-index:9999; flex-direction:column; align-items:center; justify-content:center;"></div>
-
-    <div id="sheet-bg" class="dm-modal-backdrop hidden">
-        <div id="sheet-content" class="dm-modal"></div>
-    </div>
+    <div id="sheet-bg" class="dm-modal-backdrop hidden"><div id="sheet-content" class="dm-modal"></div></div>
 
 <script src="js/config.js?v=2084"></script>
 <script src="js/state.js?v=2084"></script>
 <script src="js/ui.js?v=2084"></script>
 <script src="js/api.js?v=2084"></script>
-
 <script src="js/logic/logic.core.js?v=2084"></script>
 <script src="js/logic/logic.pedidos.js?v=2084"></script>
 <script src="js/logic/logic.movimientos.js?v=2084"></script>
 <script src="js/logic/logic.produccion.js?v=2084"></script>
 <script src="js/logic/logic.inventario.js?v=2084"></script>
 <script src="js/logic/logic.vendedores.js?v=2084"></script>
-
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script src="js/logic/logic.finanzas.js?v=2084"></script>
 <script src="js/logic/logic.reportes.js?v=2084"></script>
-
 <script src="js/views/views.core.js?v=2084"></script>
 <script src="js/views/views.catalogos.js?v=2084"></script>
 <script src="js/views/views.cobranza.js?v=2084"></script>
@@ -89,18 +68,85 @@
 <script src="js/views/views.reportes.js?v=2084"></script>
 <script src="js/views/views.reparaciones.js?v=2084"></script>
 <script src="js/views/views.vendedores.js?v=2084"></script>
-
-<!-- Finanzas modular -->
 <script src="js/views/views.finanzas.helpers.js?v=2084"></script>
 <script src="js/views/views.finanzas.gastos.js?v=2084"></script>
 <script src="js/views/views.finanzas.nomina.js?v=2084"></script>
 <script src="js/views/views.finanzas.js?v=2084"></script>
-
 <script src="js/logic/logic.reparaciones.js?v=2084"></script>
-
 <script src="js/compat.js?v=2084"></script>
 <script src="js/logic/logic.cancelaciones.js?v=2084"></script>
 <script src="js/logic/logic.pedidos.fix.js?v=2084"></script>
+
+<!-- Estabilizador de Pedidos: se ejecuta despues del fix historico para impedir ciclos de render. -->
+<script>
+(function () {
+    const norm = v => String(v || '').toLowerCase().trim();
+    const inactivo = p => ['cancelado', 'devuelto'].includes(norm(p?.estado));
+    const ventaValida = p => !!p && String(p.cliente_id || '').toUpperCase() !== 'STOCK_INTERNO' && !inactivo(p);
+
+    window.DM = window.DM || {};
+    DM.esVentaValida = ventaValida;
+    DM.ventasValidas = lista => (lista || []).filter(ventaValida);
+
+    const pedidosOriginal = App.views.pedidos;
+    if (typeof pedidosOriginal === 'function') {
+        App.views.pedidos = function () {
+            const todos = App.state?.pedidos || [];
+            const activos = todos.filter(p => !inactivo(p));
+            const historico = !!App.state?.mostrarHistoricoPedidos;
+            const anterior = App.state.pedidos;
+            App.state.pedidos = historico ? todos : activos;
+            let html;
+            try { html = pedidosOriginal.apply(this, arguments); }
+            finally { App.state.pedidos = anterior; }
+
+            html = html.replace(/📜 Histórico Completos \(\d+\)/g, `📜 Histórico Completos (${todos.length})`);
+            html = html.replace(/📦 Ver Solo Activos \(\d+\)/g, `📦 Ver Solo Activos (${activos.length})`);
+            html = html.replace(/style="background:var\(--dm-muted\); color:white;">cancelado/g, 'style="background:#dc2626; color:white;">cancelado');
+            html = html.replace(/style="background:var\(--dm-muted\); color:white;">devuelto/g, 'style="background:#f59e0b; color:white;">devuelto');
+            return html;
+        };
+    }
+
+    const inicioOriginal = App.views.inicio;
+    if (typeof inicioOriginal === 'function') {
+        App.views.inicio = function () {
+            let html = inicioOriginal.apply(this, arguments);
+            const hoy = new Date();
+            const ventas = (App.state?.pedidos || []).filter(ventaValida).filter(p => {
+                const f = new Date(p.fecha_creacion || p.fecha || p.created_at || '');
+                return !Number.isNaN(f.getTime()) && f.getMonth() === hoy.getMonth() && f.getFullYear() === hoy.getFullYear();
+            }).reduce((s, p) => s + (parseFloat(p.total || 0) || 0), 0);
+            const activos = (App.state?.pedidos || []).filter(p => !inactivo(p) && !['entregado','pagado'].includes(norm(p.estado))).length;
+            html = html.replace(/(Ventas del mes<\/small>\s*<div[^>]*>)[\s\S]*?(<\/div>)/, `$1${App.ui.money(ventas)}$2`);
+            html = html.replace(/(Pedidos activos<\/small>\s*<div[^>]*>)[\s\S]*?(<\/div>)/, `$1${activos}$2`);
+            return html;
+        };
+    }
+
+    function desconectar() {
+        ['app-content', 'sheet-content'].forEach(id => {
+            const root = document.getElementById(id);
+            if (!root) return;
+            try {
+                root.__dmFix2Observer?.disconnect();
+                root.__dmFix2DashObserver?.disconnect();
+                root.__dmFix2SheetObserver?.disconnect();
+            } catch (e) {}
+            if (root.__dmFix2Timer) clearTimeout(root.__dmFix2Timer);
+            if (root.__dmFix2DashTimer) clearTimeout(root.__dmFix2DashTimer);
+            delete root.__dmFix2Observer;
+            delete root.__dmFix2DashObserver;
+            delete root.__dmFix2SheetObserver;
+            root.querySelectorAll('[data-dm-estado-pedido]').forEach(el => el.remove());
+        });
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', desconectar, { once: true });
+    else desconectar();
+})();
+</script>
+
 <script src="js/main.js?v=2084"></script>
 </body>
 </html>
