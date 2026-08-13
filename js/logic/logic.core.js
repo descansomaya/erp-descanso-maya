@@ -5,6 +5,8 @@
 window.App = window.App || {};
 App.logic = App.logic || {};
 
+Object.assign(App.logic, {
+
 App.logic.MAPA_TABLAS = [
     { hoja: "materiales", state: "inventario" },
     { hoja: "clientes", state: "clientes" },
@@ -345,3 +347,4 @@ Object.assign(App.logic, {
             : resultados.join("");
     }
 });
+};
