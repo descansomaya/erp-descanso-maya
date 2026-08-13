@@ -17,59 +17,6 @@ App.views.runPedidoAction = async function (button, pedidoId, actionName, action
     }, async () => actionFn());
 };
 
-App.views.accionPedido = async function (button, pedidoId, actionName) {
-
-    switch (actionName) {
-
-        case 'cancelarPedido':
-            return App.views.runPedidoAction(
-                button,
-                pedidoId,
-                actionName,
-                () => App.logic.cancelarPedido(pedidoId),
-                {
-                    loadingText: 'Cancelando...',
-                    loaderMessage: 'Cancelando pedido y revirtiendo inventario...',
-                    successMessage: 'Pedido cancelado correctamente',
-                    errorTitle: 'No se pudo cancelar el pedido'
-                }
-            );
-
-        case 'devolverPedido':
-            return App.views.runPedidoAction(
-                button,
-                pedidoId,
-                actionName,
-                () => App.logic.devolverPedido(pedidoId),
-                {
-                    loadingText: 'Devolviendo...',
-                    loaderMessage: 'Registrando devolución...',
-                    successMessage: 'Devolución registrada correctamente',
-                    errorTitle: 'No se pudo registrar la devolución'
-                }
-            );
-
-        case 'marcarPedidoEntregado':
-            return App.views.runPedidoAction(
-                button,
-                pedidoId,
-                actionName,
-                () => App.logic.marcarPedidoEntregado(pedidoId),
-                {
-                    loadingText: 'Entregando...',
-                    loaderMessage: 'Registrando entrega física...',
-                    successMessage: 'Pedido entregado correctamente',
-                    errorTitle: 'No se pudo registrar la entrega'
-                }
-            );
-
-        default:
-            console.warn('Acción de pedido no disponible:', actionName);
-            App.ui.toast('Acción no disponible', 'warning');
-            return false;
-    }
-};
-
 // ==========================================
 // FUNCIONES AUXILIARES DE COTIZACIONES
 // ==========================================
@@ -1692,6 +1639,27 @@ App.views.imprimirCotizacion = function (
 
 App.views.accionPedido = function (button, pedidoId, actionName) {
     const actions = {
+        cancelarPedido: {
+            fn: () => App.logic.cancelarPedido(pedidoId),
+            loadingText: "Cancelando...",
+            loaderMessage: "Cancelando pedido y revirtiendo inventario...",
+            successMessage: "Pedido cancelado correctamente",
+            errorTitle: "No se pudo cancelar el pedido"
+        },
+        devolverPedido: {
+            fn: () => App.logic.devolverPedido(pedidoId),
+            loadingText: "Devolviendo...",
+            loaderMessage: "Registrando devolución...",
+            successMessage: "Devolución registrada correctamente",
+            errorTitle: "No se pudo registrar la devolución"
+        },
+        marcarPedidoEntregado: {
+            fn: () => App.logic.marcarPedidoEntregado(pedidoId),
+            loadingText: "Entregando...",
+            loaderMessage: "Registrando entrega física...",
+            successMessage: "Pedido entregado correctamente",
+            errorTitle: "No se pudo registrar la entrega"
+        },
         marcarListo: {
             fn: () => App.logic.marcarPedidoListo(pedidoId),
             loadingText: "Marcando...",
@@ -1728,14 +1696,14 @@ App.views.accionPedido = function (button, pedidoId, actionName) {
             errorTitle: "No se pudo generar la liquidación"
         },
         whatsappCobro: {
-            fn: () => App.logic.enviarWhatsApp(pedidoId, 'cobro'),
+            fn: () => App.logic.enviarWhatsApp(pedidoId, "cobro"),
             loadingText: "Preparando...",
             loaderMessage: "Preparando mensaje de WhatsApp...",
             successMessage: "Mensaje preparado",
             errorTitle: "No se pudo preparar WhatsApp"
         },
         whatsappListo: {
-            fn: () => App.logic.enviarWhatsApp(pedidoId, 'listo'),
+            fn: () => App.logic.enviarWhatsApp(pedidoId, "listo"),
             loadingText: "Preparando...",
             loaderMessage: "Preparando mensaje de WhatsApp...",
             successMessage: "Mensaje preparado",
@@ -1745,14 +1713,15 @@ App.views.accionPedido = function (button, pedidoId, actionName) {
             fn: () => App.logic.eliminarPedido(pedidoId),
             loadingText: "Eliminando...",
             loaderMessage: "Validando taller y eliminando pedido...",
-            toastOnSuccess: false,
-            errorTitle: "No se pudo eliminar el pedido"
+            successMessage: "Pedido eliminado",
+            errorTitle: "No se pudo eliminar el pedido",
+            toastOnSuccess: false
         }
     };
 
     const config = actions[actionName];
     if (!config) {
-        App.ui.toast('Acción no disponible', 'warning');
+        App.ui.toast("Acción no disponible", "warning");
         return;
     }
 
@@ -1762,7 +1731,14 @@ App.views.accionPedido = function (button, pedidoId, actionName) {
 App.views.accionAbono = function (button, abonoId, actionName) {
     const actions = {
         imprimirRecibo: {
-            fn: () => App.views.imprimirNotaPedido(abonoId),
+            fn: () => {
+                const abono = (App.state.abonos || []).find(a => a.id === abonoId);
+                if (!abono?.pedido_id) {
+                    App.ui.toast("No se encontró el pedido asociado al abono", "danger");
+                    return false;
+                }
+                return App.views.imprimirNotaPedido(abono.pedido_id);
+            },
             loadingText: "Generando...",
             loaderMessage: "Generando recibo de abono...",
             successMessage: "Recibo generado",
@@ -1999,7 +1975,7 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
                         <select id="cart-prod-select" class="dm-select" style="flex:1; min-width:180px;" onchange="document.getElementById('cart-price').value = this.options[this.selectedIndex].getAttribute('data-precio') || 0;">
                             ${htmlProductos}
                         </select>
-                        <button type="button" class="dm-btn dm-btn-secondary" style="padding: 0 12px;" onclick="App.views.formProductoRapidoDesdeCotizacion()">+ Prod</button>
+                        <button type="button" class="dm-btn dm-btn-secondary" style="padding: 0 12px;" onclick="App.views.formProductoRapidoDesdeCotizacion()">+ Producto</button>
                     </div>
                     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
                         <div style="width:70px;">
@@ -2612,20 +2588,29 @@ App.views.autoConvertirCotizacion = async function (cotizacionId) {
                 Convirtiendo cotización <strong>${App.ui.safe(c.id)}</strong> (${App.ui.safe(c.cliente_nombre || 'Cliente')}) por <strong>${App.ui.money(c.total || 0)}</strong>.
             </div>
             
-            <div class="dm-form-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:12px;">
-                <div class="dm-form-group">
-                    <label class="dm-label">Anticipo Recibido ($)</label>
-                    <input type="number" step="0.01" class="dm-input" name="anticipo" value="0" max="${c.total || 0}">
+            ${c.cliente_id === 'STOCK_INTERNO' ? `
+                <div class="dm-alert dm-alert-success dm-mb-3">
+                    <strong>Producción interna / Stock Bodega</strong><br>
+                    Este movimiento no es una venta. No se solicitará anticipo ni método de pago y el pedido pasará directamente al taller.
                 </div>
-                <div class="dm-form-group">
-                    <label class="dm-label">Método de Pago</label>
-                    <select class="dm-select" name="metodo_pago">
-                        <option value="Efectivo">Efectivo</option>
-                        <option value="Transferencia">Transferencia</option>
-                        <option value="Tarjeta">Tarjeta</option>
-                    </select>
+                <input type="hidden" name="anticipo" value="0">
+                <input type="hidden" name="metodo_pago" value="">
+            ` : `
+                <div class="dm-form-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:12px;">
+                    <div class="dm-form-group">
+                        <label class="dm-label">Anticipo Recibido ($)</label>
+                        <input type="number" step="0.01" class="dm-input" name="anticipo" value="0" max="${c.total || 0}">
+                    </div>
+                    <div class="dm-form-group">
+                        <label class="dm-label">Método de Pago</label>
+                        <select class="dm-select" name="metodo_pago">
+                            <option value="Efectivo">Efectivo</option>
+                            <option value="Transferencia">Transferencia</option>
+                            <option value="Tarjeta">Tarjeta</option>
+                        </select>
+                    </div>
                 </div>
-            </div>
+            `}
 
             <button type="submit" class="dm-btn dm-btn-success dm-btn-block">⚡ Confirmar y Convertir</button>
         </form>
@@ -2639,8 +2624,9 @@ App.views.autoConvertirCotizacion = async function (cotizacionId) {
             successMessage: 'Cotización convertida con éxito',
             closeSheetOnSuccess: true
         }, async () => {
-            const anticipoMonto = parseFloat(data.anticipo || 0) || 0;
-            const metodoPago = data.metodo_pago || 'Efectivo';
+            const esStockInterno = c.cliente_id === 'STOCK_INTERNO';
+            const anticipoMonto = esStockInterno ? 0 : (parseFloat(data.anticipo || 0) || 0);
+            const metodoPago = esStockInterno ? '' : (data.metodo_pago || 'Efectivo');
             const ahora = new Date().toISOString();
 
             if (tipo === 'reparacion') {
@@ -2675,6 +2661,8 @@ App.views.autoConvertirCotizacion = async function (cotizacionId) {
                     total: totalCot,
                     anticipo: anticipoMonto,
                     fecha_entrega: new Date().toISOString().split('T')[0],
+                    vendedor_id: '',
+                    comision: 0,
                     carrito: c.producto_id ? [{
                         producto_id: c.producto_id,
                         nombre: prod ? prod.nombre : (c.concepto || 'Producto Cotizado'),
