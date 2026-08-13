@@ -40,215 +40,1601 @@ App.views._cotizacionPuedeImprimir = function () {
 // ==========================================
 // PLANTILLA DE IMPRESIÓN OFICIAL DESCANSO MAYA
 // ==========================================
-App.views._generarHTMLDocumentoOficial = function ({ tituloDoc, folio, fecha, clienteNombre, fechaEntrega, estado, filasTabla, total, anticipo, abonos, saldo }) {
-    return `
-        <!DOCTYPE html>
-        <html lang="es">
-        <head>
-            <meta charset="UTF-8">
-            <title>${tituloDoc} - ${App.ui.safe(folio)}</title>
-            <style>
-                * { box-sizing: border-box; margin: 0; padding: 0; }
-                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 25px; color: #2d3748; background: #fff; font-size: 13px; }
-                
-                .header-container { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-                .logo-brand { display: flex; align-items: center; gap: 12px; }
-                .logo-box { width: 65px; height: 65px; background: #6b46c1; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: bold; font-size: 22px; text-shadow: 1px 1px 2px rgba(0,0,0,0.2); }
-                .brand-title { font-size: 20px; font-weight: 800; color: #6b46c1; text-transform: uppercase; letter-spacing: 0.5px; }
-                .brand-sub { font-size: 12px; color: #718096; margin-top: 2px; }
-                
-                .doc-info { text-align: right; }
-                .doc-title-badge { font-size: 18px; font-weight: bold; color: #2d3748; text-transform: uppercase; }
-                .doc-meta { font-size: 12px; color: #4a5568; margin-top: 4px; }
-                
-                .section-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; }
-                .card-title-sm { font-size: 11px; font-weight: bold; text-transform: uppercase; color: #a0aec0; margin-bottom: 6px; }
-                .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-                
-                .status-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: uppercase; background: #e2e8f0; color: #4a5568; }
-                .status-entregado { background: #c6f6d5; color: #22543d; }
-                .status-pendiente { background: #feebc8; color: #744210; }
 
-                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-                th { background: #f1f5f9; color: #4a5568; font-size: 11px; text-transform: uppercase; padding: 8px 10px; text-align: left; border-bottom: 2px solid #cbd5e1; }
-                td { padding: 10px; border-bottom: 1px solid #edf2f7; font-size: 13px; }
-                .text-center { text-align: center; }
-                .text-right { text-align: right; }
+App.views._generarHTMLDocumentoOficial = function ({
+    tituloDoc,
+    folio,
+    fecha,
+    clienteNombre,
+    fechaEntrega,
+    estado,
+    filasTabla,
+    total,
+    anticipo,
+    abonos,
+    saldo
+}) {
 
-                .bottom-layout { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-top: 10px; }
-                .thank-you-box { flex: 1; font-size: 12px; color: #718096; line-height: 1.5; }
-                .thank-you-title { font-weight: bold; color: #2d3748; margin-bottom: 3px; }
-                
-                .totals-table { width: 240px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; padding: 10px; }
-                .row-total { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
-                .row-total.saldo { border-top: 2px solid #cbd5e1; font-weight: bold; font-size: 15px; color: #2b6cb0; margin-top: 4px; padding-top: 6px; }
+    const esCotizacion =
+        String(tituloDoc || '')
+            .toLowerCase()
+            .includes('cotiz');
 
-                .social-footer { text-align: center; margin-top: 35px; border-top: 1px solid #edf2f7; padding-top: 12px; font-size: 12px; color: #a0aec0; }
-            </style>
-        </head>
-        <body>
-            <div class="header-container">
-                <div class="logo-brand">
-                    <div class="logo-box">DM</div>
-                    <div>
-                        <div class="brand-title">Descanso Maya</div>
-                        <div class="brand-sub">Hamacas y Accesorios Artesanales</div>
-                    </div>
-                </div>
-                <div class="doc-info">
-                    <div class="doc-title-badge">${tituloDoc}</div>
-                    <div class="doc-meta">Comprobante de venta</div>
-                    <div class="doc-meta">Fecha: <strong>${fecha}</strong></div>
-                    <div class="doc-meta">Folio: <strong>${App.ui.safe(folio)}</strong></div>
-                </div>
-            </div>
+    const estadoTexto =
+        String(estado || 'PENDIENTE')
+            .toUpperCase();
 
-            <div class="section-card grid-2">
-                <div>
-                    <div class="card-title-sm">Cliente</div>
-                    <div style="font-weight: bold; font-size: 14px;">${App.ui.safe(clienteNombre)}</div>
-                </div>
-                <div>
-                    <div class="card-title-sm">Estado / Fecha Entrega</div>
-                    <div>
-                        <span class="status-badge ${String(estado).toLowerCase().includes('entregado') ? 'status-entregado' : 'status-pendiente'}">${App.ui.safe(estado)}</span>
-                        ${fechaEntrega ? `<span style="font-size: 12px; color: #718096; margin-left: 6px;">(${fechaEntrega})</span>` : ''}
-                    </div>
-                </div>
-            </div>
+    const estadoLower =
+        String(estado || '')
+            .toLowerCase();
 
-            <table>
-                <thead>
-                    <tr>
-                        <th class="text-center" style="width: 30px;">#</th>
-                        <th>Concepto</th>
-                        <th class="text-center" style="width: 60px;">Cant.</th>
-                        <th class="text-right" style="width: 90px;">Unitario</th>
-                        <th class="text-right" style="width: 100px;">Importe</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${filasTabla}
-                </tbody>
-            </table>
+    let estadoClase = 'status-pendiente';
 
-            <div class="bottom-layout">
-                <div class="thank-you-box">
-                    <div class="thank-you-title">Gracias por su preferencia</div>
-                    <div>Conserva este comprobante para cualquier aclaración.</div>
-                </div>
-                <div class="totals-table">
-                    <div class="row-total"><span>Total</span><strong>${App.ui.money(total)}</strong></div>
-                    <div class="row-total"><span>Anticipo</span><span>${App.ui.money(anticipo)}</span></div>
-                    <div class="row-total saldo"><span>Saldo</span><span>${App.ui.money(saldo)}</span></div>
-                </div>
-            </div>
-
-            <div class="social-footer">
-                facebook.com/descansomaya.mx
-            </div>
-
-            <script>
-                window.onload = function() {
-                    window.print();
-                    window.onafterprint = function() { window.close(); };
-                };
-            </script>
-        </body>
-        </html>
-    `;
-};
-
-App.views.imprimirNotaPedido = function (pedidoId) {
-    const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
-    if (!pedido) {
-        App.ui.toast('Pedido no encontrado', 'danger');
-        return;
+    if (estadoLower.includes('produccion')) {
+        estadoClase = 'status-produccion';
+    } else if (estadoLower.includes('listo')) {
+        estadoClase = 'status-listo';
+    } else if (
+        estadoLower.includes('entregado') ||
+        estadoLower.includes('pagado')
+    ) {
+        estadoClase = 'status-entregado';
     }
 
-    const cliente = (App.state.clientes || []).find(c => c.id === pedido.cliente_id) || {};
-    const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
-    const abonosLista = (App.state.abonos || []).filter(a => a.pedido_id === pedidoId);
-    const totalAbonos = abonosLista.reduce((s, a) => s + parseFloat(a.monto || 0), 0);
-    const totalPed = parseFloat(pedido.total || 0);
-    const anticipoPed = parseFloat(pedido.anticipo || 0);
-    const saldo = Math.max(0, totalPed - anticipoPed - totalAbonos);
+    const fechaEntregaHTML = fechaEntrega
+        ? `
+            <div class="info-card">
 
-    let filasTabla = '';
-    detalles.forEach((d, idx) => {
-        const prod = (App.state.productos || []).find(p => p.id === d.producto_id);
-        const cant = parseFloat(d.cantidad || 1);
-        const unit = parseFloat(d.precio_unitario || 0);
-        const sub = cant * unit;
+                <div class="info-label">
+                    Fecha de entrega
+                </div>
 
-        filasTabla += `
-            <tr>
-                <td class="text-center">${idx + 1}</td>
-                <td>${App.ui.safe(prod ? prod.nombre : 'Artículo')}</td>
-                <td class="text-center">${cant}</td>
-                <td class="text-right">${App.ui.money(unit)}</td>
-                <td class="text-right">${App.ui.money(sub)}</td>
-            </tr>
-        `;
-    });
+                <div class="info-value">
+                    ${App.ui.safe(fechaEntrega)}
+                </div>
 
-    const html = App.views._generarHTMLDocumentoOficial({
-        tituloDoc: 'Nota de pedido',
-        folio: pedido.id,
-        fecha: String(pedido.fecha_creacion || '').split('T')[0] || new Date().toISOString().split('T')[0],
-        clienteNombre: cliente.nombre || pedido.cliente_nombre || 'Cliente General',
-        fechaEntrega: pedido.fecha_entrega ? String(pedido.fecha_entrega).split('T')[0] : '',
-        estado: pedido.estado || 'Pendiente',
-        filasTabla: filasTabla || '<tr><td colspan="5" class="text-center">Sin detalles</td></tr>',
-        total: totalPed,
-        anticipo: anticipoPed + totalAbonos,
-        saldo: saldo
-    });
+            </div>
+        `
+        : '';
 
-    const w = window.open('', '_blank');
-    if (!w) { App.ui.toast('El navegador bloqueó la ventana de impresión', 'warning'); return; }
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
+    /*
+     * IMPORTANTE:
+     * Guarda el logo en:
+     *
+     * assets/logo-descanso-maya.png
+     *
+     * El QR apunta directamente al Facebook oficial.
+     */
+
+    const logoURL =
+        'assets/logo-descanso-maya.png';
+
+    const facebookURL =
+        'https://www.facebook.com/descansomaya.mx/';
+
+    const qrURL =
+        'https://quickchart.io/qr?size=180&text=' +
+        encodeURIComponent(facebookURL);
+
+
+    return `
+<!DOCTYPE html>
+
+<html lang="es">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        ${App.ui.safe(tituloDoc)}
+        -
+        ${App.ui.safe(folio)}
+    </title>
+
+
+    <style>
+
+        @page {
+
+            size: Letter;
+
+            margin: 0;
+
+        }
+
+
+        * {
+
+            box-sizing: border-box;
+
+        }
+
+
+        html,
+        body {
+
+            margin: 0;
+
+            padding: 0;
+
+            width: 100%;
+
+            min-height: 100%;
+
+            background: #ffffff;
+
+            color: #1f2937;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                Helvetica,
+                sans-serif;
+
+            -webkit-print-color-adjust:
+                exact !important;
+
+            print-color-adjust:
+                exact !important;
+
+        }
+
+
+        body {
+
+            font-size: 12px;
+
+        }
+
+
+        .page {
+
+            width: 8.5in;
+
+            min-height: 11in;
+
+            padding:
+                0.45in
+                0.48in
+                0.40in
+                0.48in;
+
+            background: #ffffff;
+
+        }
+
+
+        /* =====================================
+           ENCABEZADO
+        ===================================== */
+
+        .header {
+
+            display: flex;
+
+            justify-content:
+                space-between;
+
+            align-items:
+                flex-start;
+
+            padding-bottom:
+                14px;
+
+            border-bottom:
+                2px solid #6b46c1;
+
+            margin-bottom:
+                22px;
+
+        }
+
+
+        .brand {
+
+            display: flex;
+
+            align-items:
+                center;
+
+            gap: 14px;
+
+        }
+
+
+        .logo {
+
+            width: 145px;
+
+            height: 70px;
+
+            object-fit:
+                contain;
+
+            object-position:
+                left center;
+
+        }
+
+
+        .brand-text {
+
+            padding-top:
+                2px;
+
+        }
+
+
+        .brand-name {
+
+            color:
+                #6b46c1;
+
+            font-size:
+                22px;
+
+            font-weight:
+                800;
+
+            line-height:
+                1.05;
+
+        }
+
+
+        .brand-sub {
+
+            margin-top:
+                5px;
+
+            color:
+                #718096;
+
+            font-size:
+                11px;
+
+        }
+
+
+        .document-info {
+
+            text-align:
+                right;
+
+            min-width:
+                190px;
+
+        }
+
+
+        .document-title {
+
+            color:
+                #2d3748;
+
+            font-size:
+                17px;
+
+            font-weight:
+                800;
+
+            text-transform:
+                uppercase;
+
+            margin-bottom:
+                8px;
+
+        }
+
+
+        .document-meta {
+
+            color:
+                #718096;
+
+            font-size:
+                11px;
+
+            line-height:
+                1.6;
+
+        }
+
+
+        .document-meta strong {
+
+            color:
+                #2d3748;
+
+        }
+
+
+        /* =====================================
+           DATOS DEL CLIENTE
+        ===================================== */
+
+        .info-grid {
+
+            display:
+                grid;
+
+            grid-template-columns:
+                repeat(3, 1fr);
+
+            gap:
+                12px;
+
+            margin-bottom:
+                22px;
+
+        }
+
+
+        .info-card {
+
+            border:
+                1px solid #e2e8f0;
+
+            border-radius:
+                10px;
+
+            padding:
+                11px 13px;
+
+            background:
+                #f8fafc;
+
+            min-height:
+                65px;
+
+        }
+
+
+        .info-label {
+
+            color:
+                #a0aec0;
+
+            font-size:
+                9px;
+
+            font-weight:
+                800;
+
+            text-transform:
+                uppercase;
+
+            margin-bottom:
+                5px;
+
+        }
+
+
+        .info-value {
+
+            color:
+                #2d3748;
+
+            font-size:
+                12px;
+
+            font-weight:
+                600;
+
+            line-height:
+                1.3;
+
+            word-break:
+                break-word;
+
+        }
+
+
+        /* =====================================
+           ESTADOS
+        ===================================== */
+
+        .status-badge {
+
+            display:
+                inline-block;
+
+            padding:
+                4px 9px;
+
+            border-radius:
+                999px;
+
+            font-size:
+                9px;
+
+            font-weight:
+                800;
+
+            text-transform:
+                uppercase;
+
+        }
+
+
+        .status-pendiente {
+
+            background:
+                #feebc8;
+
+            color:
+                #744210;
+
+        }
+
+
+        .status-produccion {
+
+            background:
+                #e9d8fd;
+
+            color:
+                #553c9a;
+
+        }
+
+
+        .status-listo {
+
+            background:
+                #fef3c7;
+
+            color:
+                #92400e;
+
+        }
+
+
+        .status-entregado {
+
+            background:
+                #c6f6d5;
+
+            color:
+                #22543d;
+
+        }
+
+
+        /* =====================================
+           TABLA
+        ===================================== */
+
+        .table-container {
+
+            width: 100%;
+
+            margin-bottom:
+                20px;
+
+        }
+
+
+        table {
+
+            width: 100%;
+
+            border-collapse:
+                collapse;
+
+            table-layout:
+                fixed;
+
+        }
+
+
+        thead {
+
+            display:
+                table-header-group;
+
+        }
+
+
+        tr {
+
+            page-break-inside:
+                avoid;
+
+        }
+
+
+        th {
+
+            background:
+                #f1f5f9;
+
+            color:
+                #4a5568;
+
+            font-size:
+                10px;
+
+            font-weight:
+                800;
+
+            text-transform:
+                uppercase;
+
+            padding:
+                9px 8px;
+
+            border-bottom:
+                2px solid #cbd5e1;
+
+        }
+
+
+        td {
+
+            color:
+                #2d3748;
+
+            font-size:
+                11px;
+
+            padding:
+                9px 8px;
+
+            border-bottom:
+                1px solid #e2e8f0;
+
+            vertical-align:
+                middle;
+
+        }
+
+
+        th:nth-child(1),
+        td:nth-child(1) {
+
+            width:
+                7%;
+
+        }
+
+
+        th:nth-child(2),
+        td:nth-child(2) {
+
+            width:
+                43%;
+
+        }
+
+
+        th:nth-child(3),
+        td:nth-child(3) {
+
+            width:
+                13%;
+
+        }
+
+
+        th:nth-child(4),
+        td:nth-child(4) {
+
+            width:
+                18%;
+
+        }
+
+
+        th:nth-child(5),
+        td:nth-child(5) {
+
+            width:
+                19%;
+
+        }
+
+
+        .text-center {
+
+            text-align:
+                center;
+
+        }
+
+
+        .text-right {
+
+            text-align:
+                right;
+
+        }
+
+
+        /* =====================================
+           TOTALES
+        ===================================== */
+
+        .totals-wrapper {
+
+            display:
+                flex;
+
+            justify-content:
+                flex-end;
+
+            margin-top:
+                15px;
+
+        }
+
+
+        .totals-box {
+
+            width:
+                285px;
+
+            border:
+                1px solid #e2e8f0;
+
+            border-radius:
+                10px;
+
+            padding:
+                12px 15px;
+
+            background:
+                #f8fafc;
+
+        }
+
+
+        .total-row {
+
+            display:
+                flex;
+
+            justify-content:
+                space-between;
+
+            align-items:
+                center;
+
+            padding:
+                4px 0;
+
+            color:
+                #4a5568;
+
+            font-size:
+                11px;
+
+        }
+
+
+        .total-row strong {
+
+            color:
+                #2d3748;
+
+        }
+
+
+        .total-row.saldo {
+
+            margin-top:
+                6px;
+
+            padding-top:
+                9px;
+
+            border-top:
+                2px solid #cbd5e1;
+
+            color:
+                #e53e3e;
+
+            font-size:
+                15px;
+
+            font-weight:
+                800;
+
+        }
+
+
+        .total-row.saldo span:last-child {
+
+            color:
+                #e53e3e;
+
+            font-weight:
+                800;
+
+        }
+
+
+        /* =====================================
+           PIE
+        ===================================== */
+
+        .footer {
+
+            display:
+                flex;
+
+            justify-content:
+                space-between;
+
+            align-items:
+                flex-end;
+
+            gap:
+                25px;
+
+            margin-top:
+                30px;
+
+            padding-top:
+                15px;
+
+            border-top:
+                1px solid #e2e8f0;
+
+        }
+
+
+        .footer-text {
+
+            flex:
+                1;
+
+            color:
+                #718096;
+
+            font-size:
+                10px;
+
+            line-height:
+                1.6;
+
+        }
+
+
+        .footer-text strong {
+
+            color:
+                #4a5568;
+
+        }
+
+
+        .footer-social {
+
+            width:
+                125px;
+
+            text-align:
+                center;
+
+        }
+
+
+        .qr {
+
+            width:
+                80px;
+
+            height:
+                80px;
+
+            display:
+                block;
+
+            margin:
+                0 auto 6px;
+
+        }
+
+
+        .facebook {
+
+            color:
+                #4a5568;
+
+            font-size:
+                9px;
+
+            white-space:
+                nowrap;
+
+        }
+
+
+        /* =====================================
+           IMPRESIÓN
+        ===================================== */
+
+        @media print {
+
+            html,
+            body {
+
+                width:
+                    8.5in;
+
+                min-height:
+                    11in;
+
+            }
+
+
+            .page {
+
+                width:
+                    8.5in;
+
+                min-height:
+                    11in;
+
+            }
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+    <div class="page">
+
+
+        <!-- =================================
+             ENCABEZADO
+        ================================= -->
+
+        <div class="header">
+
+
+            <div class="brand">
+
+                <img
+                    class="logo"
+                    src="${logoURL}"
+                    alt="Descanso Maya"
+                >
+
+
+                <div class="brand-text">
+
+                    <div class="brand-name">
+                        Descanso Maya
+                    </div>
+
+                    <div class="brand-sub">
+                        Hamacas y Accesorios Artesanales
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="document-info">
+
+                <div class="document-title">
+                    ${App.ui.safe(tituloDoc)}
+                </div>
+
+
+                <div class="document-meta">
+
+                    Fecha:
+                    <strong>
+                        ${App.ui.safe(fecha)}
+                    </strong>
+
+                </div>
+
+
+                <div class="document-meta">
+
+                    Folio:
+                    <strong>
+                        ${App.ui.safe(folio)}
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================
+             INFORMACIÓN
+        ================================= -->
+
+        <div class="info-grid">
+
+
+            <div class="info-card">
+
+                <div class="info-label">
+                    Cliente
+                </div>
+
+                <div class="info-value">
+                    ${App.ui.safe(
+                        clienteNombre ||
+                        'Cliente General'
+                    )}
+                </div>
+
+            </div>
+
+
+            <div class="info-card">
+
+                <div class="info-label">
+                    Estado
+                </div>
+
+                <div class="info-value">
+
+                    <span
+                        class="status-badge ${estadoClase}"
+                    >
+                        ${App.ui.safe(estadoTexto)}
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            ${fechaEntregaHTML}
+
+
+        </div>
+
+
+        <!-- =================================
+             TABLA
+        ================================= -->
+
+        <div class="table-container">
+
+            <table>
+
+                <thead>
+
+                    <tr>
+
+                        <th
+                            class="text-center"
+                        >
+                            #
+                        </th>
+
+                        <th>
+                            Concepto
+                        </th>
+
+                        <th
+                            class="text-center"
+                        >
+                            Cant.
+                        </th>
+
+                        <th
+                            class="text-right"
+                        >
+                            Unitario
+                        </th>
+
+                        <th
+                            class="text-right"
+                        >
+                            Importe
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    ${filasTabla}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        <!-- =================================
+             TOTALES
+        ================================= -->
+
+        <div class="totals-wrapper">
+
+            <div class="totals-box">
+
+
+                <div class="total-row">
+
+                    <span>
+                        Total
+                    </span>
+
+                    <strong>
+                        ${App.ui.money(total)}
+                    </strong>
+
+                </div>
+
+
+                <div class="total-row">
+
+                    <span>
+                        Anticipo
+                    </span>
+
+                    <strong>
+                        ${App.ui.money(anticipo)}
+                    </strong>
+
+                </div>
+
+
+                ${
+                    parseFloat(abonos || 0) > 0
+                        ? `
+                            <div class="total-row">
+
+                                <span>
+                                    Abonos
+                                </span>
+
+                                <strong>
+                                    ${App.ui.money(abonos)}
+                                </strong>
+
+                            </div>
+                        `
+                        : ''
+                }
+
+
+                <div class="total-row saldo">
+
+                    <span>
+                        Saldo
+                    </span>
+
+                    <span>
+                        ${App.ui.money(saldo)}
+                    </span>
+
+                </div>
+
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================
+             PIE
+        ================================= -->
+
+        <div class="footer">
+
+
+            <div class="footer-text">
+
+                <strong>
+                    Gracias por su preferencia ❤️
+                </strong>
+
+                <br>
+
+                Conserva este comprobante para cualquier
+                aclaración o seguimiento de tu pedido.
+
+            </div>
+
+
+            <div class="footer-social">
+
+
+                <img
+                    class="qr"
+                    src="${qrURL}"
+                    alt="QR Facebook Descanso Maya"
+                >
+
+
+                <div class="facebook">
+
+                    facebook.com/descansomaya.mx
+
+                </div>
+
+
+            </div>
+
+
+        </div>
+
+
+    </div>
+
+
+    <script>
+
+        window.onload = function () {
+
+            setTimeout(function () {
+
+                window.print();
+
+            }, 300);
+
+        };
+
+
+        window.onafterprint = function () {
+
+            setTimeout(function () {
+
+                window.close();
+
+            }, 150);
+
+        };
+
+    </script>
+
+
+</body>
+
+</html>
+    `;
 };
 
-App.views.imprimirCotizacion = function (cotizacionId) {
-    const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
-    if (!c) { App.ui.toast('Cotización no encontrada', 'danger'); return; }
 
-    const prod = (App.state.productos || []).find(p => p.id === c.producto_id);
-    const cant = parseFloat(c.cantidad || 1);
-    const totalCot = parseFloat(c.total || 0);
-    const unit = cant > 0 ? (totalCot / cant) : totalCot;
+// ==========================================
+// IMPRIMIR PEDIDO
+// ==========================================
+
+App.views.imprimirNotaPedido = function (pedidoId) {
+
+    const pedido =
+        (App.state.pedidos || [])
+            .find(
+                p => p.id === pedidoId
+            );
+
+    if (!pedido) {
+
+        App.ui.toast(
+            'Pedido no encontrado',
+            'danger'
+        );
+
+        return;
+
+    }
+
+
+    const cliente =
+        (App.state.clientes || [])
+            .find(
+                c =>
+                    c.id === pedido.cliente_id
+            ) || {};
+
+
+    const detalles =
+        (App.state.pedido_detalle || [])
+            .filter(
+                d =>
+                    d.pedido_id === pedidoId
+            );
+
+
+    const abonosLista =
+        (App.state.abonos || [])
+            .filter(
+                a =>
+                    a.pedido_id === pedidoId
+            );
+
+
+    const totalAbonos =
+        abonosLista.reduce(
+            (s, a) =>
+                s +
+                (parseFloat(a.monto || 0) || 0),
+            0
+        );
+
+
+    const totalPed =
+        parseFloat(
+            pedido.total || 0
+        ) || 0;
+
+
+    const anticipoPed =
+        parseFloat(
+            pedido.anticipo || 0
+        ) || 0;
+
+
+    const saldo =
+        Math.max(
+            0,
+            totalPed -
+            anticipoPed -
+            totalAbonos
+        );
+
+
+    let filasTabla = '';
+
+
+    detalles.forEach(
+        (d, idx) => {
+
+            const prod =
+                (App.state.productos || [])
+                    .find(
+                        p =>
+                            p.id === d.producto_id
+                    );
+
+
+            const cant =
+                parseFloat(
+                    d.cantidad || 1
+                ) || 1;
+
+
+            const unit =
+                parseFloat(
+                    d.precio_unitario || 0
+                ) || 0;
+
+
+            const sub =
+                cant * unit;
+
+
+            filasTabla += `
+
+                <tr>
+
+                    <td class="text-center">
+                        ${idx + 1}
+                    </td>
+
+                    <td>
+                        ${App.ui.safe(
+                            prod
+                                ? prod.nombre
+                                : 'Artículo'
+                        )}
+                    </td>
+
+                    <td class="text-center">
+                        ${cant}
+                    </td>
+
+                    <td class="text-right">
+                        ${App.ui.money(unit)}
+                    </td>
+
+                    <td class="text-right">
+                        ${App.ui.money(sub)}
+                    </td>
+
+                </tr>
+
+            `;
+
+        }
+    );
+
+
+    const esInterno =
+        pedido.cliente_id ===
+        'STOCK_INTERNO';
+
+
+    const nombreCliente =
+        esInterno
+            ? 'STOCK BODEGA'
+            : (
+                cliente.nombre ||
+                pedido.cliente_nombre ||
+                'Cliente General'
+            );
+
+
+    const html =
+        App.views._generarHTMLDocumentoOficial({
+
+            tituloDoc:
+                'Nota de pedido',
+
+            folio:
+                pedido.id,
+
+            fecha:
+                String(
+                    pedido.fecha_creacion ||
+                    ''
+                ).split('T')[0] ||
+                new Date()
+                    .toISOString()
+                    .split('T')[0],
+
+            clienteNombre:
+                nombreCliente,
+
+            fechaEntrega:
+                pedido.fecha_entrega
+                    ? String(
+                        pedido.fecha_entrega
+                    ).split('T')[0]
+                    : '',
+
+            estado:
+                pedido.estado ||
+                'Pendiente',
+
+            filasTabla:
+                filasTabla ||
+                `
+                    <tr>
+                        <td
+                            colspan="5"
+                            class="text-center"
+                        >
+                            Sin detalles
+                        </td>
+                    </tr>
+                `,
+
+            total:
+                totalPed,
+
+            anticipo:
+                anticipoPed,
+
+            abonos:
+                totalAbonos,
+
+            saldo:
+                saldo
+
+        });
+
+
+    const w =
+        window.open(
+            '',
+            '_blank'
+        );
+
+
+    if (!w) {
+
+        App.ui.toast(
+            'El navegador bloqueó la ventana de impresión',
+            'warning'
+        );
+
+        return;
+
+    }
+
+
+    w.document.open();
+
+    w.document.write(html);
+
+    w.document.close();
+
+};
+
+
+// ==========================================
+// IMPRIMIR COTIZACIÓN
+// ==========================================
+
+App.views.imprimirCotizacion = function (
+    cotizacionId
+) {
+
+    const c =
+        (App.state.cotizaciones || [])
+            .find(
+                x =>
+                    x.id === cotizacionId
+            );
+
+
+    if (!c) {
+
+        App.ui.toast(
+            'Cotización no encontrada',
+            'danger'
+        );
+
+        return;
+
+    }
+
+
+    const prod =
+        (App.state.productos || [])
+            .find(
+                p =>
+                    p.id === c.producto_id
+            );
+
+
+    const cant =
+        parseFloat(
+            c.cantidad || 1
+        ) || 1;
+
+
+    const totalCot =
+        parseFloat(
+            c.total || 0
+        ) || 0;
+
+
+    const unit =
+        cant > 0
+            ? totalCot / cant
+            : totalCot;
+
 
     const filasTabla = `
+
         <tr>
-            <td class="text-center">1</td>
-            <td>${App.ui.safe(c.concepto || (prod ? prod.nombre : 'Cotización'))}</td>
-            <td class="text-center">${cant}</td>
-            <td class="text-right">${App.ui.money(unit)}</td>
-            <td class="text-right">${App.ui.money(totalCot)}</td>
+
+            <td class="text-center">
+                1
+            </td>
+
+            <td>
+
+                ${App.ui.safe(
+                    c.concepto ||
+                    (
+                        prod
+                            ? prod.nombre
+                            : 'Cotización'
+                    )
+                )}
+
+            </td>
+
+            <td class="text-center">
+                ${cant}
+            </td>
+
+            <td class="text-right">
+                ${App.ui.money(unit)}
+            </td>
+
+            <td class="text-right">
+                ${App.ui.money(totalCot)}
+            </td>
+
         </tr>
+
     `;
 
-    const html = App.views._generarHTMLDocumentoOficial({
-        tituloDoc: 'Cotización',
-        folio: c.id,
-        fecha: String(c.fecha || c.fecha_creacion || '').split('T')[0] || new Date().toISOString().split('T')[0],
-        clienteNombre: c.cliente_nombre || 'Cliente General',
-        fechaEntrega: '',
-        estado: String(c.estado_conversion || '').toLowerCase() === 'convertida' ? 'CONVERTIDA' : 'COTIZACIÓN',
-        filasTabla: filasTabla,
-        total: totalCot,
-        anticipo: 0,
-        saldo: totalCot
-    });
 
-    const w = window.open('', '_blank');
-    if (!w) { App.ui.toast('El navegador bloqueó la ventana de impresión', 'warning'); return; }
+    const convertida =
+        String(
+            c.estado_conversion || ''
+        ).toLowerCase() ===
+        'convertida';
+
+
+    const html =
+        App.views._generarHTMLDocumentoOficial({
+
+            tituloDoc:
+                'Cotización',
+
+            folio:
+                c.id,
+
+            fecha:
+                String(
+                    c.fecha ||
+                    c.fecha_creacion ||
+                    ''
+                ).split('T')[0] ||
+                new Date()
+                    .toISOString()
+                    .split('T')[0],
+
+            clienteNombre:
+                c.cliente_nombre ||
+                'Cliente General',
+
+            fechaEntrega:
+                '',
+
+            estado:
+                convertida
+                    ? 'CONVERTIDA A PEDIDO'
+                    : 'COTIZACIÓN',
+
+            filasTabla:
+                filasTabla,
+
+            total:
+                totalCot,
+
+            anticipo:
+                0,
+
+            abonos:
+                0,
+
+            saldo:
+                totalCot
+
+        });
+
+
+    const w =
+        window.open(
+            '',
+            '_blank'
+        );
+
+
+    if (!w) {
+
+        App.ui.toast(
+            'El navegador bloqueó la ventana de impresión',
+            'warning'
+        );
+
+        return;
+
+    }
+
+
     w.document.open();
+
     w.document.write(html);
+
     w.document.close();
+
 };
 
 App.views.accionPedido = function (button, pedidoId, actionName) {
