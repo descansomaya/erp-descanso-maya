@@ -275,7 +275,7 @@ App.views.accionProduccion = function (button, ordenId, actionName) {
             successMessage: 'Orden iniciada e inventario actualizado',
             errorTitle: 'No se pudo iniciar la orden'
         },
-     terminar: {
+        terminar: {
             fn: async () => {
                 const res = await App.logic.cambiarEstadoProduccion(ordenId, 'listo');
                 
@@ -308,6 +308,24 @@ App.views.accionProduccion = function (button, ordenId, actionName) {
             successMessage: 'Orden terminada e inventario de bodega actualizado',
             errorTitle: 'No se pudo terminar la orden'
         },
+        regresarPendiente: {
+            fn: () => App.views.revertirProduccionAPendiente(ordenId),
+            loadingText: 'Regresando...',
+            loaderMessage: 'Regresando orden a pendiente y restaurando materiales...',
+            successMessage: 'Orden regresada a pendiente con reversa',
+            errorTitle: 'No se pudo regresar la orden a pendiente'
+        },
+        eliminar: {
+            fn: async () => {
+                const ok = window.confirm(`¿Eliminar la orden ${ordenId}?`);
+                if (!ok) return false;
+                return App.logic.eliminarRegistroGenerico('ordenes_produccion', ordenId, 'ordenes_produccion');
+            },
+            loadingText: 'Eliminando...',
+            loaderMessage: 'Eliminando orden de producción...',
+            successMessage: 'Orden eliminada',
+            errorTitle: 'No se pudo eliminar la orden'
+        }
     };
 
     const config = actions[actionName];
@@ -695,11 +713,10 @@ App.views.formAsignacionMultiArtesano = function (ordenId, asignacionId = null) 
             loaderMessage: asignacion ? 'Guardando asignación...' : 'Guardando asignación de artesano...',
             successMessage: asignacion ? 'Asignación actualizada' : 'Asignación guardada',
             errorTitle: asignacion ? 'No se pudo actualizar la asignación' : 'No se pudo guardar la asignación',
-            closeSheetOnSuccess: true // <--- Cierra el modal de asignación
+            closeSheetOnSuccess: true
         }, async () => {
             const res = asignacion ? await App.logic.editarAsignacionMultiArtesano(data) : await App.logic.guardarAsignacionMultiArtesano(data);
             
-            // RETORNO AUTOMÁTICO AL DETALLE DE LA ORDEN
             setTimeout(() => App.views.verDetallesProduccion(ordenId), 200);
             return res;
         });
@@ -867,11 +884,10 @@ App.views.modalMateriaPrima = function (ordenId) {
             loaderMessage: 'Guardando receta y recalculando pago...',
             successMessage: 'Receta de hilos guardada correctamente',
             errorTitle: 'Error al guardar los hilos',
-            closeSheetOnSuccess: true // <--- Cierra el modal de hilos
+            closeSheetOnSuccess: true
         }, async () => {
             const res = await App.logic.guardarRecetaProduccion(ordenId, recetaFinal);
             
-            // RETORNO AUTOMÁTICO AL DETALLE DE LA ORDEN
             setTimeout(() => App.views.verDetallesProduccion(ordenId), 200);
             return res;
         });
