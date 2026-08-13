@@ -299,6 +299,9 @@ Object.assign(App.logic, {
 // WHATSAPP - PEDIDOS
 // ==========================================
 
+    // ==========================================
+    // WHATSAPP - PEDIDOS
+    // ==========================================
     async enviarWhatsApp(pedidoId, tipoMensaje = "cobro") {
         try {
             const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId)
