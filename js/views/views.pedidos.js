@@ -1,5 +1,5 @@
 // ==========================================
-// VISTAS: PEDIDOS Y COTIZACIONES (FORMATO IMPRESIÓN OFICIAL)
+// VISTAS: PEDIDOS Y COTIZACIONES (REPLICACIÓN FIEL PDF DESCANSO MAYA)
 // ==========================================
 
 window.App = window.App || {};
@@ -18,9 +18,9 @@ App.views.runPedidoAction = async function (button, pedidoId, actionName, action
 };
 
 // ==========================================
-// IMPRESIÓN CON FORMATO OFICIAL DESCANSO MAYA
+// PLANTILLA IDÉNTICA AL PDF OFICIAL (CON LOGO Y DESGLOSE)
 // ==========================================
-App.views._generarHTMLDocumentoOficial = function ({ tituloDoc, folio, fecha, clienteNombre, fechaEntrega, estado, filasTabla, total, anticipo, abonos, saldo }) {
+App.views._generarHTMLDocumentoOficial = function ({ tituloDoc, folio, fecha, clienteNombre, fechaEntrega, estado, filasTabla, total, anticipo, saldo }) {
     return `
         <!DOCTYPE html>
         <html lang="es">
@@ -29,61 +29,82 @@ App.views._generarHTMLDocumentoOficial = function ({ tituloDoc, folio, fecha, cl
             <title>${tituloDoc} - ${App.ui.safe(folio)}</title>
             <style>
                 * { box-sizing: border-box; margin: 0; padding: 0; }
-                body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #333; background: #fff; font-size: 14px; }
-                .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 25px; border-bottom: 2px solid #6b46c1; padding-bottom: 15px; }
-                .brand { font-size: 24px; font-weight: bold; color: #6b46c1; letter-spacing: 0.5px; }
-                .sub-brand { font-size: 13px; color: #666; margin-top: 3px; }
-                .doc-title { text-align: right; }
-                .doc-title h2 { font-size: 18px; color: #2d3748; text-transform: uppercase; }
-                .doc-meta { font-size: 12px; color: #718096; margin-top: 4px; }
+                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 25px; color: #2d3748; background: #fff; font-size: 13px; }
                 
-                .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 25px; }
-                .info-item { display: flex; flex-direction: column; }
-                .info-label { font-size: 11px; text-transform: uppercase; color: #a0aec0; font-weight: bold; margin-bottom: 2px; }
-                .info-value { font-size: 14px; color: #2d3748; font-weight: 600; }
+                .header-container { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+                .logo-brand { display: flex; align-items: center; gap: 12px; }
+                .logo-box { width: 65px; height: 65px; background: #6b46c1; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: bold; font-size: 22px; text-shadow: 1px 1px 2px rgba(0,0,0,0.2); }
+                .brand-title { font-size: 20px; font-weight: 800; color: #6b46c1; text-transform: uppercase; letter-spacing: 0.5px; }
+                .brand-sub { font-size: 12px; color: #718096; margin-top: 2px; }
                 
-                table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
-                th { background: #f1f5f9; color: #4a5568; font-size: 12px; text-transform: uppercase; padding: 10px 12px; text-align: left; border-bottom: 2px solid #cbd5e1; }
-                td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
-                .text-right { text-align: right; }
-                .text-center { text-align: center; }
+                .doc-info { text-align: right; }
+                .doc-title-badge { font-size: 18px; font-weight: bold; color: #2d3748; text-transform: uppercase; }
+                .doc-meta { font-size: 12px; color: #4a5568; margin-top: 4px; }
+                
+                .section-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; }
+                .card-title-sm { font-size: 11px; font-weight: bold; text-transform: uppercase; color: #a0aec0; margin-bottom: 6px; }
+                .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+                
+                .status-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: uppercase; background: #e2e8f0; color: #4a5568; }
+                .status-entregado { background: #c6f6d5; color: #22543d; }
+                .status-pendiente { background: #feebc8; color: #744210; }
 
-                .totals-container { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px; }
-                .footer-notes { flex: 1; max-width: 55%; font-size: 12px; color: #718096; line-height: 1.5; padding-right: 20px; }
-                .totals-box { width: 250px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 15px; }
-                .total-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; }
-                .total-row.grand-total { border-top: 2px solid #cbd5e1; margin-top: 5px; padding-top: 8px; font-weight: bold; font-size: 15px; color: #2b6cb0; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                th { background: #f1f5f9; color: #4a5568; font-size: 11px; text-transform: uppercase; padding: 8px 10px; border-bottom: 2px solid #cbd5e1; }
+                td { padding: 10px; border-bottom: 1px solid #edf2f7; font-size: 13px; }
+                .text-center { text-align: center; }
+                .text-right { text-align: right; }
+
+                .bottom-layout { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-top: 10px; }
+                .thank-you-box { flex: 1; font-size: 12px; color: #718096; line-height: 1.5; }
+                .thank-you-title { font-weight: bold; color: #2d3748; margin-bottom: 3px; }
                 
-                .footer-brand { margin-top: 40px; text-align: center; border-top: 1px solid #edf2f7; padding-top: 15px; font-size: 12px; color: #a0aec0; }
+                .totals-table { width: 240px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; padding: 10px; }
+                .row-total { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+                .row-total.saldo { border-top: 2px solid #cbd5e1; font-weight: bold; font-size: 15px; color: #2b6cb0; margin-top: 4px; padding-top: 6px; }
+
+                .social-footer { text-align: center; margin-top: 35px; border-top: 1px solid #edf2f7; padding-top: 12px; font-size: 12px; color: #a0aec0; }
             </style>
         </head>
         <body>
-            <div class="header">
-                <div>
-                    <div class="brand">DESCANSO MAYA</div>
-                    <div class="sub-brand">Hamacas y Accesorios Artesanales</div>
+            <div class="header-container">
+                <div class="logo-brand">
+                    <div class="logo-box">DM</div>
+                    <div>
+                        <div class="brand-title">Descanso Maya</div>
+                        <div class="brand-sub">Hamacas y Accesorios Artesanales</div>
+                    </div>
                 </div>
-                <div class="doc-title">
-                    <h2>${tituloDoc}</h2>
+                <div class="doc-info">
+                    <div class="doc-title-badge">${tituloDoc}</div>
+                    <div class="doc-meta">Comprobante de venta</div>
                     <div class="doc-meta">Fecha: <strong>${fecha}</strong></div>
                     <div class="doc-meta">Folio: <strong>${App.ui.safe(folio)}</strong></div>
                 </div>
             </div>
 
-            <div class="info-grid">
-                <div class="info-item"><span class="info-label">Cliente</span><span class="info-value">${App.ui.safe(clienteNombre)}</span></div>
-                <div class="info-item"><span class="info-label">Comprobante / Estado</span><span class="info-value">${App.ui.safe((estado || 'PENDIENTE').toUpperCase())}</span></div>
-                ${fechaEntrega ? `<div class="info-item" style="grid-column: span 2;"><span class="info-label">Fecha de Entrega Estimada</span><span class="info-value">${fechaEntrega}</span></div>` : ''}
+            <div class="section-card grid-2">
+                <div>
+                    <div class="card-title-sm">Cliente</div>
+                    <div style="font-weight: bold; font-size: 14px;">${App.ui.safe(clienteNombre)}</div>
+                </div>
+                <div>
+                    <div class="card-title-sm">Estado / Fecha Entrega</div>
+                    <div>
+                        <span class="status-badge ${String(estado).toLowerCase().includes('entregado') ? 'status-entregado' : 'status-pendiente'}">${App.ui.safe(estado)}</span>
+                        ${fechaEntrega ? `<span style="font-size: 12px; color: #718096; margin-left: 6px;">(${fechaEntrega})</span>` : ''}
+                    </div>
+                </div>
             </div>
 
             <table>
                 <thead>
                     <tr>
-                        <th class="text-center" style="width: 40px;">#</th>
+                        <th class="text-center" style="width: 30px;">#</th>
                         <th>Concepto</th>
-                        <th class="text-center" style="width: 70px;">Cant.</th>
-                        <th class="text-right" style="width: 100px;">Unitario</th>
-                        <th class="text-right" style="width: 110px;">Importe</th>
+                        <th class="text-center" style="width: 60px;">Cant.</th>
+                        <th class="text-right" style="width: 90px;">Unitario</th>
+                        <th class="text-right" style="width: 100px;">Importe</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -91,20 +112,19 @@ App.views._generarHTMLDocumentoOficial = function ({ tituloDoc, folio, fecha, cl
                 </tbody>
             </table>
 
-            <div class="totals-container">
-                <div class="footer-notes">
-                    <strong style="color:#4a5568;">Gracias por su preferencia</strong><br>
-                    Conserva este comprobante para cualquier aclaración o seguimiento de tu pedido.
+            <div class="bottom-layout">
+                <div class="thank-you-box">
+                    <div class="thank-you-title">Gracias por su preferencia</div>
+                    <div>Conserva este comprobante para cualquier aclaración.</div>
                 </div>
-                <div class="totals-box">
-                    <div class="total-row"><span>Total</span><strong>${App.ui.money(total)}</strong></div>
-                    <div class="total-row"><span>Anticipo</span><span>${App.ui.money(anticipo)}</span></div>
-                    ${abonos > 0 ? `<div class="total-row"><span>Abonos</span><span>${App.ui.money(abonos)}</span></div>` : ''}
-                    <div class="total-row grand-total"><span>Saldo</span><span>${App.ui.money(saldo)}</span></div>
+                <div class="totals-table">
+                    <div class="row-total"><span>Total</span><strong>${App.ui.money(total)}</strong></div>
+                    <div class="row-total"><span>Anticipo</span><span>${App.ui.money(anticipo)}</span></div>
+                    <div class="row-total saldo"><span>Saldo</span><span>${App.ui.money(saldo)}</span></div>
                 </div>
             </div>
 
-            <div class="footer-brand">
+            <div class="social-footer">
                 facebook.com/descansomaya.mx
             </div>
 
@@ -161,8 +181,7 @@ App.views.imprimirNotaPedido = function (pedidoId) {
         estado: pedido.estado || 'Pendiente',
         filasTabla: filasTabla || '<tr><td colspan="5" class="text-center">Sin detalles</td></tr>',
         total: totalPed,
-        anticipo: anticipoPed,
-        abonos: totalAbonos,
+        anticipo: anticipoPed + totalAbonos,
         saldo: saldo
     });
 
@@ -198,11 +217,10 @@ App.views.imprimirCotizacion = function (cotizacionId) {
         fecha: String(c.fecha || c.fecha_creacion || '').split('T')[0] || new Date().toISOString().split('T')[0],
         clienteNombre: c.cliente_nombre || 'Cliente General',
         fechaEntrega: '',
-        estado: String(c.estado_conversion || '').toLowerCase() === 'convertida' ? 'CONVERTIDA A PEDIDO' : 'COTIZACIÓN PENDIENTE',
+        estado: String(c.estado_conversion || '').toLowerCase() === 'convertida' ? 'CONVERTIDA' : 'COTIZACIÓN',
         filasTabla: filasTabla,
         total: totalCot,
         anticipo: 0,
-        abonos: 0,
         saldo: totalCot
     });
 
