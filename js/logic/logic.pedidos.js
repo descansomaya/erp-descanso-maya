@@ -581,47 +581,7 @@ async enviarWhatsApp(pedidoId, tipoMensaje = "cobro") {
         }
 
 
-        // ------------------------------------------
-        // WHATSAPP
-        // ------------------------------------------
-
-        const url =
-            "https://wa.me/" +
-            telefono +
-            "?text=" +
-            encodeURIComponent(mensaje);
-
-
-        window.open(
-            url,
-            "_blank",
-            "noopener,noreferrer"
-        );
-
-
-        return true;
-
-
-    } catch (error) {
-
-        console.error(
-            "Error en enviarWhatsApp:",
-            error
-        );
-
-
-        App.ui.toast(
-            error.message ||
-            "No se pudo preparar WhatsApp",
-            "danger"
-        );
-
-
-        return false;
-
-    }
-
-},
+  
 
     async entregarDeBodega(pedidoId) {
         try {
@@ -1739,7 +1699,7 @@ async enviarWhatsApp(pedidoId, tipoMensaje = "cobro") {
         }
     },
 
-    enviarWhatsApp(pedidoId, tipoMensaje) {
+        enviarWhatsApp(pedidoId, tipoMensaje) {
         try {
             const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId)
                 || (App.state.reparaciones || []).find(r => r.id === pedidoId);
@@ -1750,12 +1710,14 @@ async enviarWhatsApp(pedidoId, tipoMensaje = "cobro") {
             }
 
             const cliente = (App.state.clientes || []).find(c => c.id === pedido.cliente_id);
+
             if (!cliente || !cliente.telefono) {
                 App.ui.toast("El cliente no tiene teléfono registrado", "warning");
                 return;
             }
 
             const telefono = String(cliente.telefono).replace(/\D/g, "");
+
             if (!telefono) {
                 App.ui.toast("Teléfono inválido", "warning");
                 return;
@@ -1769,23 +1731,43 @@ async enviarWhatsApp(pedidoId, tipoMensaje = "cobro") {
 
             if (tipoMensaje === "listo") {
                 mensaje = `Hola ${cliente.nombre || ""}, tu ${esReparacion ? "reparación" : "pedido"} ${pedido.id} ya está listo para entregar.`;
+
                 if (saldo > 0) {
                     mensaje += ` Tu saldo pendiente es de $${saldo.toFixed(2)} MXN.`;
                 }
+
                 mensaje += ` Quedamos atentos. Descanso Maya.`;
+
             } else {
+
                 mensaje = `Hola ${cliente.nombre || ""}, te contactamos de Descanso Maya sobre tu ${esReparacion ? "reparación" : "pedido"} ${pedido.id}.`;
+
                 if (saldo > 0) {
                     mensaje += ` Tienes un saldo pendiente de $${saldo.toFixed(2)} MXN.`;
                 }
+
                 mensaje += ` Quedamos atentos para apoyarte.`;
             }
 
-            const waUrl = `https://wa.me/52${telefono}?text=${encodeURIComponent(mensaje)}`;
+            const waUrl =
+                `https://wa.me/52${telefono}?text=${encodeURIComponent(mensaje)}`;
+
             window.open(waUrl, "_blank");
+
         } catch (error) {
             console.error("Error en enviarWhatsApp:", error);
-            App.ui.toast(error.message || "Error al abrir WhatsApp", "danger");
+            App.ui.toast(
+                error.message || "Error al abrir WhatsApp",
+                "danger"
+            );
         }
+    },
+
+    // ==========================================
+    // COMPATIBILIDAD
+    // ==========================================
+
+    enviarWhatsapp(pedidoId, tipoMensaje) {
+        return this.enviarWhatsApp(pedidoId, tipoMensaje);
     }
 });
