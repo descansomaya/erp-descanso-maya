@@ -1,6 +1,11 @@
 window.App = window.App || {};
 App.views = App.views || {};
 
+App.views.setNominaTab = function (tab) {
+    App.state.nominaTab = tab || 'pagos';
+    App.router.handleRoute();
+};
+
 App.views.marcarPagoArtesanoPagado = async function (pagoId) {
     try {
         const fechaPago = new Date().toISOString();
@@ -32,7 +37,161 @@ App.views.marcarPagoArtesanoPagado = async function (pagoId) {
     }
 };
 
+// ==========================================
+// FASE 4: RESUMEN Y CALCULOS DE RENDIMIENTO
+// ==========================================
+App.views._resumenRendimientoArtesanos = function () {
+    const artesanos = App.state.artesanos || [];
+    const asignaciones = App.state.ordenes_produccion_artesanos || [];
+    const ordenes = App.state.ordenes_produccion || [];
+    const pagos = App.state.pago_artesanos || [];
+
+    const reporte = [];
+
+    artesanos.forEach(art => {
+        const asigArt = asignaciones.filter(a => String(a.artesano_id) === String(art.id) && String(a.estado || 'activo').toLowerCase() !== 'cancelado');
+        
+        let completadas = 0;
+        let diasTotales = 0;
+        let ordenesConTiempo = 0;
+
+        asigArt.forEach(a => {
+            const ord = ordenes.find(o => String(o.id) === String(a.orden_id));
+            if (ord) {
+                if (String(ord.estado || '').toLowerCase() === 'listo') {
+                    completadas += 1;
+                    
+                    if (ord.fecha_creacion && (ord.fecha_descuento_materiales || ord.fecha_reversa_materiales)) {
+                        const inicio = new Date(ord.fecha_descuento_materiales || ord.fecha_creacion);
+                        const fin = new Date(ord.fecha_reversa_materiales || ord.fecha_creacion);
+                        const diffDias = Math.max(1, Math.round((fin - inicio) / (1000 * 60 * 60 * 24)));
+                        diasTotales += diffDias;
+                        ordenesConTiempo += 1;
+                    }
+                }
+            }
+        });
+
+        const tiempoPromedio = ordenesConTiempo > 0 ? (diasTotales / ordenesConTiempo).toFixed(1) : 'N/A';
+
+        const pagosArt = pagos.filter(p => String(p.artesano_id) === String(art.id));
+        const totalPagado = pagosArt
+            .filter(p => String(p.estado || '').toLowerCase() === 'pagado')
+            .reduce((acc, p) => acc + (parseFloat(p.total || p.monto || 0) || 0), 0);
+
+        const pendientePagar = pagosArt
+            .filter(p => String(p.estado || '').toLowerCase() !== 'pagado')
+            .reduce((acc, p) => acc + (parseFloat(p.total || p.monto || 0) || 0), 0);
+
+        const totalGanadoHist = totalPagado + pendientePagar;
+
+        reporte.push({
+            id: art.id,
+            nombre: art.nombre,
+            especialidad: art.especialidad || 'Tejedor',
+            totalTrabajos: asigArt.length,
+            completadas,
+            enProceso: asigArt.length - completadas,
+            tiempoPromedio,
+            totalPagado,
+            pendientePagar,
+            totalGanadoHist
+        });
+    });
+
+    return reporte.sort((a, b) => b.completadas - a.completadas);
+};
+
+App.views._renderTabRendimientoArtesanos = function () {
+    const reporte = App.views._resumenRendimientoArtesanos();
+    const money = (n) => '$' + ((parseFloat(n || 0) || 0).toFixed(2));
+
+    let html = `
+        <div class="dm-card dm-mb-4">
+            <div class="dm-card-title">Eficiencia y Desempeño del Taller</div>
+            <p class="dm-muted dm-mt-1" style="font-size:13px;">Métricas de productividad, tiempos de entrega y acumulados por artesano.</p>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px;">
+    `;
+
+    if (!reporte.length) {
+        html += `<div class="dm-alert dm-alert-info">No hay artesanos registrados.</div>`;
+    } else {
+        reporte.forEach(art => {
+            const tieneDeuda = art.pendientePagar > 0;
+
+            html += `
+                <div class="dm-card" style="padding:16px;">
+                    <div class="dm-row-between" style="align-items:flex-start; margin-bottom:10px;">
+                        <div>
+                            <strong style="font-size:16px;">👤 ${App.ui.safe(art.nombre)}</strong><br>
+                            <small class="dm-muted">${App.ui.safe(art.especialidad)}</small>
+                        </div>
+                        <span class="dm-badge ${tieneDeuda ? 'dm-badge-warning' : 'dm-badge-success'}" style="font-size:11px;">
+                            ${tieneDeuda ? 'Por pagar: ' + money(art.pendientePagar) : 'Al día'}
+                        </span>
+                    </div>
+
+                    <div class="dm-card" style="background:var(--dm-surface-2); padding:10px; margin-bottom:10px;">
+                        <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; text-align:center;">
+                            <div>
+                                <small class="dm-muted">Completadas</small><br>
+                                <strong style="color:var(--dm-success); font-size:15px;">${art.completadas} pzas</strong>
+                            </div>
+                            <div>
+                                <small class="dm-muted">En proceso</small><br>
+                                <strong style="color:#B7791F; font-size:15px;">${art.enProceso} pzas</strong>
+                            </div>
+                            <div style="margin-top:4px;">
+                                <small class="dm-muted">Promedio entrega</small><br>
+                                <strong>${art.tiempoPromedio !== 'N/A' ? art.tiempoPromedio + ' días' : 'N/A'}</strong>
+                            </div>
+                            <div style="margin-top:4px;">
+                                <small class="dm-muted">Total histórico</small><br>
+                                <strong>${money(art.totalGanadoHist)}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dm-row-between dm-text-sm" style="color:var(--dm-muted); font-size:12px;">
+                        <span>Asignaciones: <strong>${art.totalTrabajos}</strong></span>
+                        <span>Pagado: <strong style="color:green;">${money(art.totalPagado)}</strong></span>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    html += `</div>`;
+    return html;
+};
+
 App.views.nomina = function () {
+    const tab = App.state.nominaTab || 'pagos';
+
+    const activeTabPagos = tab === 'pagos' ? 'dm-btn-primary' : 'dm-btn-secondary';
+    const activeTabRendimiento = tab === 'rendimiento' ? 'dm-btn-primary' : 'dm-btn-secondary';
+
+    const selectorTabs = `
+        <div class="dm-card dm-mb-4">
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="dm-btn ${activeTabPagos}" onclick="App.views.setNominaTab('pagos')">💰 Detalle de Pagos</button>
+                <button class="dm-btn ${activeTabRendimiento}" onclick="App.views.setNominaTab('rendimiento')">📊 Rendimiento de Artesanos</button>
+            </div>
+        </div>
+    `;
+
+    if (tab === 'rendimiento') {
+        return `
+            <div class="dm-section" style="padding-bottom:90px;">
+                ${selectorTabs}
+                ${App.views._renderTabRendimientoArtesanos()}
+            </div>
+        `;
+    }
+
+    // VISTA ORIGINAL DE PAGOS
     const pagos = App.state.pago_artesanos || [];
     const artesanos = App.state.artesanos || [];
 
@@ -112,6 +271,8 @@ App.views.nomina = function () {
 
     return `
         <div class="dm-section" style="padding-bottom:90px;">
+            ${selectorTabs}
+
             <div class="dm-card dm-mb-4">
                 <h3 class="dm-card-title">Nómina real</h3>
                 <div>Total pagado: ${money(totalPagado)}</div>
