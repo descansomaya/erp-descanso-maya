@@ -1490,7 +1490,5 @@ Object.assign(App.logic, {
             console.error("Error en imprimirCotizacion:", error);
             App.ui.toast(error.message || "Error al imprimir cotización", "danger");
         }
-    },
-}
-    } // <--- Cierre de imprimirCotizacion
-}); // <--- CIERRE OBLIGATORIO DEL OBJECT.ASSIGN
+    }
+});
