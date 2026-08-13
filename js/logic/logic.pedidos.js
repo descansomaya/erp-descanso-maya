@@ -11,11 +11,8 @@ Object.assign(App.logic, {
             App.ui.showLoader("Procesando pedido...");
 
             const pedidoId = "PED-" + Date.now();
-            const esStockInterno = datosFormulario.cliente_id === "STOCK_INTERNO";
-            const totalNum = esStockInterno ? 0 : (parseFloat(datosFormulario.total) || 0);
-            const anticipoNum = esStockInterno ? 0 : (parseFloat(datosFormulario.anticipo) || 0);
-            const comisionNum = esStockInterno ? 0 : (parseFloat(datosFormulario.comision) || 0);
-            const vendedorId = esStockInterno ? "" : (datosFormulario.vendedor_id || "");
+            const totalNum = parseFloat(datosFormulario.total) || 0;
+            const anticipoNum = parseFloat(datosFormulario.anticipo) || 0;
             const fechaC = datosFormulario.fecha_creacion
                 ? datosFormulario.fecha_creacion + "T12:00:00.000Z"
                 : new Date().toISOString();
@@ -47,8 +44,6 @@ Object.assign(App.logic, {
                 estado: estadoCalculado,
                 total: totalNum,
                 anticipo: anticipoNum,
-                vendedor_id: vendedorId,
-                comision: comisionNum,
                 notas: datosFormulario.notas || "",
                 fecha_entrega: datosFormulario.fecha_entrega || "",
                 fecha_creacion: fechaC
@@ -166,16 +161,10 @@ Object.assign(App.logic, {
                 App.state.movimientos_inventario.push(...nuevosMovs);
 
                 if (datosPedido.estado === "taller") {
-                    const resTaller = await App.logic.generarOrdenesDesdePedido(nuevosDetallesMemoria);
-                    if (resTaller?.status !== "success") {
-                        console.error("El pedido se guardó, pero no se pudieron generar las órdenes de taller:", resTaller);
-                        App.ui.toast("Pedido guardado, pero hubo un problema al enviarlo al taller", "warning");
-                    }
+                    await App.logic.generarOrdenesDesdePedido(nuevosDetallesMemoria);
                 }
 
-                App.ui.toast(esStockInterno
-                    ? "Pedido interno creado y enviado al taller"
-                    : (todosReventa ? "Pedido guardado y stock apartado" : "Pedido guardado y hilos apartados"));
+                App.ui.toast(todosReventa ? "Pedido guardado y stock apartado" : "Pedido guardado y hilos apartados");
                 App.router.handleRoute();
                 App.logic.revisarAlertasStock();
             } else {
@@ -189,67 +178,242 @@ Object.assign(App.logic, {
     },
 
     // ==========================================
-    // GENERAR ÓRDENES DE PRODUCCIÓN DESDE PEDIDO
+    // CANCELAR PEDIDO
     // ==========================================
-    async generarOrdenesDesdePedido(detallesArray) {
+    async cancelarPedido(pedidoId) {
         try {
+            const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
+            if (!pedido) throw new Error("Pedido no encontrado");
+
+            const estado = String(pedido.estado || '').toLowerCase().trim();
+            if (["entregado", "devuelto", "cancelado"].includes(estado)) {
+                App.ui.toast("Este pedido ya no puede cancelarse.", "warning");
+                return false;
+            }
+
+            if (!confirm("¿Cancelar este pedido?\n\nSe liberará el apartado y se revertirá el inventario físico que corresponda.")) return false;
+
+            const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
+            const ordenes = (App.state.ordenes_produccion || []).filter(o => detalles.some(d => d.id === o.pedido_detalle_id));
             const operaciones = [];
-            const nuevasOrdenes = [];
+            const movimientos = [];
+            const cambios = [];
+            const ahora = new Date().toISOString();
+            let seq = 0;
 
-            (detallesArray || []).forEach((det, idx) => {
-                const producto = (App.state.productos || []).find(p => p.id === det.producto_id);
-                if (!producto) return;
+            for (const detalle of detalles) {
+                const producto = (App.state.productos || []).find(p => p.id === detalle.producto_id);
+                if (!producto) continue;
+                const cantidad = parseFloat(detalle.cantidad || 1) || 1;
 
-                // Solo los productos fabricados pasan al taller.
-                if (String(producto.categoria || '').toLowerCase() === 'reventa') return;
-
-                const recetaBase = [];
-                const cantidadPedido = parseFloat(det.cantidad || 1) || 1;
+                // Reventa: normalmente solo existe apartado hasta que se entrega.
+                // Si ya se descontó físicamente antes de cancelar, se identifica por el estado.
+                const esReventa = String(producto.categoria || '').toLowerCase() === 'reventa';
 
                 for (let i = 1; i <= 20; i++) {
                     const matId = producto[`mat_${i}`];
-                    const cantBase = parseFloat(producto[`cant_${i}`] || 0) || 0;
-                    if (matId && cantBase > 0) {
-                        recetaBase.push({
-                            mat_id: matId,
-                            cant: cantBase * cantidadPedido,
-                            uso: producto[`uso_${i}`] || "Cuerpo"
+                    const cant = (parseFloat(producto[`cant_${i}`] || 0) || 0) * cantidad;
+                    if (!matId || cant <= 0) continue;
+                    const mat = (App.state.inventario || []).find(m => m.id === matId);
+                    if (!mat) continue;
+
+                    const reservadoActual = parseFloat(mat.stock_reservado || 0) || 0;
+                    const realActual = parseFloat(mat.stock_real || 0) || 0;
+
+                    // Si el pedido está listo/pagado y es reventa, la salida física ya pudo haberse realizado.
+                    // En ese caso no devolvemos físicamente aquí salvo que exista evidencia en movimientos.
+                    let devolverReal = false;
+                    if (esReventa && ["listo para entregar", "pagado"].includes(estado)) {
+                        devolverReal = (App.state.movimientos_inventario || []).some(m =>
+                            m.origen_id === pedidoId &&
+                            m.tipo_movimiento === 'salida_venta' &&
+                            m.material_id === mat.id
+                        );
+                    }
+
+                    const nuevoReservado = Math.max(0, reservadoActual - cant);
+                    const nuevoReal = devolverReal ? realActual + cant : realActual;
+
+                    if (nuevoReservado !== reservadoActual || nuevoReal !== realActual) {
+                        operaciones.push({
+                            action: "actualizar_fila",
+                            nombreHoja: "materiales",
+                            idFila: mat.id,
+                            datosNuevos: { stock_reservado: nuevoReservado, stock_real: nuevoReal }
                         });
+                        cambios.push({ mat, nuevoReservado, nuevoReal });
+
+                        if (devolverReal) {
+                            const mov = {
+                                id: `MOV-${Date.now()}-${seq++}`,
+                                fecha: ahora.split('T')[0],
+                                tipo_movimiento: 'entrada_devolucion_cancelacion',
+                                origen: 'pedido',
+                                origen_id: pedidoId,
+                                ref_tipo: 'material',
+                                ref_id: mat.id,
+                                material_id: mat.id,
+                                tipo: 'entrada',
+                                cantidad: cant,
+                                costo_unitario: parseFloat(mat.costo_unitario || 0) || 0,
+                                total: cant * (parseFloat(mat.costo_unitario || 0) || 0),
+                                motivo: 'Reversión por cancelación de pedido',
+                                notas: 'Inventario físico reintegrado por cancelación'
+                            };
+                            movimientos.push(mov);
+                            operaciones.push({ action: 'guardar_fila', nombreHoja: 'movimientos_inventario', datos: mov });
+                        }
                     }
                 }
+            }
 
-                const idOrden = "ORD-" + Date.now() + "-" + idx;
-                const nuevaOrden = {
-                    id: idOrden,
-                    pedido_detalle_id: det.id,
-                    estado: "pendiente",
-                    receta_personalizada: JSON.stringify(recetaBase),
-                    fecha_creacion: new Date().toISOString()
-                };
+            // Si Taller ya generó producto terminado, cancelarlo retira ese terminado del inventario.
+            for (const orden of ordenes) {
+                const estadoOrden = String(orden.estado || '').toLowerCase().trim();
+                if (estadoOrden !== 'listo') continue;
+                const detalle = detalles.find(d => d.id === orden.pedido_detalle_id);
+                const producto = detalle ? (App.state.productos || []).find(p => p.id === detalle.producto_id) : null;
+                if (!producto) continue;
+                const invPT = (App.state.inventario || []).find(m => String(m.nombre || '').toLowerCase().trim() === String(producto.nombre || '').toLowerCase().trim());
+                if (!invPT) continue;
+                const q = parseFloat(detalle.cantidad || 1) || 1;
+                const nuevoReal = Math.max(0, (parseFloat(invPT.stock_real || 0) || 0) - q);
+                operaciones.push({ action: 'actualizar_fila', nombreHoja: 'materiales', idFila: invPT.id, datosNuevos: { stock_real: nuevoReal } });
+                cambios.push({ mat: invPT, nuevoReal });
+            }
 
-                nuevasOrdenes.push(nuevaOrden);
+            // Cancelar órdenes de taller, sin borrar historial.
+            for (const orden of ordenes) {
                 operaciones.push({
-                    action: "guardar_fila",
-                    nombreHoja: "ordenes_produccion",
-                    datos: nuevaOrden
+                    action: 'actualizar_fila',
+                    nombreHoja: 'ordenes_produccion',
+                    idFila: orden.id,
+                    datosNuevos: { estado: 'cancelado', fecha_cancelacion: ahora }
                 });
+            }
+
+            operaciones.push({
+                action: 'actualizar_fila',
+                nombreHoja: 'pedidos',
+                idFila: pedidoId,
+                datosNuevos: { estado: 'cancelado', fecha_cancelacion: ahora }
             });
 
-            if (!operaciones.length) {
-                return { status: "success", data: [] };
-            }
+            const res = await App.api.fetch('ejecutar_lote', { operaciones });
+            if (res.status !== 'success') throw new Error(res.message || 'No se pudo cancelar el pedido');
 
-            const res = await App.api.fetch("ejecutar_lote", { operaciones });
+            pedido.estado = 'cancelado';
+            pedido.fecha_cancelacion = ahora;
+            cambios.forEach(c => {
+                if (c.nuevoReservado !== undefined) c.mat.stock_reservado = c.nuevoReservado;
+                if (c.nuevoReal !== undefined) c.mat.stock_real = c.nuevoReal;
+            });
+            if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
+            App.state.movimientos_inventario.push(...movimientos);
 
-            if (res.status === "success") {
-                if (!Array.isArray(App.state.ordenes_produccion)) App.state.ordenes_produccion = [];
-                App.state.ordenes_produccion.push(...nuevasOrdenes);
-            }
-
-            return res;
+            App.ui.toast('Pedido cancelado e inventario revertido correctamente');
+            App.router.handleRoute();
+            App.logic.revisarAlertasStock();
+            return true;
         } catch (error) {
-            console.error("Error en generarOrdenesDesdePedido:", error);
-            return { status: "error", message: error.message || "Error al generar órdenes de producción" };
+            console.error('Error en cancelarPedido:', error);
+            App.ui.hideLoader();
+            App.ui.toast(error.message || 'Error al cancelar pedido', 'danger');
+            return false;
+        }
+    },
+
+    // ==========================================
+    // DEVOLVER PEDIDO ENTREGADO
+    // ==========================================
+    async devolverPedido(pedidoId) {
+        try {
+            const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
+            if (!pedido) throw new Error('Pedido no encontrado');
+            if (String(pedido.estado || '').toLowerCase().trim() !== 'entregado') {
+                App.ui.toast('Solo se puede devolver un pedido entregado.', 'warning');
+                return false;
+            }
+            if (!confirm('¿Registrar la devolución de este pedido?\n\nEl inventario físico regresará a bodega.')) return false;
+
+            const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
+            const operaciones = [];
+            const cambios = [];
+            const movimientos = [];
+            const ahora = new Date().toISOString();
+            let seq = 0;
+
+            for (const detalle of detalles) {
+                const producto = (App.state.productos || []).find(p => p.id === detalle.producto_id);
+                if (!producto) continue;
+                const cantidad = parseFloat(detalle.cantidad || 1) || 1;
+                const esReventa = String(producto.categoria || '').toLowerCase() === 'reventa';
+
+                if (esReventa) {
+                    for (let i = 1; i <= 20; i++) {
+                        const matId = producto[`mat_${i}`];
+                        const cant = (parseFloat(producto[`cant_${i}`] || 0) || 0) * cantidad;
+                        if (!matId || cant <= 0) continue;
+                        const mat = (App.state.inventario || []).find(m => m.id === matId);
+                        if (!mat) continue;
+                        const nuevoReal = (parseFloat(mat.stock_real || 0) || 0) + cant;
+                        operaciones.push({ action: 'actualizar_fila', nombreHoja: 'materiales', idFila: mat.id, datosNuevos: { stock_real: nuevoReal } });
+                        cambios.push({ mat, nuevoReal });
+                        const mov = {
+                            id: `MOV-${Date.now()}-${seq++}`,
+                            fecha: ahora.split('T')[0],
+                            tipo_movimiento: 'devolucion_venta',
+                            origen: 'pedido', origen_id: pedidoId,
+                            ref_tipo: 'material', ref_id: mat.id, material_id: mat.id,
+                            tipo: 'entrada', cantidad: cant,
+                            costo_unitario: parseFloat(mat.costo_unitario || 0) || 0,
+                            total: cant * (parseFloat(mat.costo_unitario || 0) || 0),
+                            motivo: 'Devolución de venta', notas: 'Producto devuelto por cliente'
+                        };
+                        movimientos.push(mov);
+                        operaciones.push({ action: 'guardar_fila', nombreHoja: 'movimientos_inventario', datos: mov });
+                    }
+                } else {
+                    const invPT = (App.state.inventario || []).find(m => String(m.nombre || '').toLowerCase().trim() === String(producto.nombre || '').toLowerCase().trim());
+                    if (!invPT) continue;
+                    const nuevoReal = (parseFloat(invPT.stock_real || 0) || 0) + cantidad;
+                    operaciones.push({ action: 'actualizar_fila', nombreHoja: 'materiales', idFila: invPT.id, datosNuevos: { stock_real: nuevoReal } });
+                    cambios.push({ mat: invPT, nuevoReal });
+                    const mov = {
+                        id: `MOV-${Date.now()}-${seq++}`,
+                        fecha: ahora.split('T')[0],
+                        tipo_movimiento: 'devolucion_venta',
+                        origen: 'pedido', origen_id: pedidoId,
+                        ref_tipo: 'material', ref_id: invPT.id, material_id: invPT.id,
+                        tipo: 'entrada', cantidad,
+                        costo_unitario: parseFloat(invPT.costo_unitario || 0) || 0,
+                        total: cantidad * (parseFloat(invPT.costo_unitario || 0) || 0),
+                        motivo: 'Devolución de producto terminado', notas: 'Producto terminado devuelto por cliente'
+                    };
+                    movimientos.push(mov);
+                    operaciones.push({ action: 'guardar_fila', nombreHoja: 'movimientos_inventario', datos: mov });
+                }
+            }
+
+            operaciones.push({ action: 'actualizar_fila', nombreHoja: 'pedidos', idFila: pedidoId, datosNuevos: { estado: 'devuelto', fecha_devolucion: ahora } });
+            const res = await App.api.fetch('ejecutar_lote', { operaciones });
+            if (res.status !== 'success') throw new Error(res.message || 'No se pudo registrar la devolución');
+
+            pedido.estado = 'devuelto';
+            pedido.fecha_devolucion = ahora;
+            cambios.forEach(c => c.mat.stock_real = c.nuevoReal);
+            if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
+            App.state.movimientos_inventario.push(...movimientos);
+
+            App.ui.toast('Devolución registrada e inventario reintegrado');
+            App.router.handleRoute();
+            App.logic.revisarAlertasStock();
+            return true;
+        } catch (error) {
+            console.error('Error en devolverPedido:', error);
+            App.ui.hideLoader();
+            App.ui.toast(error.message || 'Error al devolver pedido', 'danger');
+            return false;
         }
     },
 
@@ -568,7 +732,7 @@ Object.assign(App.logic, {
             }
 
             if (pedido.cliente_id === "STOCK_INTERNO") {
-                App.ui.toast("Los pedidos de stock interno deben avanzar desde el taller; no se pueden marcar como listos manualmente desde Pedidos.", "warning");
+                App.ui.toast("Los pedidos de stock interno deben avanzar desde el taller.", "warning");
                 return;
             }
 
@@ -606,39 +770,76 @@ Object.assign(App.logic, {
     async marcarPedidoEntregado(pedidoId) {
         try {
             const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
-            if (!pedido) {
-                App.ui.toast("Pedido no encontrado", "danger");
-                return;
+            if (!pedido) throw new Error("Pedido no encontrado");
+            const estado = String(pedido.estado || '').toLowerCase().trim();
+            if (!['listo para entregar', 'pagado'].includes(estado)) {
+                App.ui.toast("El pedido debe estar listo para entregar antes de entregarlo.", "warning");
+                return false;
+            }
+            if (!confirm("¿Marcar este pedido como entregado?")) return false;
+
+            App.ui.showLoader("Registrando entrega...");
+            const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
+            const operaciones = [];
+            const movimientos = [];
+            let seq = 0;
+
+            // Solo hacemos salida aquí si no existe ya una salida de venta para el pedido.
+            // Esto evita doble descuento cuando una reventa fue preparada desde bodega.
+            for (const detalle of detalles) {
+                const producto = (App.state.productos || []).find(p => p.id === detalle.producto_id);
+                if (!producto) continue;
+                const cantidad = parseFloat(detalle.cantidad || 1) || 1;
+                const esReventa = String(producto.categoria || '').toLowerCase() === 'reventa';
+
+                if (esReventa) {
+                    for (let i = 1; i <= 20; i++) {
+                        const matId = producto[`mat_${i}`];
+                        const cant = (parseFloat(producto[`cant_${i}`] || 0) || 0) * cantidad;
+                        if (!matId || cant <= 0) continue;
+                        const yaSalio = (App.state.movimientos_inventario || []).some(m => m.origen_id === pedidoId && m.tipo_movimiento === 'salida_venta' && m.material_id === matId);
+                        if (yaSalio) continue;
+                        const mat = (App.state.inventario || []).find(m => m.id === matId);
+                        if (!mat) continue;
+                        const nuevoReal = (parseFloat(mat.stock_real || 0) || 0) - cant;
+                        const nuevoReservado = Math.max(0, (parseFloat(mat.stock_reservado || 0) || 0) - cant);
+                        operaciones.push({ action: 'actualizar_fila', nombreHoja: 'materiales', idFila: mat.id, datosNuevos: { stock_real: nuevoReal, stock_reservado: nuevoReservado } });
+                        mat.stock_real = nuevoReal; mat.stock_reservado = nuevoReservado;
+                        const mov = { id:`MOV-${Date.now()}-${seq++}`, fecha:new Date().toISOString().split('T')[0], tipo_movimiento:'salida_venta', origen:'pedido', origen_id:pedidoId, ref_tipo:'material', ref_id:mat.id, material_id:mat.id, tipo:'salida', cantidad:-cant, costo_unitario:parseFloat(mat.costo_unitario||0)||0, total:-cant*(parseFloat(mat.costo_unitario||0)||0), motivo:'Entrega física al cliente', notas:'Salida por entrega de pedido' };
+                        movimientos.push(mov);
+                        operaciones.push({action:'guardar_fila',nombreHoja:'movimientos_inventario',datos:mov});
+                    }
+                } else {
+                    // Producto fabricado: al entregar sale el producto terminado de inventario.
+                    const invPT = (App.state.inventario || []).find(m => String(m.nombre || '').toLowerCase().trim() === String(producto.nombre || '').toLowerCase().trim());
+                    if (!invPT) continue;
+                    const yaSalio = (App.state.movimientos_inventario || []).some(m => m.origen_id === pedidoId && m.tipo_movimiento === 'salida_venta' && m.material_id === invPT.id);
+                    if (yaSalio) continue;
+                    const nuevoReal = (parseFloat(invPT.stock_real || 0) || 0) - cantidad;
+                    operaciones.push({action:'actualizar_fila',nombreHoja:'materiales',idFila:invPT.id,datosNuevos:{stock_real:nuevoReal}});
+                    invPT.stock_real = nuevoReal;
+                    const mov={id:`MOV-${Date.now()}-${seq++}`,fecha:new Date().toISOString().split('T')[0],tipo_movimiento:'salida_venta',origen:'pedido',origen_id:pedidoId,ref_tipo:'producto_terminado',ref_id:invPT.id,material_id:invPT.id,tipo:'salida',cantidad:-cantidad,costo_unitario:parseFloat(invPT.costo_unitario||0)||0,total:-cantidad*(parseFloat(invPT.costo_unitario||0)||0),motivo:'Entrega de producto terminado',notas:'Salida por entrega de pedido'};
+                    movimientos.push(mov);
+                    operaciones.push({action:'guardar_fila',nombreHoja:'movimientos_inventario',datos:mov});
+                }
             }
 
-            if (pedido.estado !== "listo para entregar" && pedido.estado !== "pagado") {
-                App.ui.toast("Primero marca el pedido como listo para entregar o liquídalo", "warning");
-                return;
-            }
-
-            if (!confirm("¿Marcar este pedido como entregado?")) return;
-
-            App.ui.showLoader("Cerrando entrega...");
-
-            const res = await App.api.fetch("actualizar_fila", {
-                nombreHoja: "pedidos",
-                idFila: pedidoId,
-                datosNuevos: { estado: "entregado" }
-            });
-
+            operaciones.push({action:'actualizar_fila',nombreHoja:'pedidos',idFila:pedidoId,datosNuevos:{estado:'entregado',fecha_entrega_real:new Date().toISOString()}});
+            const res = await App.api.fetch('ejecutar_lote',{operaciones});
             App.ui.hideLoader();
-
-            if (res.status === "success") {
-                pedido.estado = "entregado";
-                App.ui.toast("Pedido marcado como entregado");
-                App.router.handleRoute();
-            } else {
-                App.ui.toast(res.message || "Error al marcar entregado", "danger");
-            }
-        } catch (error) {
-            console.error("Error en marcarPedidoEntregado:", error);
+            if (res.status !== 'success') throw new Error(res.message || 'Error al registrar entrega');
+            pedido.estado='entregado';
+            if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario=[];
+            App.state.movimientos_inventario.push(...movimientos);
+            App.ui.toast('Pedido marcado como entregado');
+            App.router.handleRoute();
+            App.logic.revisarAlertasStock();
+            return true;
+        } catch(error) {
+            console.error('Error en marcarPedidoEntregado:',error);
             App.ui.hideLoader();
-            App.ui.toast(error.message || "Error al marcar entregado", "danger");
+            App.ui.toast(error.message || 'Error al marcar entregado','danger');
+            return false;
         }
     },
 
