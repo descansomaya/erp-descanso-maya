@@ -5,6 +5,8 @@
 window.App = window.App || {};
 App.logic = App.logic || {};
 
+Object.assign(App.logic, {
+
 App.logic.obtenerEstadoComisiones = function(vendedorId) {
     // Filtramos los pedidos asignados a este vendedor que tengan alguna comisión
     const pedidosVendedor = (App.state.pedidos || []).filter(p => p.vendedor_id === vendedorId && parseFloat(p.comision || 0) > 0);
@@ -53,4 +55,5 @@ App.logic.pagarComisionesVendedor = async function(vendedorId, pedidosIds, total
         console.error("Error pagando comisiones:", error);
         throw error;
     }
+};
 };
