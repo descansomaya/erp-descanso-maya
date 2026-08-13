@@ -1,5 +1,5 @@
 // ==========================================
-// VISTAS: INVENTARIO Y COMPRAS (FLUIDO & AUTO-RETORNO)
+// VISTAS: INVENTARIO Y COMPRAS (FLUIDO, AUTO-RETORNO Y FASE 2)
 // ==========================================
 
 window.App = window.App || {};
@@ -64,7 +64,7 @@ App.views._resumenInventario = function () {
         if (real <= 0) resumen.itemsEnCero += 1;
         if (minimo > 0 && libre <= minimo) resumen.itemsCriticos += 1;
 
-        resumen.topCriticos.push({ id: i.id, nombre: i.nombre, libre, minimo, unidad: i.unidad || '', tipo: i.tipo || 'otro' });
+        resumen.topCriticos.push({ id: i.id, nombre: i.nombre, libre, minimo, unidad: i.unidad || '', tipo: i.tipo || 'otro', costo });
         resumen.topValor.push({ id: i.id, nombre: i.nombre, valor, stock: real, costo, unidad: i.unidad || '' });
         resumen.topRotacion.push({ id: i.id, nombre: i.nombre, salidas30d: salidasItem30d, stock: real, diasCobertura, unidad: i.unidad || '' });
     });
@@ -78,17 +78,144 @@ App.views._resumenInventario = function () {
         if (tipo.includes('salida')) resumen.salidas30d += cantidad;
     });
 
-    resumen.topCriticos = resumen.topCriticos.filter(x => x.minimo > 0).sort((a, b) => (a.libre - a.minimo) - (b.libre - b.minimo)).slice(0, 5);
+    resumen.topCriticos = resumen.topCriticos.filter(x => x.minimo > 0 && x.libre <= x.minimo).sort((a, b) => (a.libre - a.minimo) - (b.libre - b.minimo));
     resumen.topValor = resumen.topValor.sort((a, b) => b.valor - a.valor).slice(0, 5);
     resumen.topRotacion = resumen.topRotacion.sort((a, b) => b.salidas30d - a.salidas30d).slice(0, 5);
 
     return resumen;
 };
 
+// ==========================================
+// FASE 2: COMPONENTES DE ALERTA Y GENERADOR DE COMPRA SUGERIDA
+// ==========================================
+App.views._renderBannerStockCritico = function () {
+    const r = App.views._resumenInventario();
+    if (!r.topCriticos.length) return '';
+
+    const itemsCriticos = r.topCriticos;
+
+    return `
+        <div class="dm-card dm-mb-4" style="background: #fff5f5; border: 1px solid #feb2b2; padding: 16px;">
+            <div class="dm-row-between" style="align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 20px;">⚠️</span>
+                        <strong style="color: #c53030; font-size: 16px;">Stock Mínimo Comprometido (${itemsCriticos.length} insumos)</strong>
+                    </div>
+                    <p class="dm-muted dm-mt-1" style="font-size: 13px; color: #9b2c2c; margin: 4px 0 0 0;">
+                        Hay materiales por debajo del límite mínimo recomendado.
+                    </p>
+                </div>
+                <button class="dm-btn dm-btn-danger" onclick="App.views.generarCompraSugerida()">
+                    🛒 Generar Compra Sugerida
+                </button>
+            </div>
+        </div>
+    `;
+};
+
+App.views.generarCompraSugerida = function () {
+    const r = App.views._resumenInventario();
+    const criticos = r.topCriticos;
+
+    if (!criticos.length) {
+        App.ui.toast("No hay materiales en punto crítico actualmente", "info");
+        return;
+    }
+
+    // Armamos la lista de renglones calculando la cantidad faltante para cubrir el mínimo
+    let htmlFilasSugeridas = '';
+    criticos.forEach(c => {
+        const libre = Math.max(0, c.libre);
+        const cantidadSugerida = Math.max(1, Math.ceil(c.minimo - libre));
+        const costoU = c.costo || 0;
+
+        htmlFilasSugeridas += `
+            <div class="fila-compra-item dm-card" style="background:var(--dm-surface-2); padding:10px; margin-bottom:10px;">
+                <div style="display:grid; grid-template-columns:1fr; gap:10px;">
+                    <select class="dm-select" name="mat_id[]" onchange="App.views.calcularTotalCompraForm()">
+                        ${App.views._optionsMaterialCompraConSeleccion(c.id)}
+                    </select>
+                    <div style="display:flex; gap:8px;">
+                        <div style="flex:1;">
+                            <label class="dm-text-sm dm-muted">Cantidad Sugerida</label>
+                            <input type="number" step="0.01" class="dm-input" name="cant[]" value="${cantidadSugerida}" placeholder="Cantidad" oninput="App.views.calcularTotalCompraForm()">
+                        </div>
+                        <div style="flex:1;">
+                            <label class="dm-text-sm dm-muted">Costo U. ($)</label>
+                            <input type="number" step="0.01" class="dm-input" name="precio_u[]" value="${costoU}" placeholder="Costo unitario" oninput="App.views.calcularTotalCompraForm()">
+                        </div>
+                    </div>
+                    <button type="button" class="dm-btn dm-btn-danger dm-btn-sm" onclick="this.closest('.fila-compra-item').remove(); App.views.calcularTotalCompraForm();">🗑️ Quitar</button>
+                </div>
+            </div>
+        `;
+    });
+
+    const formHTML = `
+        <form id="dynamic-form">
+            <div class="dm-alert dm-alert-warning dm-mb-3">
+                <strong>Orden de Compra Sugerida:</strong> Prellenada automáticamente con ${criticos.length} insumos críticos.
+            </div>
+
+            <div class="dm-form-group">
+                <label class="dm-label">Proveedor</label>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <select class="dm-select" id="compra-proveedor-select" name="proveedor_id" required style="flex:1; min-width:180px;">${App.views._optionsProveedorCompra()}</select>
+                    <button type="button" class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formProveedorCompra()">+ Proveedor</button>
+                </div>
+            </div>
+            
+            <div class="dm-form-group">
+                <label class="dm-label">Fecha</label>
+                <input type="date" class="dm-input" name="fecha" value="${new Date().toISOString().split('T')[0]}" required>
+            </div>
+
+            <div class="dm-card dm-mb-3" style="background:var(--dm-surface-2);">
+                <div class="dm-row-between dm-mb-2" style="align-items:center; gap:8px; flex-wrap:wrap;">
+                    <div class="dm-card-title">Insumos a Reponer</div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button type="button" class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formMaterialCompra()">+ Material</button>
+                        <button type="button" class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.agregarFilaCompra()">+ Renglón</button>
+                    </div>
+                </div>
+                <div id="cont-filas-compra">${htmlFilasSugeridas}</div>
+            </div>
+
+            <div class="dm-form-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
+                <div class="dm-form-group"><label class="dm-label">Total Est. ($)</label><input type="number" step="0.01" class="dm-input" name="total" readonly required></div>
+                <div class="dm-form-group"><label class="dm-label">Monto pagado ($)</label><input type="number" step="0.01" class="dm-input" name="monto_pagado" value="0" required></div>
+            </div>
+
+            <button type="submit" class="dm-btn dm-btn-primary dm-btn-block">💾 Generar Registro de Compra</button>
+        </form>
+    `;
+
+    App.ui.openSheet('Compra Sugerida (Reponer Stock)', formHTML, async (data) => {
+        return App.ui.runSafeAction({
+            lockKey: 'compra:sugerida:nueva',
+            loadingText: 'Registrando...',
+            loaderMessage: 'Guardando compra y reponiendo stock físico...',
+            successMessage: 'Compra registrada y stock reabastecido',
+            closeSheetOnSuccess: true
+        }, async () => App.logic.guardarNuevaCompra(data));
+    });
+
+    setTimeout(() => App.views.calcularTotalCompraForm(), 150);
+};
+
+App.views._optionsMaterialCompraConSeleccion = function (selectedId) {
+    let htmlMat = '<option value="">-- Material / reventa --</option>';
+    (App.state.inventario || []).forEach(m => { 
+        htmlMat += `<option value="${m.id}" ${m.id === selectedId ? 'selected' : ''}>${App.ui.safe(m.nombre)} (${App.ui.safe(m.tipo || '')})</option>`; 
+    });
+    return htmlMat;
+};
+
 App.views._renderDashboardInventario = function () {
     const r = App.views._resumenInventario();
 
-    const topCriticosHTML = r.topCriticos.length ? r.topCriticos.map(x => `
+    const topCriticosHTML = r.topCriticos.length ? r.topCriticos.slice(0, 5).map(x => `
         <div class="dm-row-between dm-mb-2" style="gap:12px; align-items:flex-start;">
             <div style="flex:1; min-width:0;">
                 <strong style="word-break:break-word;">${App.ui.safe(x.nombre)}</strong><br>
@@ -128,6 +255,8 @@ App.views._renderDashboardInventario = function () {
     `).join('') : `<div class="dm-alert dm-alert-info">Sin movimientos suficientes.</div>`;
 
     return `
+        ${App.views._renderBannerStockCritico()}
+
         <div class="dm-card dm-mb-4">
             <div style="display:flex; flex-direction:column; gap:10px;">
                 <div>
@@ -275,6 +404,8 @@ App.views.compras = function() {
 
     let html = `
         <div class="dm-section" style="padding-bottom:90px;">
+            ${App.views._renderBannerStockCritico()}
+
             <div class="dm-mb-4" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(170px,1fr)); gap:12px;">
                 <div class="dm-card"><small class="dm-muted">Compras</small><div class="dm-text-xl dm-fw-bold">${App.ui.money(totalCompras)}</div></div>
                 <div class="dm-card"><small class="dm-muted">Pagado</small><div class="dm-text-xl dm-fw-bold" style="color:var(--dm-success);">${App.ui.money(totalPagado)}</div></div>
@@ -402,12 +533,11 @@ App.views.formProveedorCompra = function (callback = null) {
             loaderMessage: 'Guardando proveedor...',
             successMessage: 'Proveedor guardado correctamente',
             errorTitle: 'No se pudo guardar el proveedor',
-            closeSheetOnSuccess: true // <--- Cierra el modal automáticamente
+            closeSheetOnSuccess: true
         }, async () => {
             const payload = Object.assign({ activo: 'TRUE' }, data);
             const res = await App.logic.guardarNuevoGenerico('proveedores', payload, 'PROV', 'proveedores', callback);
             
-            // AUTO-SELECCIÓN: Añade y selecciona al nuevo proveedor en el formulario de Compra activo
             setTimeout(() => {
                 const sel = document.getElementById('compra-proveedor-select');
                 const ultimo = (App.state.proveedores || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
@@ -448,12 +578,11 @@ App.views.formMaterialCompra = function (callback = null) {
             loaderMessage: 'Guardando material...',
             successMessage: 'Material guardado correctamente',
             errorTitle: 'No se pudo guardar el material',
-            closeSheetOnSuccess: true // <--- Cierra el modal automáticamente
+            closeSheetOnSuccess: true
         }, async () => {
             const payload = Object.assign({ costo_unitario: 0 }, data);
             const res = await App.logic.guardarNuevoGenerico('materiales', payload, 'MAT', 'inventario', callback);
             
-            // AUTO-SELECCIÓN: Asigna el nuevo material a las filas de la compra
             setTimeout(() => {
                 const selects = document.querySelectorAll('#cont-filas-compra select[name="mat_id[]"]');
                 const ultimo = (App.state.inventario || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
@@ -506,7 +635,7 @@ App.views.formCompra = function() {
             loaderMessage: 'Registrando compra y actualizando inventario...',
             successMessage: 'Compra registrada correctamente',
             errorTitle: 'No se pudo registrar la compra',
-            closeSheetOnSuccess: true // <--- Cierra el modal de compra
+            closeSheetOnSuccess: true
         }, async () => App.logic.guardarNuevaCompra(data));
     });
 
@@ -534,7 +663,7 @@ App.views.formAbonoCompra = function(compraId) {
             loaderMessage: 'Registrando abono a compra...',
             successMessage: 'Abono registrado',
             errorTitle: 'No se pudo registrar el abono',
-            closeSheetOnSuccess: true // <--- Cierra el modal de abono a compra
+            closeSheetOnSuccess: true
         }, async () => App.logic.guardarAbonoCompra(data));
     });
 };
@@ -585,7 +714,7 @@ App.views.formMaterial = function(id = null, callback = null) {
             loadingText: 'Guardando...',
             loaderMessage: obj ? 'Guardando cambios...' : 'Guardando nuevo insumo...',
             successMessage: obj ? 'Insumo actualizado' : 'Insumo creado',
-            closeSheetOnSuccess: true // <--- Cierra el modal de insumo
+            closeSheetOnSuccess: true
         }, async () => {
             if (obj) return App.logic.actualizarRegistroGenerico('materiales', id, data, 'inventario');
             return App.logic.guardarNuevoGenerico('materiales', data, 'MAT', 'inventario', callback);
