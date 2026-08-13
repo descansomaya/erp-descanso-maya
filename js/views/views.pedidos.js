@@ -262,12 +262,15 @@ window.generarListaPedidos = function(tipo) {
 };
 
 // ==========================================
-// CARRITO Y CREACIÓN DE PEDIDOS MÚLTIPLES
+// CARRITO Y CREACIÓN DE PEDIDOS MÚLTIPLES (SOPORTE PRECARGA)
 // ==========================================
 App.views._formPedidoInterno = function(obj = null, prefill = null) {
     const dataBase = Object.assign({ cantidad: 1, anticipo: 0, comision: 0, vendedor_id: '' }, prefill || {}, obj || {});
 
-    if (!obj) { window._carritoTemp = []; }
+    if (!obj) {
+        // Carga el carrito precargado si proviene de una cotización
+        window._carritoTemp = Array.isArray(dataBase.carrito) ? [...dataBase.carrito] : [];
+    }
 
     let htmlClientes = '<option value="STOCK_INTERNO">STOCK BODEGA</option>';
     (App.state.clientes || []).forEach(c => {
@@ -313,7 +316,7 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
                     </div>
                 </div>
                 <div id="cart-items-container">
-                    <!-- Artículos dinámicos -->
+                    <!-- Artículos dinámicos o precargados -->
                 </div>
             </div>
         `;
@@ -1134,13 +1137,23 @@ App.views.autoConvertirCotizacion = async function (cotizacionId) {
                 await App.views._marcarCotizacionConvertida(cotizacionId, { convertido_a: 'reparacion' });
 
             } else {
+                const prod = (App.state.productos || []).find(p => p.id === c.producto_id);
+                const cant = parseFloat(c.cantidad || 1) || 1;
+                const totalCot = parseFloat(c.total || 0) || 0;
+                const precioUnitario = cant > 0 ? (totalCot / cant) : totalCot;
+
                 const dataPedido = {
                     cliente_id: c.cliente_id || 'STOCK_INTERNO',
-                    producto_id: c.producto_id || '',
-                    cantidad: c.cantidad || 1,
-                    total: c.total || 0,
+                    total: totalCot,
                     anticipo: anticipoMonto,
-                    fecha_entrega: new Date().toISOString().split('T')[0]
+                    fecha_entrega: new Date().toISOString().split('T')[0],
+                    carrito: c.producto_id ? [{
+                        producto_id: c.producto_id,
+                        nombre: prod ? prod.nombre : (c.concepto || 'Producto Cotizado'),
+                        cantidad: cant,
+                        precio_unitario: precioUnitario,
+                        subtotal: totalCot
+                    }] : []
                 };
                 const resPed = await App.logic.guardarNuevoPedido(dataPedido);
 
@@ -1172,19 +1185,32 @@ App.views.convertirCotizacion = function(cotizacionId) {
     return App.views.formPedidoDesdeCotizacion(cotizacionId);
 };
 
+// ==========================================
+// PRECARGA DESDE COTIZACIÓN
+// ==========================================
 App.views.formPedidoDesdeCotizacion = function(cotizacionId) {
     const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
     if (!c) return;
 
+    const prod = (App.state.productos || []).find(p => p.id === c.producto_id);
+    const cant = parseFloat(c.cantidad || 1) || 1;
+    const totalCot = parseFloat(c.total || 0) || 0;
+    const precioUnitario = cant > 0 ? (totalCot / cant) : totalCot;
+
     const prefill = {
         cliente_id: c.cliente_id || '',
-        producto_id: c.producto_id || '',
-        cantidad: c.cantidad || 1,
-        total: c.total || '',
+        cliente_nombre: c.cliente_nombre || '',
+        total: totalCot,
         anticipo: 0,
         fecha_entrega: '',
-        notas: c.detalles || '',
-        cliente_nombre: c.cliente_nombre || ''
+        notas: c.detalles || c.concepto || '',
+        carrito: c.producto_id ? [{
+            producto_id: c.producto_id,
+            nombre: prod ? prod.nombre : (c.concepto || 'Producto Cotizado'),
+            cantidad: cant,
+            precio_unitario: precioUnitario,
+            subtotal: totalCot
+        }] : []
     };
 
     App.views._formPedidoInterno(null, prefill);
