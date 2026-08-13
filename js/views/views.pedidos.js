@@ -124,7 +124,21 @@ App.views.accionAbono = function (button, abonoId, actionName) {
 // PEDIDOS
 // ==========================================
 App.views.pedidos = function() {
-    const pedidos = App.state.pedidos || [];
+    const todosPedidos = App.state.pedidos || [];
+    const mostrarHistorico = App.state.mostrarHistoricoPedidos || false;
+
+    // Filtramos activos (en proceso, pendientes o listos) vs entregados/cerrados
+    const activos = todosPedidos.filter(p => {
+        const est = String(p.estado || '').toLowerCase();
+        return est !== 'entregado' && est !== 'pagado' && est !== 'cerrado';
+    });
+
+    const entregados = todosPedidos.filter(p => {
+        const est = String(p.estado || '').toLowerCase();
+        return est === 'entregado' || est === 'pagado' || est === 'cerrado';
+    });
+
+    const listaAMostrar = mostrarHistorico ? todosPedidos : activos;
 
     const getColorEstado = (estado) => {
         estado = String(estado || '').toLowerCase();
@@ -138,7 +152,15 @@ App.views.pedidos = function() {
         <div class="dm-section" style="padding-bottom:90px;">
             <div class="dm-card dm-mb-4">
                 <div style="display:flex; flex-direction:column; gap:10px;">
-                    <h3 class="dm-card-title">Pedidos</h3>
+                    <div class="dm-row-between" style="align-items:center; flex-wrap:wrap; gap:10px;">
+                        <h3 class="dm-card-title">Pedidos</h3>
+                        <div style="display:flex; gap:8px;">
+                            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.modalRendimientoVendedores()">👔 Vendedores</button>
+                            <button class="dm-btn ${mostrarHistorico ? 'dm-btn-primary' : 'dm-btn-ghost'} dm-btn-sm" style="border:1px solid var(--dm-border);" onclick="App.state.mostrarHistoricoPedidos = !App.state.mostrarHistoricoPedidos; App.router.handleRoute();">
+                                ${mostrarHistorico ? '📦 Ver Solo Activos (' + activos.length + ')' : '📜 Histórico Completos (' + entregados.length + ')'}
+                            </button>
+                        </div>
+                    </div>
                     <input type="text" id="bus-ped" class="dm-input" placeholder="🔍 Buscar pedido o cliente..." onkeyup="window.filtrarLista('bus-ped','tarj-ped')">
                 </div>
             </div>
@@ -146,11 +168,11 @@ App.views.pedidos = function() {
             <div class="dm-list">
     `;
 
-    if (pedidos.length === 0) {
-        html += `<div class="dm-alert dm-alert-info">No hay pedidos.</div>`;
+    if (listaAMostrar.length === 0) {
+        html += `<div class="dm-alert dm-alert-info">${mostrarHistorico ? 'No hay pedidos en el histórico.' : 'No hay pedidos activos pendientes.'}</div>`;
     }
 
-    pedidos.forEach(p => {
+    listaAMostrar.forEach(p => {
         const colorEstado = getColorEstado(p.estado);
         const esInterno = p.cliente_id === 'STOCK_INTERNO';
 
