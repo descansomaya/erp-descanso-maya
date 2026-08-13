@@ -1556,11 +1556,4 @@ Object.assign(App.logic, {
         }
     },
 
-    // ==========================================
-    // COMPATIBILIDAD
-    // ==========================================
-
-    enviarWhatsApp(pedidoId, tipoMensaje) {
-        return this.enviarWhatsApp(pedidoId, tipoMensaje);
-    }
-});
+   
