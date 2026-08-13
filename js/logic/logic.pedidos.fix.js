@@ -203,6 +203,29 @@ App.views = App.views || {};
         App.logic.marcarPedidoEntregado = entregar;
     }
 
+    // La vista de pedidos ya genera el botón de entrega. Los parches históricos
+    // podían agregar un segundo botón "Entregar" al mismo modal. Como los
+    // observers antiguos pueden existir en una sesión ya abierta, limpiamos
+    // únicamente duplicados de la misma acción después de abrir el modal.
+    const modalDetallesOriginal = App.views.modalDetallesPedido;
+    if (typeof modalDetallesOriginal === 'function' && !modalDetallesOriginal.__dmEntregaDuplicadoFix) {
+        const modalDetalles = function (pedidoId) {
+            const resultado = modalDetallesOriginal.apply(this, arguments);
+            setTimeout(() => {
+                const root = document.getElementById('sheet-content');
+                if (!root) return;
+                const botonesEntrega = Array.from(root.querySelectorAll('button')).filter(b => {
+                    const onclick = String(b.getAttribute('onclick') || '');
+                    return /marcarEntregado/.test(onclick);
+                });
+                botonesEntrega.slice(1).forEach(b => b.remove());
+            }, 0);
+            return resultado;
+        };
+        modalDetalles.__dmEntregaDuplicadoFix = true;
+        App.views.modalDetallesPedido = modalDetalles;
+    }
+
     function boot() {
         desconectarObservers();
     }
