@@ -446,15 +446,29 @@ App.views._buildOrdenCard = function (o) {
 };
 
 App.views._renderProduccionColumn = function (estado, titulo, icono, badgeClass) {
-    const ordenes = (App.state?.ordenes_produccion || []).filter(o => o.estado === estado).sort((a, b) => new Date(b.fecha_creacion || 0) - new Date(a.fecha_creacion || 0));
-    const contenido = ordenes.length ? ordenes.map(o => App.views._buildOrdenCard(o)).join('') : `<div class="dm-alert dm-alert-info">No hay órdenes en esta sección.</div>`;
+    let ordenes = (App.state?.ordenes_produccion || [])
+        .filter(o => o.estado === estado)
+        .sort((a, b) => new Date(b.fecha_creacion || 0) - new Date(a.fecha_creacion || 0));
+
+    const totalOrdenes = ordenes.length;
+
+    // Si es la columna de "Listas", mostramos las 6 más recientes para no saturar la pantalla
+    if (estado === 'listo' && ordenes.length > 6) {
+        ordenes = ordenes.slice(0, 6);
+    }
+
+    const contenido = ordenes.length 
+        ? ordenes.map(o => App.views._buildOrdenCard(o)).join('') 
+        : `<div class="dm-alert dm-alert-info">No hay órdenes en esta sección.</div>`;
+
     return `
         <div class="dm-card">
             <div class="dm-row-between" style="align-items:center; gap:10px; margin-bottom:12px;">
                 <div class="dm-card-title">${icono} ${titulo}</div>
-                <span class="dm-badge ${badgeClass}">${ordenes.length}</span>
+                <span class="dm-badge ${badgeClass}">${totalOrdenes}</span>
             </div>
             <div class="dm-list">${contenido}</div>
+            ${estado === 'listo' && totalOrdenes > 6 ? `<small class="dm-muted dm-mt-2" style="display:block; text-align:center;">*Mostrando las 6 más recientes de ${totalOrdenes}</small>` : ''}
         </div>
     `;
 };
