@@ -295,6 +295,334 @@ Object.assign(App.logic, {
         }
     },
 
+    // ==========================================
+// WHATSAPP - PEDIDOS
+// ==========================================
+
+async enviarWhatsApp(pedidoId, tipoMensaje = "cobro") {
+
+    try {
+
+        const pedido =
+            (App.state.pedidos || [])
+                .find(p => p.id === pedidoId);
+
+        if (!pedido) {
+            throw new Error("Pedido no encontrado");
+        }
+
+
+        // ------------------------------------------
+        // CLIENTE
+        // ------------------------------------------
+
+        const cliente =
+            (App.state.clientes || [])
+                .find(c => c.id === pedido.cliente_id);
+
+        if (!cliente) {
+            throw new Error(
+                "No se encontró el cliente del pedido"
+            );
+        }
+
+
+        // ------------------------------------------
+        // TELÉFONO
+        // ------------------------------------------
+
+        let telefono =
+            String(
+                cliente.telefono ||
+                cliente.celular ||
+                cliente.whatsapp ||
+                ""
+            )
+            .replace(/\D/g, "");
+
+
+        if (!telefono) {
+
+            App.ui.toast(
+                "El cliente no tiene teléfono registrado",
+                "warning"
+            );
+
+            return false;
+        }
+
+
+        // México
+        if (
+            telefono.length === 10
+        ) {
+            telefono =
+                "52" + telefono;
+        }
+
+
+        // ------------------------------------------
+        // DETALLES DEL PEDIDO
+        // ------------------------------------------
+
+        const detalles =
+            (App.state.pedido_detalle || [])
+                .filter(
+                    d =>
+                        d.pedido_id === pedidoId
+                );
+
+
+        const productos =
+            detalles.map(detalle => {
+
+                const producto =
+                    (App.state.productos || [])
+                        .find(
+                            p =>
+                                p.id === detalle.producto_id
+                        );
+
+                const cantidad =
+                    parseInt(
+                        detalle.cantidad || 1
+                    ) || 1;
+
+                return {
+                    nombre:
+                        producto?.nombre ||
+                        "Producto",
+
+                    cantidad
+                };
+
+            });
+
+
+        // ------------------------------------------
+        // IMPORTES
+        // ------------------------------------------
+
+        const total =
+            parseFloat(
+                pedido.total || 0
+            ) || 0;
+
+
+        const anticipo =
+            parseFloat(
+                pedido.anticipo || 0
+            ) || 0;
+
+
+        const abonos =
+            (App.state.abonos || [])
+                .filter(
+                    a =>
+                        a.pedido_id === pedidoId
+                )
+                .reduce(
+                    (totalAbonos, abono) =>
+                        totalAbonos +
+                        (
+                            parseFloat(
+                                abono.monto || 0
+                            ) || 0
+                        ),
+                    0
+                );
+
+
+        const saldo =
+            Math.max(
+                0,
+                total -
+                anticipo -
+                abonos
+            );
+
+
+        // ------------------------------------------
+        // NOMBRE
+        // ------------------------------------------
+
+        const nombreCliente =
+            cliente.nombre ||
+            cliente.razon_social ||
+            "cliente";
+
+
+        // ------------------------------------------
+        // PRODUCTOS TEXTO
+        // ------------------------------------------
+
+        let textoProductos = "";
+
+        if (productos.length > 0) {
+
+            textoProductos =
+                productos
+                    .map(
+                        p =>
+                            `• ${p.nombre} x${p.cantidad}`
+                    )
+                    .join("\n");
+
+        }
+
+
+        // ------------------------------------------
+        // MENSAJE
+        // ------------------------------------------
+
+        let mensaje = "";
+
+
+        if (
+            tipoMensaje === "listo"
+        ) {
+
+            mensaje =
+                `Hola ${nombreCliente} 👋\n\n` +
+                `Te contactamos de *Descanso Maya*.\n\n` +
+                `Tu pedido *${pedidoId}* ` +
+                `ya está listo para entregar. 📦\n\n`;
+
+            if (textoProductos) {
+
+                mensaje +=
+                    `*Pedido:*\n` +
+                    `${textoProductos}\n\n`;
+
+            }
+
+
+            if (saldo > 0.05) {
+
+                mensaje +=
+                    `*Saldo pendiente:* ` +
+                    `$${saldo.toFixed(2)} MXN\n\n`;
+
+            } else {
+
+                mensaje +=
+                    `Tu pedido se encuentra ` +
+                    `liquidado. ✅\n\n`;
+
+            }
+
+
+            mensaje +=
+                `Quedamos atentos para ` +
+                `coordinar tu entrega.\n\n` +
+                `Gracias por tu preferencia. ❤️\n` +
+                `*Descanso Maya*`;
+
+        } else {
+
+            mensaje =
+                `Hola ${nombreCliente} 👋\n\n` +
+                `Te contactamos de *Descanso Maya* ` +
+                `respecto a tu pedido *${pedidoId}*.\n\n`;
+
+            if (textoProductos) {
+
+                mensaje +=
+                    `*Pedido:*\n` +
+                    `${textoProductos}\n\n`;
+
+            }
+
+
+            mensaje +=
+                `*Total:* ` +
+                `$${total.toFixed(2)} MXN\n`;
+
+
+            mensaje +=
+                `*Anticipo:* ` +
+                `$${anticipo.toFixed(2)} MXN\n`;
+
+
+            if (abonos > 0.05) {
+
+                mensaje +=
+                    `*Abonos:* ` +
+                    `$${abonos.toFixed(2)} MXN\n`;
+
+            }
+
+
+            mensaje +=
+                `*Saldo:* ` +
+                `$${saldo.toFixed(2)} MXN\n\n`;
+
+
+            if (saldo > 0.05) {
+
+                mensaje +=
+                    `Quedamos atentos para ` +
+                    `cualquier duda o para ` +
+                    `coordinar tu pago.\n\n`;
+
+            } else {
+
+                mensaje +=
+                    `Tu pedido se encuentra ` +
+                    `liquidado. ✅\n\n`;
+
+            }
+
+
+            mensaje +=
+                `Gracias por tu preferencia. ❤️\n` +
+                `*Descanso Maya*`;
+
+        }
+
+
+        // ------------------------------------------
+        // WHATSAPP
+        // ------------------------------------------
+
+        const url =
+            "https://wa.me/" +
+            telefono +
+            "?text=" +
+            encodeURIComponent(mensaje);
+
+
+        window.open(
+            url,
+            "_blank",
+            "noopener,noreferrer"
+        );
+
+
+        return true;
+
+
+    } catch (error) {
+
+        console.error(
+            "Error en enviarWhatsApp:",
+            error
+        );
+
+
+        App.ui.toast(
+            error.message ||
+            "No se pudo preparar WhatsApp",
+            "danger"
+        );
+
+
+        return false;
+
+    }
+
+},
+
     async entregarDeBodega(pedidoId) {
         try {
             const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
