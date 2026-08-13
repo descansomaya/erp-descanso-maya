@@ -38,7 +38,7 @@ App.views.marcarPagoArtesanoPagado = async function (pagoId) {
 };
 
 // ==========================================
-// FASE 4: RESUMEN Y CALCULOS DE RENDIMIENTO
+// FASE 4: RESUMEN Y CALCULOS DE RENDIMIENTO (BLINDADO)
 // ==========================================
 App.views._resumenRendimientoArtesanos = function () {
     const artesanos = App.state.artesanos || [];
@@ -49,16 +49,24 @@ App.views._resumenRendimientoArtesanos = function () {
     const reporte = [];
 
     artesanos.forEach(art => {
+        // Filtrar asignaciones activas de este artesano
         const asigArt = asignaciones.filter(a => String(a.artesano_id) === String(art.id) && String(a.estado || 'activo').toLowerCase() !== 'cancelado');
         
         let completadas = 0;
+        let enProceso = 0;
         let diasTotales = 0;
         let ordenesConTiempo = 0;
+        let asignacionesValidasCount = 0;
 
         asigArt.forEach(a => {
             const ord = ordenes.find(o => String(o.id) === String(a.orden_id));
+            
+            // BLINDAJE: Solo procesa asignaciones cuyas órdenes existan activas en el taller
             if (ord) {
-                if (String(ord.estado || '').toLowerCase() === 'listo') {
+                asignacionesValidasCount += 1;
+                const estOrd = String(ord.estado || '').toLowerCase().trim();
+
+                if (estOrd === 'listo') {
                     completadas += 1;
                     
                     if (ord.fecha_creacion && (ord.fecha_descuento_materiales || ord.fecha_reversa_materiales)) {
@@ -68,6 +76,8 @@ App.views._resumenRendimientoArtesanos = function () {
                         diasTotales += diffDias;
                         ordenesConTiempo += 1;
                     }
+                } else if (estOrd === 'proceso') {
+                    enProceso += 1;
                 }
             }
         });
@@ -89,9 +99,9 @@ App.views._resumenRendimientoArtesanos = function () {
             id: art.id,
             nombre: art.nombre,
             especialidad: art.especialidad || 'Tejedor',
-            totalTrabajos: asigArt.length,
+            totalTrabajos: asignacionesValidasCount,
             completadas,
-            enProceso: asigArt.length - completadas,
+            enProceso, // Muestra exactamente las órdenes con estado 'proceso'
             tiempoPromedio,
             totalPagado,
             pendientePagar,
