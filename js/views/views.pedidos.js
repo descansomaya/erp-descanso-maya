@@ -1,5 +1,5 @@
 // ==========================================
-// VISTAS: PEDIDOS Y COTIZACIONES (FLUIDO & AUTO-RETORNO)
+// VISTAS: PEDIDOS Y COTIZACIONES (CORREGIDO CON IMPRESIÓN NATIVA)
 // ==========================================
 
 window.App = window.App || {};
@@ -15,6 +15,107 @@ App.views.runPedidoAction = async function (button, pedidoId, actionName, action
         errorTitle: options.errorTitle || "No se pudo actualizar el pedido",
         toastOnSuccess: options.toastOnSuccess !== false
     }, async () => actionFn());
+};
+
+// ==========================================
+// IMPRESIÓN NATIVA DE NOTAS Y LIQUIDACIONES
+// ==========================================
+App.views.imprimirNotaPedido = function (pedidoId) {
+    const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
+    if (!pedido) {
+        App.ui.toast('Pedido no encontrado', 'danger');
+        return;
+    }
+
+    const cliente = (App.state.clientes || []).find(c => c.id === pedido.cliente_id) || {};
+    const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
+    const abonosLista = (App.state.abonos || []).filter(a => a.pedido_id === pedidoId);
+    const totalAbonos = abonosLista.reduce((s, a) => s + parseFloat(a.monto || 0), 0);
+    const saldo = parseFloat(pedido.total || 0) - parseFloat(pedido.anticipo || 0) - totalAbonos;
+
+    let filasItems = '';
+    detalles.forEach(d => {
+        const prod = (App.state.productos || []).find(p => p.id === d.producto_id);
+        const sub = parseFloat(d.precio_unitario || 0) * parseFloat(d.cantidad || 1);
+        filasItems += `
+            <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;">${App.ui.safe(d.cantidad)}x ${App.ui.safe(prod ? prod.nombre : 'Producto')}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${App.ui.money(d.precio_unitario || 0)}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${App.ui.money(sub)}</td>
+            </tr>
+        `;
+    });
+
+    const html = `
+        <html>
+        <head>
+            <title>Nota de Venta - ${App.ui.safe(pedido.id)}</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 24px; color: #222; }
+                .head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
+                .box { border:1px solid #ddd; border-radius:10px; padding:14px; margin-bottom:14px; }
+                .muted { color:#666; }
+                table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+                .row { display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
+            </style>
+        </head>
+        <body>
+            <div class="head">
+                <div>
+                    <h1 style="margin:0;">Descanso Maya</h1>
+                    <p class="muted" style="margin:4px 0 0 0;">Nota de Venta / Pedido</p>
+                </div>
+                <div style="text-align:right;">
+                    <strong style="font-size: 18px;">${App.ui.safe(pedido.id)}</strong><br>
+                    <span class="muted">${String(pedido.fecha_creacion || '').split('T')[0]}</span>
+                </div>
+            </div>
+
+            <div class="box">
+                <div class="row"><strong>Cliente:</strong><span>${App.ui.safe(cliente.nombre || pedido.cliente_nombre || 'Cliente')}</span></div>
+                <div class="row"><strong>Teléfono:</strong><span>${App.ui.safe(cliente.telefono || 'N/A')}</span></div>
+                <div class="row"><strong>Estado:</strong><span>${App.ui.safe((pedido.estado || '').toUpperCase())}</span></div>
+            </div>
+
+            <div class="box">
+                <strong>Detalle de Artículos:</strong>
+                <table>
+                    <thead>
+                        <tr style="background: #f5f5f5;">
+                            <th style="padding: 8px; text-align: left;">Descripción</th>
+                            <th style="padding: 8px; text-align: right;">P. Unit.</th>
+                            <th style="padding: 8px; text-align: right;">Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filasItems || '<tr><td colspan="3" style="padding:8px;">Sin detalles</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="box" style="background: #fafafa;">
+                <div class="row"><strong>Total Pedido:</strong><strong>${App.ui.money(pedido.total || 0)}</strong></div>
+                <div class="row"><strong>Anticipo:</strong><span>${App.ui.money(pedido.anticipo || 0)}</span></div>
+                <div class="row"><strong>Abonos:</strong><span>${App.ui.money(totalAbonos)}</span></div>
+                <div class="row" style="font-size: 16px; margin-top: 10px; border-top: 1px solid #ddd; padding-top: 8px;">
+                    <strong>Saldo Pendiente:</strong>
+                    <strong style="color: ${saldo > 0 ? '#c53030' : '#2f855a'};">${App.ui.money(saldo)}</strong>
+                </div>
+            </div>
+
+            <script>window.onload = function(){ window.print(); window.onafterprint = function(){ window.close(); }; };</script>
+        </body>
+        </html>
+    `;
+
+    const w = window.open('', '_blank');
+    if (!w) {
+        App.ui.toast('El navegador bloqueó la ventana de impresión', 'warning');
+        return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
 };
 
 App.views.accionPedido = function (button, pedidoId, actionName) {
@@ -41,14 +142,14 @@ App.views.accionPedido = function (button, pedidoId, actionName) {
             errorTitle: "No se pudo cerrar el pedido"
         },
         imprimirNota: {
-            fn: () => App.logic.imprimirNota(pedidoId),
+            fn: async () => App.views.imprimirNotaPedido(pedidoId),
             loadingText: "Generando...",
             loaderMessage: "Generando nota...",
             successMessage: "Nota generada",
             errorTitle: "No se pudo generar la nota"
         },
         imprimirLiquidacion: {
-            fn: () => App.logic.imprimirReciboLiquidacion(pedidoId),
+            fn: async () => App.views.imprimirNotaPedido(pedidoId),
             loadingText: "Generando...",
             loaderMessage: "Generando recibo de liquidación...",
             successMessage: "Recibo generado",
@@ -89,7 +190,7 @@ App.views.accionPedido = function (button, pedidoId, actionName) {
 App.views.accionAbono = function (button, abonoId, actionName) {
     const actions = {
         imprimirRecibo: {
-            fn: () => App.logic.imprimirReciboAbono(abonoId),
+            fn: () => App.views.imprimirNotaPedido(abonoId),
             loadingText: "Generando...",
             loaderMessage: "Generando recibo de abono...",
             successMessage: "Recibo generado",
@@ -127,7 +228,6 @@ App.views.pedidos = function() {
     const todosPedidos = App.state.pedidos || [];
     const mostrarHistorico = App.state.mostrarHistoricoPedidos || false;
 
-    // Filtramos activos (en proceso, pendientes o listos) vs entregados/cerrados
     const activos = todosPedidos.filter(p => {
         const est = String(p.estado || '').toLowerCase();
         return est !== 'entregado' && est !== 'pagado' && est !== 'cerrado';
@@ -284,7 +384,7 @@ window.generarListaPedidos = function(tipo) {
 };
 
 // ==========================================
-// CARRITO Y CREACIÓN DE PEDIDOS MÚLTIPLES (SOPORTE PRECARGA)
+// CARRITO Y CREACIÓN DE PEDIDOS MÚLTIPLES
 // ==========================================
 App.views._formPedidoInterno = function(obj = null, prefill = null) {
     const dataBase = Object.assign({ cantidad: 1, anticipo: 0, comision: 0, vendedor_id: '' }, prefill || {}, obj || {});
@@ -746,9 +846,6 @@ App.views.toggleCamposCotizacion = function () {
     }
 };
 
-// ==========================================
-// CREACIÓN RÁPIDA DE CLIENTES CON AUTO-SELECCIÓN Y CIERRE
-// ==========================================
 App.views.formClienteRapidoDesdeCotizacion = function () {
     const formHTML = `
         <form id="dynamic-form-cliente-rapido">
@@ -803,9 +900,6 @@ App.views.formClienteRapidoDesdeCotizacion = function () {
     });
 };
 
-// ==========================================
-// CREACIÓN RÁPIDA DE PRODUCTOS CON AUTO-SELECCIÓN Y CIERRE
-// ==========================================
 App.views.formProductoRapidoDesdeCotizacion = function () {
     const formHTML = `
         <form id="dynamic-form-producto-rapido">
@@ -982,58 +1076,7 @@ App.views.imprimirCotizacion = async function (cotizacionId) {
     const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
     if (!c) return;
 
-    if (App.logic?.imprimirCotizacion) {
-        return App.logic.imprimirCotizacion(cotizacionId);
-    }
-
-    const html = `
-        <html>
-        <head>
-            <title>Cotización ${App.ui.safe(c.id || '')}</title>
-            <style>
-                body { font-family: Arial, sans-serif; padding: 24px; color: #222; }
-                .head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
-                .box { border:1px solid #ddd; border-radius:10px; padding:14px; margin-bottom:14px; }
-                .muted { color:#666; }
-                h1,h2,h3,p { margin:0; }
-                .row { display:flex; justify-content:space-between; gap:12px; margin-top:8px; }
-            </style>
-        </head>
-        <body>
-            <div class="head">
-                <div>
-                    <h1>Descanso Maya</h1>
-                    <p class="muted">Cotización</p>
-                </div>
-                <div style="text-align:right;">
-                    <strong>${App.ui.safe(c.id || '')}</strong><br>
-                    <span class="muted">${String(c.fecha || c.fecha_creacion || '').split('T')[0]}</span>
-                </div>
-            </div>
-            <div class="box">
-                <div class="row"><strong>Cliente</strong><span>${App.ui.safe(c.cliente_nombre || '')}</span></div>
-                <div class="row"><strong>Tipo</strong><span>${App.ui.safe(c.tipo || '')}</span></div>
-                <div class="row"><strong>Concepto</strong><span>${App.ui.safe(c.concepto || '')}</span></div>
-                <div class="row"><strong>Cantidad</strong><span>${App.ui.safe(c.cantidad || 1)}</span></div>
-                <div class="row"><strong>Total</strong><span>${App.ui.money(c.total || 0)}</span></div>
-            </div>
-            <div class="box">
-                <strong>Detalles</strong>
-                <p style="margin-top:8px; white-space:pre-wrap;">${App.ui.safe(c.detalles || '')}</p>
-            </div>
-            <script>window.onload = function(){ window.print(); window.onafterprint = function(){ window.close(); }; };</script>
-        </body>
-        </html>
-    `;
-
-    const w = window.open('', '_blank');
-    if (!w) {
-        App.ui.toast('El navegador bloqueó la ventana de impresión', 'warning');
-        return;
-    }
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
+    App.views.imprimirNotaPedido(cotizacionId);
 };
 
 App.views.eliminarCotizacion = async function (cotizacionId) {
@@ -1090,9 +1133,6 @@ App.views._marcarCotizacionConvertida = async function (cotizacionId, extras = {
     }
 };
 
-// ==========================================
-// FASE 1: AUTO-CONVERTIR CON ANTICIPO Y MÉTODO DE PAGO
-// ==========================================
 App.views.autoConvertirCotizacion = async function (cotizacionId) {
     const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
     if (!c) return;
@@ -1206,9 +1246,6 @@ App.views.convertirCotizacion = function(cotizacionId) {
     return App.views.formPedidoDesdeCotizacion(cotizacionId);
 };
 
-// ==========================================
-// PRECARGA DESDE COTIZACIÓN
-// ==========================================
 App.views.formPedidoDesdeCotizacion = function(cotizacionId) {
     const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
     if (!c) return;
@@ -1281,9 +1318,6 @@ App.views.formReparacionDesdeCotizacion = function(cotizacionId) {
     });
 };
 
-// ==========================================
-// DETALLE DE PEDIDO
-// ==========================================
 App.views.modalDetallesPedido = function(pedidoId) {
     const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
     const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
@@ -1358,9 +1392,6 @@ App.views.modalDetallesPedido = function(pedidoId) {
     App.ui.openSheet(`Detalles del Pedido: ${pedidoId}`, html, () => App.ui.closeSheet());
 };
 
-// ==========================================
-// CÓDIGO OCULTAR VENDEDOR Y COMISIÓN EN STOCK BODEGA
-// ==========================================
 window.verificarStockInterno = function() {
     const clienteSel = document.querySelector('#dynamic-form select[name="cliente_id"]');
     const vendedorSel = document.querySelector('#dynamic-form select[name="vendedor_id"]');
@@ -1368,12 +1399,10 @@ window.verificarStockInterno = function() {
     const totalInp = document.querySelector('#dynamic-form input[name="total"]');
     const antInp = document.querySelector('#dynamic-form input[name="anticipo"]');
     
-    // Búsqueda de contenedores padres
     const vendedorWrap = vendedorSel ? vendedorSel.closest('.dm-form-group') : null;
     const comisionWrap = comisionInp ? comisionInp.closest('.dm-form-row') : null;
 
     if (clienteSel && clienteSel.value === 'STOCK_INTERNO') {
-        // 1. Bloquear y resetear Totales y Anticipos
         if (totalInp) { 
             totalInp.value = 0; 
             totalInp.readOnly = true; 
@@ -1389,7 +1418,6 @@ window.verificarStockInterno = function() {
             antInp.style.cursor = 'not-allowed';
         }
 
-        // 2. Ocultar y resetear Vendedor y Comisión
         if (vendedorSel) vendedorSel.value = '';
         if (comisionInp) comisionInp.value = 0;
 
@@ -1397,7 +1425,6 @@ window.verificarStockInterno = function() {
         if (comisionWrap) comisionWrap.style.display = 'none';
 
     } else {
-        // Restaurar para ventas a Clientes
         if (totalInp) { 
             totalInp.readOnly = window._carritoTemp ? true : false; 
             totalInp.style.backgroundColor = window._carritoTemp ? '#e5e7eb' : ''; 
@@ -1412,18 +1439,11 @@ window.verificarStockInterno = function() {
             antInp.style.cursor = '';
         }
 
-        // Mostrar de nuevo los campos
         if (vendedorWrap) vendedorWrap.style.display = '';
         if (comisionWrap) comisionWrap.style.display = '';
     }
 };
 
-// ==========================================
-// REPORTE DE RENDIMIENTO DE VENDEDORES
-// ==========================================
-// ==========================================
-// REPORTE DE RENDIMIENTO DE VENDEDORES (FILTRANDO STOCK BODEGA)
-// ==========================================
 App.views._resumenRendimientoVendedores = function () {
     const vendedores = App.state.vendedores || [];
     const pedidos = App.state.pedidos || [];
@@ -1431,14 +1451,12 @@ App.views._resumenRendimientoVendedores = function () {
 
     const reporte = [];
 
-    // Incluir opción de Venta Directa (Sin Vendedor asignado)
     const listaVendedores = [
         { id: '', nombre: 'Venta Directa / Sin Vendedor' },
         ...vendedores
     ];
 
     listaVendedores.forEach(v => {
-        // FILTRO CLAVE: Excluimos pedidos cancelados Y pedidos de STOCK_INTERNO
         const pedVend = pedidos.filter(p => 
             (p.vendedor_id || '') === v.id && 
             String(p.estado || '').toLowerCase() !== 'cancelado' &&
@@ -1452,7 +1470,6 @@ App.views._resumenRendimientoVendedores = function () {
         const pzasVendidas = pedVend.length;
         const ticketPromedio = pzasVendidas > 0 ? (ventasTotales / pzasVendidas) : 0;
 
-        // Solo mostramos vendedores reales o Venta Directa si tiene ventas comerciales válidas
         if (pzasVendidas > 0 || (v.id !== '' && cotVend.length > 0)) {
             reporte.push({
                 id: v.id,
