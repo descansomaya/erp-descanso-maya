@@ -1,8 +1,6 @@
 window.App = window.App || {};
 App.logic = App.logic || {};
 
-Object.assign(App.logic, {
-
 App.logic.movimientos = App.logic.movimientos || {};
 
 Object.assign(App.logic.movimientos, {
@@ -241,8 +239,4 @@ Object.assign(App.logic.movimientos, {
             idFila: m.id
         }));
     }
-}
 });
-
-
-
