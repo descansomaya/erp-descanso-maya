@@ -404,7 +404,7 @@ App.views._formPedidoInterno = function(obj = null, prefill = null) {
             loaderMessage: obj ? 'Guardando cambios...' : 'Creando pedido y apartando inventario para todos los artículos...',
             successMessage: obj ? 'Pedido actualizado' : 'Pedido registrado correctamente',
             errorTitle: obj ? 'No se pudo actualizar' : 'No se pudo crear el pedido',
-            closeSheetOnSuccess: true // <--- Cierra el modal automáticamente
+            closeSheetOnSuccess: true
         }, async () => action());
     });
 
@@ -564,7 +564,7 @@ App.views.modalAbonos = function(pedidoId) {
             loaderMessage: 'Registrando abono...',
             successMessage: 'Abono registrado',
             errorTitle: 'No se pudo registrar el abono',
-            closeSheetOnSuccess: true // <--- Cierra el modal de abono
+            closeSheetOnSuccess: true
         }, async () => App.logic.guardarAbono(data));
     });
 };
@@ -751,22 +751,19 @@ App.views.formClienteRapidoDesdeCotizacion = function () {
             loaderMessage: 'Guardando cliente...',
             successMessage: 'Cliente guardado correctamente',
             errorTitle: 'No se pudo guardar el cliente',
-            closeSheetOnSuccess: true // <--- Cierra el modal automáticamente
+            closeSheetOnSuccess: true
         }, async () => {
             const res = await App.logic.guardarNuevoGenerico('clientes', data, 'CLI', 'clientes');
             
-            // AUTO-SELECCIÓN: Busca al cliente guardado y lo selecciona en los desplegables activos
             setTimeout(() => {
                 const ultimo = (App.state.clientes || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
                 if (ultimo) {
-                    // Si está dentro de Pedidos:
                     const selectPedido = document.getElementById('select-cliente-pedido');
                     if (selectPedido) {
                         selectPedido.insertAdjacentHTML('beforeend', `<option value="${ultimo.id}">${App.ui.safe(ultimo.nombre)}</option>`);
                         selectPedido.value = ultimo.id;
                     }
 
-                    // Si está dentro de Cotizaciones:
                     const selectCot = document.querySelector('#dynamic-form select[name="cliente_id"]');
                     const inputCot = document.querySelector('#dynamic-form input[name="cliente_nombre"]');
                     if (selectCot) {
@@ -814,12 +811,11 @@ App.views.formProductoRapidoDesdeCotizacion = function () {
             loaderMessage: 'Guardando producto...',
             successMessage: 'Producto guardado correctamente',
             errorTitle: 'No se pudo guardar el producto',
-            closeSheetOnSuccess: true // <--- Cierra el modal automáticamente
+            closeSheetOnSuccess: true
         }, async () => {
             const payload = Object.assign({ activo: 'TRUE' }, data);
             const res = await App.logic.guardarNuevoGenerico('productos', payload, 'PROD', 'productos');
             
-            // AUTO-SELECCIÓN: Asigna el producto creado al carrito o formulario activo
             setTimeout(() => {
                 const ultimo = (App.state.productos || []).slice().sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
                 
@@ -1070,44 +1066,101 @@ App.views._marcarCotizacionConvertida = async function (cotizacionId, extras = {
     }
 };
 
+// ==========================================
+// FASE 1: AUTO-CONVERTIR CON ANTICIPO Y MÉTODO DE PAGO
+// ==========================================
 App.views.autoConvertirCotizacion = async function (cotizacionId) {
     const c = (App.state.cotizaciones || []).find(x => x.id === cotizacionId);
     if (!c) return;
 
     const tipo = String(c.tipo || '').toLowerCase();
-    try {
-        App.ui.showLoader('Auto-convirtiendo cotización...');
+    
+    const formHTML = `
+        <form id="dynamic-form">
+            <div class="dm-alert dm-alert-info dm-mb-3">
+                Convirtiendo cotización <strong>${App.ui.safe(c.id)}</strong> (${App.ui.safe(c.cliente_nombre || 'Cliente')}) por <strong>${App.ui.money(c.total || 0)}</strong>.
+            </div>
+            
+            <div class="dm-form-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:12px;">
+                <div class="dm-form-group">
+                    <label class="dm-label">Anticipo Recibido ($)</label>
+                    <input type="number" step="0.01" class="dm-input" name="anticipo" value="0" max="${c.total || 0}">
+                </div>
+                <div class="dm-form-group">
+                    <label class="dm-label">Método de Pago</label>
+                    <select class="dm-select" name="metodo_pago">
+                        <option value="Efectivo">Efectivo</option>
+                        <option value="Transferencia">Transferencia</option>
+                        <option value="Tarjeta">Tarjeta</option>
+                    </select>
+                </div>
+            </div>
 
-        if (tipo === 'reparacion') {
-            const dataRep = {
-                cliente_nombre: c.cliente_nombre || 'Cliente',
-                descripcion: c.concepto || c.detalles || 'Reparación desde cotización',
-                precio: c.total || 0,
-                anticipo_inicial: 0
-            };
-            await App.logic.guardarNuevoGenerico('reparaciones', dataRep, 'REP', 'reparaciones');
-            await App.views._marcarCotizacionConvertida(cotizacionId, { convertido_a: 'reparacion' });
-        } else {
-            const dataPedido = {
-                cliente_id: c.cliente_id || 'STOCK_INTERNO',
-                producto_id: c.producto_id || '',
-                cantidad: c.cantidad || 1,
-                total: c.total || 0,
-                anticipo: 0,
-                fecha_entrega: new Date().toISOString().split('T')[0]
-            };
-            await App.logic.guardarNuevoPedido(dataPedido);
-            await App.views._marcarCotizacionConvertida(cotizacionId, { convertido_a: 'pedido' });
-        }
+            <button type="submit" class="dm-btn dm-btn-success dm-btn-block">⚡ Confirmar y Convertir</button>
+        </form>
+    `;
 
-        App.ui.hideLoader();
-        App.ui.toast('Cotización convertida automáticamente');
-        if (App.router?.handleRoute) App.router.handleRoute();
-    } catch (error) {
-        console.error('Error en autoConvertirCotizacion:', error);
-        App.ui.hideLoader();
-        App.ui.toast(error.message || 'No se pudo auto-convertir la cotización', 'danger');
-    }
+    App.ui.openSheet('Convertir Cotización a ' + (tipo === 'reparacion' ? 'Reparación' : 'Pedido'), formHTML, async (data) => {
+        return App.ui.runSafeAction({
+            lockKey: `cotizacion:${cotizacionId}:convertir:directo`,
+            loadingText: 'Convertidor...',
+            loaderMessage: 'Generando registro y abono de anticipo...',
+            successMessage: 'Cotización convertida con éxito',
+            closeSheetOnSuccess: true
+        }, async () => {
+            const anticipoMonto = parseFloat(data.anticipo || 0) || 0;
+            const metodoPago = data.metodo_pago || 'Efectivo';
+            const ahora = new Date().toISOString();
+
+            if (tipo === 'reparacion') {
+                const dataRep = {
+                    cliente_nombre: c.cliente_nombre || 'Cliente',
+                    descripcion: c.concepto || c.detalles || 'Reparación desde cotización',
+                    precio: c.total || 0,
+                    anticipo_inicial: anticipoMonto,
+                    fecha_creacion: ahora
+                };
+                const resRep = await App.logic.guardarNuevoGenerico('reparaciones', dataRep, 'REP', 'reparaciones');
+
+                if (anticipoMonto > 0 && resRep?.id) {
+                    await App.logic.guardarNuevoGenerico('abonos_reparaciones', {
+                        reparacion_id: resRep.id,
+                        monto: anticipoMonto,
+                        metodo_pago: metodoPago,
+                        fecha: ahora
+                    }, 'ABR', 'abonos_reparaciones');
+                }
+                
+                await App.views._marcarCotizacionConvertida(cotizacionId, { convertido_a: 'reparacion' });
+
+            } else {
+                const dataPedido = {
+                    cliente_id: c.cliente_id || 'STOCK_INTERNO',
+                    producto_id: c.producto_id || '',
+                    cantidad: c.cantidad || 1,
+                    total: c.total || 0,
+                    anticipo: anticipoMonto,
+                    fecha_entrega: new Date().toISOString().split('T')[0]
+                };
+                const resPed = await App.logic.guardarNuevoPedido(dataPedido);
+
+                if (anticipoMonto > 0 && resPed?.id) {
+                    await App.logic.guardarNuevoGenerico('abonos_clientes', {
+                        pedido_id: resPed.id,
+                        cliente_id: c.cliente_id || '',
+                        monto: anticipoMonto,
+                        metodo_pago: metodoPago,
+                        fecha: ahora
+                    }, 'ABO', 'abonos');
+                }
+
+                await App.views._marcarCotizacionConvertida(cotizacionId, { convertido_a: 'pedido' });
+            }
+
+            if (App.router?.handleRoute) App.router.handleRoute();
+            return { status: 'success' };
+        });
+    });
 };
 
 App.views.convertirCotizacion = function(cotizacionId) {
