@@ -275,31 +275,39 @@ App.views.accionProduccion = function (button, ordenId, actionName) {
             successMessage: 'Orden iniciada e inventario actualizado',
             errorTitle: 'No se pudo iniciar la orden'
         },
-        terminar: {
-            fn: () => App.logic.cambiarEstadoProduccion(ordenId, 'listo'),
+     terminar: {
+            fn: async () => {
+                const res = await App.logic.cambiarEstadoProduccion(ordenId, 'listo');
+                
+                // FASE 3: Si la orden es para STOCK BODEGA, incrementa el producto en bodega automáticamente
+                const orden = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
+                if (orden) {
+                    const pedDet = (App.state?.pedido_detalle || []).find(d => d.id === orden.pedido_detalle_id);
+                    const pedido = (App.state?.pedidos || []).find(p => p.id === pedDet?.pedido_id);
+                    
+                    if (pedido && pedido.cliente_id === 'STOCK_INTERNO' && pedDet?.producto_id) {
+                        const prod = (App.state?.productos || []).find(p => p.id === pedDet.producto_id);
+                        if (prod) {
+                            const cantIncrementar = parseFloat(pedDet.cantidad || 1) || 1;
+                            const nuevoStock = (parseFloat(prod.stock_disponible || prod.stock_real || 0) || 0) + cantIncrementar;
+                            
+                            await App.logic.actualizarRegistroGenerico('productos', prod.id, {
+                                stock_disponible: nuevoStock
+                            }, 'productos');
+                            
+                            prod.stock_disponible = nuevoStock;
+                            App.ui.toast(`Se agregaron ${cantIncrementar} pza(s) a la Bodega de Productos Terminados`, 'success');
+                        }
+                    }
+                }
+
+                return res;
+            },
             loadingText: 'Terminando...',
-            loaderMessage: 'Marcando orden como lista...',
-            successMessage: 'Orden terminada',
+            loaderMessage: 'Marcando orden como lista e ingresando a bodega...',
+            successMessage: 'Orden terminada e inventario de bodega actualizado',
             errorTitle: 'No se pudo terminar la orden'
         },
-        regresarPendiente: {
-            fn: () => App.views.revertirProduccionAPendiente(ordenId),
-            loadingText: 'Regresando...',
-            loaderMessage: 'Regresando orden a pendiente y restaurando materiales...',
-            successMessage: 'Orden regresada a pendiente con reversa',
-            errorTitle: 'No se pudo regresar la orden a pendiente'
-        },
-        eliminar: {
-            fn: async () => {
-                const ok = window.confirm(`¿Eliminar la orden ${ordenId}?`);
-                if (!ok) return false;
-                return App.logic.eliminarRegistroGenerico('ordenes_produccion', ordenId, 'ordenes_produccion');
-            },
-            loadingText: 'Eliminando...',
-            loaderMessage: 'Eliminando orden de producción...',
-            successMessage: 'Orden eliminada',
-            errorTitle: 'No se pudo eliminar la orden'
-        }
     };
 
     const config = actions[actionName];
