@@ -1749,15 +1749,15 @@ App.views.pedidos = function() {
     const todosPedidos = App.state.pedidos || [];
     const mostrarHistorico = App.state.mostrarHistoricoPedidos || false;
 
-    const activos = todosPedidos.filter(p => {
-        const est = String(p.estado || '').toLowerCase().trim();
-        return !['entregado','pagado','cerrado','cancelado','devuelto'].includes(est);
-    });
+const activos = todosPedidos.filter(p => {
+    const est = String(p.estado || '').toLowerCase().trim();
+    return !['entregado','cancelado','devuelto'].includes(est);
+});
 
-    const entregados = todosPedidos.filter(p => {
-        const est = String(p.estado || '').toLowerCase().trim();
-        return ['entregado','pagado','cerrado','cancelado','devuelto'].includes(est);
-    });
+const entregados = todosPedidos.filter(p => {
+    const est = String(p.estado || '').toLowerCase().trim();
+    return ['entregado','cancelado','devuelto'].includes(est);
+});
 
     const listaAMostrar = mostrarHistorico ? todosPedidos : activos;
 
@@ -1765,7 +1765,7 @@ App.views.pedidos = function() {
         estado = String(estado || '').toLowerCase();
         if (estado.includes('produccion') || estado.includes('taller')) return 'var(--dm-primary)';
         if (estado.includes('listo')) return '#D69E2E';
-        if (estado.includes('entregado') || estado.includes('pagado')) return 'var(--dm-success)';
+        if (estado.includes('entregado')) return 'var(--dm-success)';
         if (estado.includes('cancelado')) return '#dc2626';
         if (estado.includes('devuelto')) return '#f59e0b';
         return 'var(--dm-muted)';
@@ -2801,7 +2801,7 @@ App.views.modalDetallesPedido = function(pedidoId) {
                 <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', '${whatsappAction}')">💬 WhatsApp</button>
             ` : ''}
             ${!['cancelado','devuelto','entregado','pagado'].includes(estado) ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'marcarListo')">📦 Listo</button>` : ''}
-            ${estado === 'listo para entregar' || estado === 'pagado' ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'marcarPedidoEntregado')">🚚 Entregar</button>` : ''}
+            ${estado === 'listo para entregar' || estado === 'pagado' ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'marcarEntregado')">🚚 Entregar</button>` : ''}
             ${estado === 'listo para entregar' ? `<button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'cancelarPedido')">🚫 Cancelar</button>` : ''}
             ${estado === 'entregado' ? `<button class="dm-btn dm-btn-warning dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'devolverPedido')">↩️ Devolver</button>` : ''}
             ${saldo <= 0.05 && !['pagado','entregado','cancelado','devuelto'].includes(estado) ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'cerrarPedido')">🔒 Cerrar</button>` : ''}
