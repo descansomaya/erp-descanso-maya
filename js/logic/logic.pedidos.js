@@ -327,96 +327,292 @@ Object.assign(App.logic, {
     // DEVOLVER PEDIDO ENTREGADO
     // ==========================================
     async devolverPedido(pedidoId) {
-        try {
-            const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
-            if (!pedido) throw new Error('Pedido no encontrado');
-            if (String(pedido.estado || '').toLowerCase().trim() !== 'entregado') {
-                App.ui.toast('Solo se puede devolver un pedido entregado.', 'warning');
-                return false;
-            }
-            if (!confirm('¿Registrar la devolución de este pedido?\n\nEl inventario físico regresará a bodega.')) return false;
+    try {
+        const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
 
-            const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
-            const operaciones = [];
-            const cambios = [];
-            const movimientos = [];
-            const ahora = new Date().toISOString();
-            let seq = 0;
+        if (!pedido) {
+            throw new Error("Pedido no encontrado");
+        }
 
-            for (const detalle of detalles) {
-                const producto = (App.state.productos || []).find(p => p.id === detalle.producto_id);
-                if (!producto) continue;
-                const cantidad = parseFloat(detalle.cantidad || 1) || 1;
-                const esReventa = String(producto.categoria || '').toLowerCase() === 'reventa';
+        const estado = String(pedido.estado || "").toLowerCase().trim();
 
-                if (esReventa) {
-                    for (let i = 1; i <= 20; i++) {
-                        const matId = producto[`mat_${i}`];
-                        const cant = (parseFloat(producto[`cant_${i}`] || 0) || 0) * cantidad;
-                        if (!matId || cant <= 0) continue;
-                        const mat = (App.state.inventario || []).find(m => m.id === matId);
-                        if (!mat) continue;
-                        const nuevoReal = (parseFloat(mat.stock_real || 0) || 0) + cant;
-                        operaciones.push({ action: 'actualizar_fila', nombreHoja: 'materiales', idFila: mat.id, datosNuevos: { stock_real: nuevoReal } });
-                        cambios.push({ mat, nuevoReal });
-                        const mov = {
-                            id: `MOV-${Date.now()}-${seq++}`,
-                            fecha: ahora.split('T')[0],
-                            tipo_movimiento: 'devolucion_venta',
-                            origen: 'pedido', origen_id: pedidoId,
-                            ref_tipo: 'material', ref_id: mat.id, material_id: mat.id,
-                            tipo: 'entrada', cantidad: cant,
-                            costo_unitario: parseFloat(mat.costo_unitario || 0) || 0,
-                            total: cant * (parseFloat(mat.costo_unitario || 0) || 0),
-                            motivo: 'Devolución de venta', notas: 'Producto devuelto por cliente'
-                        };
-                        movimientos.push(mov);
-                        operaciones.push({ action: 'guardar_fila', nombreHoja: 'movimientos_inventario', datos: mov });
-                    }
-                } else {
-                    const invPT = (App.state.inventario || []).find(m => String(m.nombre || '').toLowerCase().trim() === String(producto.nombre || '').toLowerCase().trim());
-                    if (!invPT) continue;
-                    const nuevoReal = (parseFloat(invPT.stock_real || 0) || 0) + cantidad;
-                    operaciones.push({ action: 'actualizar_fila', nombreHoja: 'materiales', idFila: invPT.id, datosNuevos: { stock_real: nuevoReal } });
-                    cambios.push({ mat: invPT, nuevoReal });
-                    const mov = {
-                        id: `MOV-${Date.now()}-${seq++}`,
-                        fecha: ahora.split('T')[0],
-                        tipo_movimiento: 'devolucion_venta',
-                        origen: 'pedido', origen_id: pedidoId,
-                        ref_tipo: 'material', ref_id: invPT.id, material_id: invPT.id,
-                        tipo: 'entrada', cantidad,
-                        costo_unitario: parseFloat(invPT.costo_unitario || 0) || 0,
-                        total: cantidad * (parseFloat(invPT.costo_unitario || 0) || 0),
-                        motivo: 'Devolución de producto terminado', notas: 'Producto terminado devuelto por cliente'
-                    };
-                    movimientos.push(mov);
-                    operaciones.push({ action: 'guardar_fila', nombreHoja: 'movimientos_inventario', datos: mov });
-                }
-            }
-
-            operaciones.push({ action: 'actualizar_fila', nombreHoja: 'pedidos', idFila: pedidoId, datosNuevos: { estado: 'devuelto', fecha_devolucion: ahora } });
-            const res = await App.api.fetch('ejecutar_lote', { operaciones });
-            if (res.status !== 'success') throw new Error(res.message || 'No se pudo registrar la devolución');
-
-            pedido.estado = 'devuelto';
-            pedido.fecha_devolucion = ahora;
-            cambios.forEach(c => c.mat.stock_real = c.nuevoReal);
-            if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
-            App.state.movimientos_inventario.push(...movimientos);
-
-            App.ui.toast('Devolución registrada e inventario reintegrado');
-            App.router.handleRoute();
-            App.logic.revisarAlertasStock();
-            return true;
-        } catch (error) {
-            console.error('Error en devolverPedido:', error);
-            App.ui.hideLoader();
-            App.ui.toast(error.message || 'Error al devolver pedido', 'danger');
+        if (estado !== "entregado") {
+            App.ui.toast(
+                "Solo se puede devolver un pedido entregado.",
+                "warning"
+            );
             return false;
         }
-    },
 
+        if (!confirm(
+            "¿Registrar la devolución de este pedido?\n\n" +
+            "Se devolverá al inventario físico exactamente lo que salió al momento de la entrega."
+        )) {
+            return false;
+        }
+
+        App.ui.showLoader("Registrando devolución y reintegrando inventario...");
+
+        const movimientosInventario =
+            App.state.movimientos_inventario || [];
+
+        /*
+         * BUSCAMOS LAS SALIDAS FÍSICAS REALMENTE REGISTRADAS
+         * POR ESTE PEDIDO.
+         *
+         * Esto es mucho más seguro que volver a calcular
+         * la receta del producto.
+         */
+        const salidasVenta = movimientosInventario.filter(m =>
+            String(m.origen_id || "") === String(pedidoId) &&
+            String(m.tipo_movimiento || "").toLowerCase() === "salida_venta"
+        );
+
+        if (salidasVenta.length === 0) {
+            App.ui.hideLoader();
+
+            throw new Error(
+                "No se encontraron movimientos de salida física para este pedido. " +
+                "No se modificó el inventario."
+            );
+        }
+
+        const operaciones = [];
+        const movimientosDevolucion = [];
+        const cambiosMemoria = [];
+
+        const ahora = new Date().toISOString();
+        const fechaMovimiento = ahora.split("T")[0];
+
+        let secuencia = 0;
+
+        /*
+         * REVERTIR CADA SALIDA FÍSICA
+         */
+        for (const salida of salidasVenta) {
+
+            const materialId =
+                salida.material_id ||
+                salida.ref_id;
+
+            if (!materialId) {
+                continue;
+            }
+
+            const material =
+                (App.state.inventario || [])
+                    .find(m => String(m.id) === String(materialId));
+
+            if (!material) {
+                throw new Error(
+                    `No se encontró en inventario el artículo ${materialId}.`
+                );
+            }
+
+            /*
+             * Las salidas se guardan negativas.
+             *
+             * Ejemplo:
+             * salida = -1
+             *
+             * devolución:
+             * stock_real + 1
+             */
+            const cantidadSalida =
+                Math.abs(parseFloat(salida.cantidad || 0) || 0);
+
+            if (cantidadSalida <= 0) {
+                continue;
+            }
+
+            const stockActual =
+                parseFloat(material.stock_real || 0) || 0;
+
+            const nuevoStock =
+                stockActual + cantidadSalida;
+
+            operaciones.push({
+                action: "actualizar_fila",
+                nombreHoja: "materiales",
+                idFila: material.id,
+                datosNuevos: {
+                    stock_real: nuevoStock
+                }
+            });
+
+            cambiosMemoria.push({
+                material,
+                nuevoStock
+            });
+
+            const costoUnitario =
+                parseFloat(material.costo_unitario || 0) || 0;
+
+            const movimientoDevolucion = {
+                id:
+                    `MOV-${Date.now()}-DEV-${secuencia++}`,
+
+                fecha:
+                    fechaMovimiento,
+
+                tipo_movimiento:
+                    "devolucion_venta",
+
+                origen:
+                    "pedido",
+
+                origen_id:
+                    pedidoId,
+
+                ref_tipo:
+                    salida.ref_tipo ||
+                    "material",
+
+                ref_id:
+                    material.id,
+
+                material_id:
+                    material.id,
+
+                tipo:
+                    "entrada",
+
+                cantidad:
+                    cantidadSalida,
+
+                costo_unitario:
+                    costoUnitario,
+
+                total:
+                    cantidadSalida * costoUnitario,
+
+                motivo:
+                    "Devolución de venta",
+
+                notas:
+                    `Reintegro de salida física del pedido ${pedidoId}`
+            };
+
+            movimientosDevolucion.push(
+                movimientoDevolucion
+            );
+
+            operaciones.push({
+                action:
+                    "guardar_fila",
+
+                nombreHoja:
+                    "movimientos_inventario",
+
+                datos:
+                    movimientoDevolucion
+            });
+        }
+
+        if (cambiosMemoria.length === 0) {
+            App.ui.hideLoader();
+
+            throw new Error(
+                "No se encontró inventario físico válido para revertir."
+            );
+        }
+
+        /*
+         * CAMBIAR ESTADO DEL PEDIDO
+         */
+        operaciones.push({
+            action:
+                "actualizar_fila",
+
+            nombreHoja:
+                "pedidos",
+
+            idFila:
+                pedidoId,
+
+            datosNuevos: {
+                estado:
+                    "devuelto",
+
+                fecha_devolucion:
+                    ahora
+            }
+        });
+
+        /*
+         * EJECUTAR TODO EN UNA SOLA OPERACIÓN
+         */
+        const res =
+            await App.api.fetch(
+                "ejecutar_lote",
+                {
+                    operaciones
+                }
+            );
+
+        App.ui.hideLoader();
+
+        if (res.status !== "success") {
+            throw new Error(
+                res.message ||
+                "No se pudo registrar la devolución."
+            );
+        }
+
+        /*
+         * ACTUALIZAR MEMORIA LOCAL
+         */
+        pedido.estado =
+            "devuelto";
+
+        pedido.fecha_devolucion =
+            ahora;
+
+        cambiosMemoria.forEach(c => {
+            c.material.stock_real =
+                c.nuevoStock;
+        });
+
+        if (
+            !Array.isArray(
+                App.state.movimientos_inventario
+            )
+        ) {
+            App.state.movimientos_inventario = [];
+        }
+
+        App.state.movimientos_inventario.push(
+            ...movimientosDevolucion
+        );
+
+        App.ui.toast(
+            "Devolución registrada e inventario físico reintegrado correctamente."
+        );
+
+        App.router.handleRoute();
+
+        App.logic.revisarAlertasStock?.();
+
+        return true;
+
+    } catch (error) {
+
+        console.error(
+            "Error en devolverPedido:",
+            error
+        );
+
+        App.ui.hideLoader();
+
+        App.ui.toast(
+            error.message ||
+            "Error al registrar devolución",
+            "danger"
+        );
+
+        return false;
+    }
+}
     async eliminarPedido(id) {
         try {
             if (!confirm("⚠️ ¿Eliminar pedido por completo?\n\nLos insumos volverán a estar libres en el inventario.")) return false;
