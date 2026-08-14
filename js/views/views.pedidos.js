@@ -2805,7 +2805,86 @@ App.views.modalDetallesPedido = function(pedidoId) {
             ${estado === 'listo para entregar' ? `<button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'cancelarPedido')">🚫 Cancelar</button>` : ''}
             ${estado === 'entregado' ? `<button class="dm-btn dm-btn-warning dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'devolverPedido')">↩️ Devolver</button>` : ''}
             ${saldo <= 0.05 && !['pagado','entregado','cancelado','devuelto'].includes(estado) ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'cerrarPedido')">🔒 Cerrar</button>` : ''}
-            ${!['entregado','pagado','cancelado','devuelto'].includes(estado) ? `<button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'eliminarPedido')">🗑️ Eliminar</button>` : ''}
+
+    ${(() => {
+
+    const detallesPedido =
+        (App.state.pedido_detalle || [])
+            .filter(d => d.pedido_id === pedidoId);
+
+    const esReventa =
+        detallesPedido.length > 0 &&
+        detallesPedido.every(detalle => {
+
+            const producto =
+                (App.state.productos || [])
+                    .find(p =>
+                        p.id === detalle.producto_id
+                    );
+
+            return producto &&
+                String(producto.categoria || '')
+                    .toLowerCase()
+                    .trim() === 'reventa';
+        });
+
+    const ordenesPedido =
+        (App.state.ordenes_produccion || [])
+            .filter(o =>
+                detallesPedido.some(d =>
+                    d.id === o.pedido_detalle_id
+                )
+            );
+
+    const tieneOrdenEnTaller =
+        ordenesPedido.some(o => {
+
+            const estadoTaller =
+                String(o.estado || '')
+                    .toLowerCase()
+                    .trim();
+
+            return (
+                estadoTaller === 'proceso' ||
+                estadoTaller === 'listo'
+            );
+        });
+
+    const puedeEliminar =
+        !['entregado', 'cancelado', 'devuelto']
+            .includes(estado) &&
+
+        (
+            estado === 'nuevo' ||
+            estado === 'pendiente' ||
+
+            (
+                estado === 'listo para entregar' &&
+                esReventa &&
+                !tieneOrdenEnTaller
+            ) ||
+
+            (
+                estado === 'pagado' &&
+                esReventa &&
+                !tieneOrdenEnTaller
+            )
+        );
+
+    return puedeEliminar
+        ? `<button
+                class="dm-btn dm-btn-danger dm-btn-sm"
+                onclick="App.views.accionPedido(
+                    this,
+                    '${pedidoId}',
+                    'eliminarPedido'
+                )">
+                🗑️ Eliminar
+           </button>`
+        : '';
+
+})()}
+            
         </div>
     `;
 
