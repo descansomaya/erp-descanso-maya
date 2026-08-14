@@ -2876,21 +2876,55 @@ App.views._resumenRendimientoVendedores = function () {
         ...vendedores
     ];
 
-    listaVendedores.forEach(v => {
-        const pedVend = pedidos.filter(p => 
-            (p.vendedor_id || '') === v.id && 
-            String(p.estado || '').toLowerCase() !== 'cancelado' &&
+    // SOLO LOS PEDIDOS QUE REALMENTE SON VENTAS
+    // Regla:
+    // - Deben estar ENTREGADOS
+    // - No deben ser STOCK_INTERNO
+    // - Cancelados y devueltos quedan fuera automáticamente
+    const pedidosValidos = pedidos.filter(p => {
+        const estado = String(p.estado || '').toLowerCase().trim();
+
+        return (
+            estado === 'entregado' &&
             p.cliente_id !== 'STOCK_INTERNO'
         );
+    });
 
-        const cotVend = cotizaciones.filter(c => (c.vendedor_id || '') === v.id);
+    listaVendedores.forEach(v => {
 
-        const ventasTotales = pedVend.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
-        const comisionesTotales = pedVend.reduce((acc, p) => acc + (parseFloat(p.comision || 0) || 0), 0);
+        const pedVend = pedidosValidos.filter(p =>
+            String(p.vendedor_id || '') === String(v.id || '')
+        );
+
+        const cotVend = cotizaciones.filter(c =>
+            String(c.vendedor_id || '') === String(v.id || '')
+        );
+
+        const ventasTotales = pedVend.reduce(
+            (acc, p) =>
+                acc +
+                (parseFloat(p.total || 0) || 0),
+            0
+        );
+
+        const comisionesTotales = pedVend.reduce(
+            (acc, p) =>
+                acc +
+                (parseFloat(p.comision || 0) || 0),
+            0
+        );
+
         const pzasVendidas = pedVend.length;
-        const ticketPromedio = pzasVendidas > 0 ? (ventasTotales / pzasVendidas) : 0;
 
-        if (pzasVendidas > 0 || (v.id !== '' && cotVend.length > 0)) {
+        const ticketPromedio =
+            pzasVendidas > 0
+                ? ventasTotales / pzasVendidas
+                : 0;
+
+        if (
+            pzasVendidas > 0 ||
+            (v.id !== '' && cotVend.length > 0)
+        ) {
             reporte.push({
                 id: v.id,
                 nombre: v.nombre,
@@ -2903,9 +2937,12 @@ App.views._resumenRendimientoVendedores = function () {
         }
     });
 
-    return reporte.sort((a, b) => b.ventasTotales - a.ventasTotales);
+    return reporte.sort(
+        (a, b) =>
+            b.ventasTotales -
+            a.ventasTotales
+    );
 };
-
 App.views.modalRendimientoVendedores = function () {
     const reporte = App.views._resumenRendimientoVendedores();
 
