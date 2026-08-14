@@ -30,13 +30,13 @@ Object.assign(App.logic, {
                 return p && p.categoria === "reventa";
             });
 
-            let estadoCalculado = "nuevo";
+         let estadoCalculado = "nuevo";
 
-            if (datosFormulario.cliente_id === "STOCK_INTERNO") {
-                estadoCalculado = "taller"; 
-            } else if (todosReventa) {
-                estadoCalculado = anticipoNum >= totalNum ? "pagado" : "listo para entregar";
-            }
+if (datosFormulario.cliente_id === "STOCK_INTERNO") {
+    estadoCalculado = "taller";
+} else if (todosReventa) {
+    estadoCalculado = "listo para entregar";
+}
 
             const datosPedido = {
                 id: pedidoId,
@@ -223,7 +223,7 @@ Object.assign(App.logic, {
                     // Si el pedido está listo/pagado y es reventa, la salida física ya pudo haberse realizado.
                     // En ese caso no devolvemos físicamente aquí salvo que exista evidencia en movimientos.
                     let devolverReal = false;
-                    if (esReventa && ["listo para entregar", "pagado"].includes(estado)) {
+                    if (esReventa && estado === "listo para entregar") {
                         devolverReal = (App.state.movimientos_inventario || []).some(m =>
                             m.origen_id === pedidoId &&
                             m.tipo_movimiento === 'salida_venta' &&
@@ -738,23 +738,19 @@ Object.assign(App.logic, {
         }
 
         /*
-         * Estados permitidos para eliminación.
-         *
-         * 'nuevo' / 'pendiente':
-         *   fabricación pendiente o pedido normal.
-         *
-         * 'listo para entregar':
-         *   únicamente reventa.
-         *
-         * 'pagado':
-         *   únicamente reventa que todavía no ha sido entregada.
-         */
+ * Estados permitidos para eliminación.
+ *
+ * 'nuevo' / 'pendiente':
+ *   pedido que todavía no ha sido entregado.
+ *
+ * 'listo para entregar':
+ *   únicamente reventa que todavía no ha sido entregada.
+ */
 
-        const estadoPermitido =
-            estado === 'nuevo' ||
-            estado === 'pendiente' ||
-            (estado === 'listo para entregar' && esReventa) ||
-            (estado === 'pagado' && esReventa);
+     const estadoPermitido =
+    estado === 'nuevo' ||
+    estado === 'pendiente' ||
+    (estado === 'listo para entregar' && esReventa);
 
         if (!estadoPermitido) {
             throw new Error(
@@ -1333,7 +1329,13 @@ Object.assign(App.logic, {
             const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
             if (!pedido) throw new Error("Pedido no encontrado");
             const estado = String(pedido.estado || '').toLowerCase().trim();
-            if (!['listo para entregar', 'pagado'].includes(estado)) {
+        if (estado !== 'listo para entregar') {
+    App.ui.toast(
+        "El pedido debe estar listo para entregar antes de entregarlo.",
+        "warning"
+    );
+    return false;
+}
                 App.ui.toast("El pedido debe estar listo para entregar antes de entregarlo.", "warning");
                 return false;
             }
@@ -1405,45 +1407,58 @@ Object.assign(App.logic, {
     },
 
     async cerrarPedidoSiLiquidado(pedidoId) {
-        try {
-            const resumen = this._getResumenFinancieroRegistro(pedidoId);
-            if (!resumen || resumen.esReparacion) {
-                App.ui.toast("Pedido no encontrado", "danger");
-                return;
-            }
+    try {
+        const resumen = this._getResumenFinancieroRegistro(pedidoId);
 
-            if (parseFloat(resumen.saldo || 0) > 0.05) {
-                App.ui.toast(`Aún hay saldo pendiente de $${parseFloat(resumen.saldo).toFixed(2)}`, "warning");
-                return;
-            }
-
-            const pedido = resumen.registro;
-
-            if (!confirm("¿Cerrar este pedido como pagado?")) return;
-
-            App.ui.showLoader("Cerrando pedido...");
-
-            const res = await App.api.fetch("actualizar_fila", {
-                nombreHoja: "pedidos",
-                idFila: pedidoId,
-                datosNuevos: { estado: "pagado" }
-            });
-
-            App.ui.hideLoader();
-
-            if (res.status === "success") {
-                pedido.estado = "pagado";
-                App.ui.toast("Pedido liquidado correctamente");
-                App.router.handleRoute();
-            } else {
-                App.ui.toast(res.message || "Error al cerrar pedido", "danger");
-            }
-        } catch (error) {
-            console.error("Error en cerrarPedidoSiLiquidado:", error);
-            App.ui.hideLoader();
-            App.ui.toast(error.message || "Error al cerrar pedido", "danger");
+        if (!resumen || resumen.esReparacion) {
+            App.ui.toast("Pedido no encontrado", "danger");
+            return;
         }
-    },
+
+        if (parseFloat(resumen.saldo || 0) > 0.05) {
+            App.ui.toast(
+                `Aún hay saldo pendiente de $${parseFloat(resumen.saldo).toFixed(2)}`,
+                "warning"
+            );
+            return;
+        }
+
+        /*
+         * La liquidación financiera NO modifica el estado operativo.
+         *
+         * Un pedido entregado permanece:
+         *
+         *     estado = entregado
+         *
+         * Su condición financiera se determina mediante
+         * _getResumenFinancieroRegistro().
+         */
+
+        App.ui.toast(
+            "El pedido ya se encuentra liquidado. Su estado operativo permanece como entregado.",
+            "success"
+        );
+
+        App.router.handleRoute();
+
+        return true;
+
+    } catch (error) {
+        console.error(
+            "Error en cerrarPedidoSiLiquidado:",
+            error
+        );
+
+        App.ui.hideLoader();
+
+        App.ui.toast(
+            error.message || "Error al validar liquidación",
+            "danger"
+        );
+
+        return false;
+    }
+},
     
     async marcarReparacionLista(reparacionId) {
         try {
@@ -1604,27 +1619,17 @@ Object.assign(App.logic, {
                     return;
                 }
 
-                saldoRealFinal = saldoPendiente - nuevoMonto;
-
-                if (saldoRealFinal <= 0.05 && pedidoObj.estado !== "pagado") {
-                    operaciones.push({
-                        action: "actualizar_fila",
-                        nombreHoja: "pedidos",
-                        idFila: pedidoObj.id,
-                        datosNuevos: { estado: "pagado" }
-                    });
-                    pedidoObj.estado = "pagado";
-                }
+           saldoRealFinal = saldoPendiente - nuevoMonto;
 
                 nuevoAbono = {
-                    id: "ABO-" + Date.now(),
-                    pedido_id: registroId,
-                    cliente_id: datos.cliente_id,
-                    monto: nuevoMonto,
-                    nota: datos.nota || "Abono en caja",
-                    metodo_pago: datos.metodo_pago || "Efectivo",
-                    fecha: new Date().toISOString()
-                };
+    id: "ABO-" + Date.now(),
+    pedido_id: registroId,
+    cliente_id: datos.cliente_id,
+    monto: nuevoMonto,
+    nota: datos.nota || "Abono en caja",
+    metodo_pago: datos.metodo_pago || "Efectivo",
+    fecha: new Date().toISOString()
+};
 
                 operaciones.push({
                     action: "guardar_fila",
