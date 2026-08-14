@@ -613,123 +613,488 @@ Object.assign(App.logic, {
         return false;
     }
 }
-    async eliminarPedido(id) {
-        try {
-            if (!confirm("⚠️ ¿Eliminar pedido por completo?\n\nLos insumos volverán a estar libres en el inventario.")) return false;
+   async eliminarPedido(id) {
+    try {
+        const pedido = (App.state.pedidos || []).find(p => p.id === id);
 
-            App.ui.showLoader("Procesando eliminación...");
+        if (!pedido) {
+            throw new Error("Pedido no encontrado");
+        }
 
-            const pedido = (App.state.pedidos || []).find(p => p.id === id);
-            if (!pedido) {
-                App.ui.hideLoader();
-                throw new Error("Pedido no encontrado");
-            }
+        const estado = String(pedido.estado || '').toLowerCase().trim();
 
-            const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === id);
-            const ordenes = (App.state.ordenes_produccion || []).filter(o =>
-                detalles.some(d => d.id === o.pedido_detalle_id)
+        /*
+         * ==========================================
+         * VALIDACIÓN DEL ESTADO DEL PEDIDO
+         * ==========================================
+         */
+
+        // Nunca se elimina un pedido que ya salió al cliente
+        if (estado === 'entregado') {
+            throw new Error(
+                "Este pedido ya fue entregado. Utiliza la opción 'Devolver'."
+            );
+        }
+
+        // Cancelados y devueltos conservan su histórico
+        if (estado === 'cancelado') {
+            throw new Error(
+                "Este pedido ya está cancelado y no debe eliminarse."
+            );
+        }
+
+        if (estado === 'devuelto') {
+            throw new Error(
+                "Este pedido ya está devuelto y no debe eliminarse."
+            );
+        }
+
+        /*
+         * ==========================================
+         * OBTENER DETALLES Y ÓRDENES DE PRODUCCIÓN
+         * ==========================================
+         */
+
+        const detalles = (App.state.pedido_detalle || [])
+            .filter(d => d.pedido_id === id);
+
+        const ordenes = (App.state.ordenes_produccion || [])
+            .filter(o =>
+                detalles.some(d =>
+                    d.id === o.pedido_detalle_id
+                )
             );
 
-            const ordenEnProcesoOTerminada = ordenes.some(o => {
-                const estadoTaller = String(o.estado || '').toLowerCase().trim();
-                return estadoTaller === 'proceso' || estadoTaller === 'listo';
+        /*
+         * ==========================================
+         * DETERMINAR SI ES REVENTA
+         * ==========================================
+         */
+
+        const esReventa =
+            detalles.length > 0 &&
+            detalles.every(detalle => {
+                const producto =
+                    (App.state.productos || [])
+                        .find(p => p.id === detalle.producto_id);
+
+                return producto &&
+                    String(producto.categoria || '')
+                        .toLowerCase()
+                        .trim() === 'reventa';
             });
 
-            if (ordenEnProcesoOTerminada) {
-                App.ui.hideLoader();
-                throw new Error("⚠️ BLOQUEADO: El taller ya inició o terminó esta orden. Regrésala a 'Pendiente' primero para liberar los hilos.");
-            }
+        /*
+         * ==========================================
+         * VALIDAR TALLER
+         * ==========================================
+         *
+         * Si existe una orden de producción en proceso
+         * o lista, el pedido NO puede eliminarse.
+         *
+         * Taller primero debe regresarlo a Pendiente.
+         */
 
-            const operaciones = [];
+        const ordenEnProcesoOTerminada = ordenes.some(o => {
+            const estadoTaller =
+                String(o.estado || '')
+                    .toLowerCase()
+                    .trim();
 
-            detalles.forEach(detalle => {
-                const producto = (App.state.productos || []).find(p => p.id === detalle.producto_id);
-                const cantidadDetalle = parseInt(detalle.cantidad) || 1;
+            return (
+                estadoTaller === 'proceso' ||
+                estadoTaller === 'listo'
+            );
+        });
 
-                if (!producto) return;
+        if (ordenEnProcesoOTerminada) {
+            throw new Error(
+                "Este pedido está en proceso o terminado en Taller. " +
+                "Primero debes regresarlo a Pendiente desde Taller."
+            );
+        }
 
-                for (let i = 1; i <= 20; i++) {
-                    const matId = producto[`mat_${i}`];
-                    const cantTeorica = (parseFloat(producto[`cant_${i}`] || 0)) * cantidadDetalle;
+        /*
+         * ==========================================
+         * REGLA PARA 'LISTO PARA ENTREGAR'
+         * ==========================================
+         *
+         * Reventa:
+         *   Sí se puede eliminar porque nunca pasó por Taller.
+         *
+         * Fabricación:
+         *   No se puede eliminar. Primero Taller debe
+         *   regresarlo a Pendiente.
+         */
 
-                    if (matId && cantTeorica > 0) {
-                        const mat = (App.state.inventario || []).find(m => m.id === matId);
-                        if (!mat) continue;
+        if (
+            estado === 'listo para entregar' &&
+            !esReventa
+        ) {
+            throw new Error(
+                "Este pedido fue preparado por Taller. " +
+                "Primero debes regresarlo a Pendiente desde Taller."
+            );
+        }
 
-                        if (pedido.estado === "listo para entregar" || pedido.estado === "pagado" || pedido.estado === "entregado") {
-                            const nuevoReal = parseFloat(mat.stock_real || 0) + cantTeorica;
-                            operaciones.push({
-                                action: "actualizar_fila",
-                                nombreHoja: "materiales",
-                                idFila: mat.id,
-                                datosNuevos: { stock_real: nuevoReal }
-                            });
-                            mat.stock_real = nuevoReal;
-                        } else {
-                            const nuevoReservado = Math.max(0, parseFloat(mat.stock_reservado || 0) - cantTeorica);
-                            operaciones.push({
-                                action: "actualizar_fila",
-                                nombreHoja: "materiales",
-                                idFila: mat.id,
-                                datosNuevos: { stock_reservado: nuevoReservado }
-                            });
-                            mat.stock_reservado = nuevoReservado;
-                        }
-                    }
-                }
-            });
+        /*
+         * Estados permitidos para eliminación.
+         *
+         * 'nuevo' / 'pendiente':
+         *   fabricación pendiente o pedido normal.
+         *
+         * 'listo para entregar':
+         *   únicamente reventa.
+         *
+         * 'pagado':
+         *   únicamente reventa que todavía no ha sido entregada.
+         */
 
-            operaciones.push({ action: "eliminar_fila", nombreHoja: "pedidos", idFila: id });
+        const estadoPermitido =
+            estado === 'nuevo' ||
+            estado === 'pendiente' ||
+            (estado === 'listo para entregar' && esReventa) ||
+            (estado === 'pagado' && esReventa);
 
-            detalles.forEach(det => {
-                operaciones.push({ action: "eliminar_fila", nombreHoja: "pedido_detalle", idFila: det.id });
-            });
+        if (!estadoPermitido) {
+            throw new Error(
+                "Este pedido no puede eliminarse en su estado actual."
+            );
+        }
 
-            ordenes.forEach(orden => {
-                operaciones.push({ action: "eliminar_fila", nombreHoja: "ordenes_produccion", idFila: orden.id });
+        /*
+         * ==========================================
+         * CONFIRMACIÓN
+         * ==========================================
+         */
 
-                (App.state.pago_artesanos || [])
-                    .filter(p => p.orden_id === orden.id)
-                    .forEach(pago => {
-                        operaciones.push({ action: "eliminar_fila", nombreHoja: "pago_artesanos", idFila: pago.id });
-                    });
-            });
+        const mensajeReversion = esReventa
+            ? "Se liberará el stock apartado. El stock físico NO cambiará."
+            : "Se liberarán los materiales apartados.";
 
-            (App.state.abonos || [])
-                .filter(a => a.pedido_id === id)
-                .forEach(ab => {
-                    operaciones.push({ action: "eliminar_fila", nombreHoja: "abonos_clientes", idFila: ab.id });
-                });
-
-            const res = await App.api.fetch("ejecutar_lote", { operaciones });
-            App.ui.hideLoader();
-
-            if (res.status === "success") {
-                App.state.pedidos = (App.state.pedidos || []).filter(p => p.id !== id);
-                App.state.pedido_detalle = (App.state.pedido_detalle || []).filter(d => d.pedido_id !== id);
-                App.state.ordenes_produccion = (App.state.ordenes_produccion || []).filter(o =>
-                    !ordenes.some(ord => ord.id === o.id)
-                );
-                App.state.pago_artesanos = (App.state.pago_artesanos || []).filter(p =>
-                    !ordenes.some(ord => ord.id === p.orden_id)
-                );
-                App.state.abonos = (App.state.abonos || []).filter(a => a.pedido_id !== id);
-
-                App.ui.toast("Pedido y órdenes de taller eliminados correctamente.");
-                App.router.handleRoute();
-                App.logic.revisarAlertasStock();
-                return true;
-            } else {
-                throw new Error(res.message || "Error al comunicarse con la base de datos.");
-            }
-        } catch (error) {
-            console.error("Error en eliminarPedido:", error);
-            App.ui.hideLoader();
-            App.ui.toast(error.message || "Error al eliminar pedido", "danger");
+        if (!confirm(
+            "⚠️ ¿Eliminar pedido por completo?\n\n" +
+            mensajeReversion +
+            "\n\nEsta acción no se puede deshacer."
+        )) {
             return false;
         }
-    },
 
+        App.ui.showLoader(
+            "Revirtiendo inventario y eliminando pedido..."
+        );
+
+        const operaciones = [];
+
+        /*
+         * ==========================================
+         * REVERTIR INVENTARIO
+         * ==========================================
+         *
+         * IMPORTANTE:
+         *
+         * Si el pedido todavía NO salió físicamente:
+         *     stock_real NO cambia.
+         *     stock_reservado disminuye.
+         *
+         * Esto aplica especialmente a reventa
+         * en 'listo para entregar'.
+         */
+
+        detalles.forEach(detalle => {
+
+            const producto =
+                (App.state.productos || [])
+                    .find(p => p.id === detalle.producto_id);
+
+            if (!producto) return;
+
+            const cantidadDetalle =
+                parseInt(detalle.cantidad) || 1;
+
+            for (let i = 1; i <= 20; i++) {
+
+                const matId =
+                    producto[`mat_${i}`];
+
+                const cantidadMaterial =
+                    (
+                        parseFloat(
+                            producto[`cant_${i}`] || 0
+                        ) || 0
+                    ) * cantidadDetalle;
+
+                if (!matId || cantidadMaterial <= 0) {
+                    continue;
+                }
+
+                const material =
+                    (App.state.inventario || [])
+                        .find(m => m.id === matId);
+
+                if (!material) {
+                    continue;
+                }
+
+                const reservadoActual =
+                    parseFloat(
+                        material.stock_reservado || 0
+                    ) || 0;
+
+                const nuevoReservado =
+                    Math.max(
+                        0,
+                        reservadoActual - cantidadMaterial
+                    );
+
+                operaciones.push({
+                    action: "actualizar_fila",
+                    nombreHoja: "materiales",
+                    idFila: material.id,
+                    datosNuevos: {
+                        stock_reservado: nuevoReservado
+                    }
+                });
+
+                /*
+                 * Actualización inmediata de memoria
+                 */
+                material.stock_reservado =
+                    nuevoReservado;
+
+                /*
+                 * ==================================
+                 * REGISTRAR LIBERACIÓN DE RESERVA
+                 * ==================================
+                 */
+
+                operaciones.push({
+                    action: "guardar_fila",
+                    nombreHoja: "movimientos_inventario",
+                    datos: {
+                        id:
+                            "MOV-" +
+                            Date.now() +
+                            "-LIB-" +
+                            i +
+                            "-" +
+                            Math.random()
+                                .toString(36)
+                                .slice(2, 7),
+
+                        fecha:
+                            new Date()
+                                .toISOString()
+                                .split("T")[0],
+
+                        tipo_movimiento:
+                            "liberacion_reserva",
+
+                        origen:
+                            "pedido",
+
+                        origen_id:
+                            id,
+
+                        ref_tipo:
+                            "material",
+
+                        ref_id:
+                            material.id,
+
+                        material_id:
+                            material.id,
+
+                        tipo:
+                            "entrada",
+
+                        cantidad:
+                            cantidadMaterial,
+
+                        costo_unitario:
+                            parseFloat(
+                                material.costo_unitario || 0
+                            ) || 0,
+
+                        total:
+                            cantidadMaterial *
+                            (
+                                parseFloat(
+                                    material.costo_unitario || 0
+                                ) || 0
+                            ),
+
+                        motivo:
+                            "Liberación de apartado por eliminación de pedido",
+
+                        notas:
+                            "Pedido eliminado antes de entrega"
+                    }
+                });
+            }
+        });
+
+        /*
+         * ==========================================
+         * ELIMINAR PEDIDO
+         * ==========================================
+         */
+
+        operaciones.push({
+            action: "eliminar_fila",
+            nombreHoja: "pedidos",
+            idFila: id
+        });
+
+        /*
+         * ==========================================
+         * ELIMINAR DETALLES
+         * ==========================================
+         */
+
+        detalles.forEach(detalle => {
+            operaciones.push({
+                action: "eliminar_fila",
+                nombreHoja: "pedido_detalle",
+                idFila: detalle.id
+            });
+        });
+
+        /*
+         * ==========================================
+         * ELIMINAR ÓRDENES DE PRODUCCIÓN
+         * ==========================================
+         *
+         * Normalmente será 0 en una reventa.
+         *
+         * En fabricación pendiente se elimina la orden
+         * que todavía no inició.
+         */
+
+        ordenes.forEach(orden => {
+
+            operaciones.push({
+                action: "eliminar_fila",
+                nombreHoja: "ordenes_produccion",
+                idFila: orden.id
+            });
+
+            (App.state.pago_artesanos || [])
+                .filter(p =>
+                    p.orden_id === orden.id
+                )
+                .forEach(pago => {
+
+                    operaciones.push({
+                        action: "eliminar_fila",
+                        nombreHoja: "pago_artesanos",
+                        idFila: pago.id
+                    });
+
+                });
+        });
+
+        /*
+         * ==========================================
+         * ELIMINAR ABONOS DEL PEDIDO
+         * ==========================================
+         */
+
+        (App.state.abonos || [])
+            .filter(a => a.pedido_id === id)
+            .forEach(abono => {
+
+                operaciones.push({
+                    action: "eliminar_fila",
+                    nombreHoja: "abonos_clientes",
+                    idFila: abono.id
+                });
+
+            });
+
+        /*
+         * ==========================================
+         * EJECUTAR TODO
+         * ==========================================
+         */
+
+        const res =
+            await App.api.fetch(
+                "ejecutar_lote",
+                { operaciones }
+            );
+
+        App.ui.hideLoader();
+
+        if (res.status !== "success") {
+            throw new Error(
+                res.message ||
+                "Error al eliminar el pedido."
+            );
+        }
+
+        /*
+         * ==========================================
+         * ACTUALIZAR MEMORIA LOCAL
+         * ==========================================
+         */
+
+        App.state.pedidos =
+            (App.state.pedidos || [])
+                .filter(p => p.id !== id);
+
+        App.state.pedido_detalle =
+            (App.state.pedido_detalle || [])
+                .filter(d => d.pedido_id !== id);
+
+        App.state.ordenes_produccion =
+            (App.state.ordenes_produccion || [])
+                .filter(o =>
+                    !ordenes.some(
+                        ord => ord.id === o.id
+                    )
+                );
+
+        App.state.pago_artesanos =
+            (App.state.pago_artesanos || [])
+                .filter(p =>
+                    !ordenes.some(
+                        ord =>
+                            ord.id === p.orden_id
+                    )
+                );
+
+        App.state.abonos =
+            (App.state.abonos || [])
+                .filter(a => a.pedido_id !== id);
+
+        App.ui.toast(
+            "Pedido eliminado y apartado liberado correctamente."
+        );
+
+        App.router.handleRoute();
+        App.logic.revisarAlertasStock();
+
+        return true;
+
+    } catch (error) {
+
+        console.error(
+            "Error en eliminarPedido:",
+            error
+        );
+
+        App.ui.hideLoader();
+
+        App.ui.toast(
+            error.message ||
+            "Error al eliminar pedido",
+            "danger"
+        );
+
+        return false;
+    }
+},
     // ==========================================
 // WHATSAPP - PEDIDOS
 // ==========================================
