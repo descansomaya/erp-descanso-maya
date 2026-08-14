@@ -36,7 +36,17 @@ App.views.detalleFinanzas = function(tipo, filtro) {
     
     if (tipo === 'ventas') {
         titulo = 'Ventas totales';
-        const pedidos = (App.state.pedidos || []).filter(p => p.cliente_id !== 'STOCK_INTERNO' && entraEnFiltro(p.fecha_creacion || p.fecha));
+       const pedidos = (App.state.pedidos || []).filter(
+    p => {
+        const estado = String(p.estado || '').toLowerCase().trim();
+
+        return (
+            p.cliente_id !== 'STOCK_INTERNO' &&
+            estado === 'entregado' &&
+            entraEnFiltro(p.fecha_creacion || p.fecha)
+        );
+    }
+);
         const reparaciones = (App.state.reparaciones || []).filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
         
         const totalPedidos = pedidos.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
@@ -132,7 +142,17 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
     const resRep = { ordenes: 0, venta: 0, costo_materiales: 0, mano_obra: 0, costo_real: 0, utilidad: 0, margen: 0 };
 
     // 1. PROCESAR PEDIDOS (TALLER Y REVENTA)
-    const pedidosValidos = pedidos.filter(p => p.cliente_id !== 'STOCK_INTERNO' && entraEnFiltro(p.fecha_creacion || p.fecha));
+    const pedidosValidos = pedidos.filter(
+    p => {
+        const estado = String(p.estado || '').toLowerCase().trim();
+
+        return (
+            p.cliente_id !== 'STOCK_INTERNO' &&
+            estado === 'entregado' &&
+            entraEnFiltro(p.fecha_creacion || p.fecha)
+        );
+    }
+);
 
     pedidosValidos.forEach(p => {
         const cliente = clientes.find(c => c.id === p.cliente_id) || {};
@@ -349,11 +369,26 @@ App.views.finanzas = function () {
     const pedidos = App.state.pedidos || [];
     const reparaciones = App.state.reparaciones || [];
     const gastos = App.state.gastos || [];
-    const abonos = App.state.abonos || [];
+        const abonos = App.state.abonos || [];
     const abonosReparaciones = App.state.abonos_reparaciones || [];
     const compras = App.state.compras || [];
     const pagosArtesanos = App.state.pago_artesanos || [];
     const cotizaciones = App.state.cotizaciones || [];
+    // ==========================================
+    // REGLA FINANCIERA: ¿QUÉ PEDIDOS SON VENTA?
+    // ==========================================
+    // Solo un pedido ENTREGADO cuenta como venta.
+    // Cancelados, devueltos, pendientes, listos para entregar
+    // y stock interno NO cuentan en Finanzas.
+    const pedidoEsVenta = (p) => {
+    const estado = String(p.estado || '').toLowerCase().trim();
+
+    return (
+        p.cliente_id !== 'STOCK_INTERNO' &&
+        estado === 'entregado'
+    );
+};
+    
     const money = (n) => '$' + ((parseFloat(n || 0) || 0).toFixed(2));
     const hoy = new Date();
     const mesActual = hoy.getMonth();
@@ -371,7 +406,10 @@ App.views.finanzas = function () {
         return true;
     };
     
-    const pedidosFil = pedidos.filter(p => p.cliente_id !== 'STOCK_INTERNO' && entraEnFiltro(p.fecha_creacion || p.fecha));
+    const pedidosFil = pedidos.filter(
+    p => pedidoEsVenta(p) &&
+         entraEnFiltro(p.fecha_creacion || p.fecha)
+);
     const reparacionesFil = reparaciones.filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
     const gastosFil = gastos.filter(g => entraEnFiltro(g.fecha));
     const abonosFil = abonos.filter(a => entraEnFiltro(a.fecha));
@@ -381,7 +419,24 @@ App.views.finanzas = function () {
     const cotizacionesFil = cotizaciones.filter(c => entraEnFiltro(c.fecha || c.fecha_creacion));
     
     const totalVentas = pedidosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0) + reparacionesFil.reduce((acc, r) => acc + (parseFloat(r.precio || 0) || 0), 0);
-    const totalCobradoPedidos = abonosFil.reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0) + pedidosFil.reduce((acc, p) => acc + (parseFloat(p.anticipo || 0) || 0), 0);
+
+    const pedidosVentaIds = new Set(
+    pedidosFil.map(p => p.id)
+);
+
+const totalCobradoPedidos =
+    abonosFil
+        .filter(a => pedidosVentaIds.has(a.pedido_id))
+        .reduce(
+            (acc, a) => acc + (parseFloat(a.monto || 0) || 0),
+            0
+        )
+    +
+    pedidosFil.reduce(
+        (acc, p) => acc + (parseFloat(p.anticipo || 0) || 0),
+        0
+    );
+    
     const totalCobradoReparaciones = abonosRepFil.reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0) + reparacionesFil.reduce((acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0), 0);
     const totalCobrado = totalCobradoPedidos + totalCobradoReparaciones;
     const totalCompras = comprasFil.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
