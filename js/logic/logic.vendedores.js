@@ -5,35 +5,12 @@
 window.App = window.App || {};
 App.logic = App.logic || {};
 
-// ==========================================
-// REGLA ÚNICA DE NEGOCIO PARA VENDEDORES
-// ==========================================
-// Una venta solo genera venta/comisión cuando:
-// 1) Es un pedido de cliente real (no STOCK_INTERNO).
-// 2) El pedido ya fue ENTREGADO.
-// 3) No está cancelado ni devuelto.
-//
-// IMPORTANTE: conservar el pedido en histórico NO significa que
-// siga contando como venta. El histórico y los indicadores son cosas distintas.
 App.logic.esVentaValidaVendedor = function (pedido) {
-    if (!pedido) return false;
-
-    const estado = String(pedido.estado || '').toLowerCase().trim();
-    const clienteId = String(pedido.cliente_id || '').toUpperCase().trim();
-
-    return (
-        estado === 'entregado' &&
-        clienteId !== 'STOCK_INTERNO'
-    );
+    return App.logic.estado.esVenta(pedido);
 };
 
-// Alias compartido para que otros módulos puedan usar exactamente
-// la misma regla sin duplicar filtros.
-window.DM = window.DM || {};
-DM.esVentaValida = App.logic.esVentaValidaVendedor;
-
 App.logic.ventasValidasVendedor = function (lista) {
-    return (lista || []).filter(App.logic.esVentaValidaVendedor);
+    return (lista || []).filter(p => App.logic.estado.esVenta(p));
 };
 
 App.logic.obtenerResumenVentasVendedor = function (vendedorId) {
