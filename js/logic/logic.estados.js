@@ -83,15 +83,17 @@ App.logic.estado.esVenta = function(pedido) {
     if (!pedido) return false;
 
     return (
-        !this.esStockInterno(pedido) &&
-        this.estaEntregado(pedido) &&
-        !this.esCancelado(pedido) &&
-        !this.esDevuelto(pedido)
+        !App.logic.estado.esStockInterno(pedido) &&
+        App.logic.estado.estaEntregado(pedido) &&
+        !App.logic.estado.esCancelado(pedido) &&
+        !App.logic.estado.esDevuelto(pedido)
     );
 };
 
 // Alias compatible con la lógica anterior
-App.logic.esVentaValidaVendedor = App.logic.estado.esVenta;
+App.logic.esVentaValidaVendedor = function(pedido) {
+    return App.logic.estado.esVenta(pedido);
+};
 
 // ==========================================
 // COBRANZA
