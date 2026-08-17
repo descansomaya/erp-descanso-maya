@@ -395,8 +395,20 @@ const pedidosFil = pedidos
     const pagosArtesanosFil = pagosArtesanos.filter(p => entraEnFiltro(p.fecha_pago || p.fecha || p.fecha_creacion));
     const cotizacionesFil = cotizaciones.filter(c => entraEnFiltro(c.fecha || c.fecha_creacion));
     
-    const totalVentas = pedidosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0) + reparacionesFil.reduce((acc, r) => acc + (parseFloat(r.precio || 0) || 0), 0);
+const reparacionesVenta = reparacionesFil.filter(
+    r => String(r.estado || '').toLowerCase().trim() === 'entregada'
+);
 
+const totalVentas =
+    pedidosFil.reduce(
+        (acc, p) => acc + (parseFloat(p.total || 0) || 0),
+        0
+    ) +
+    reparacionesVenta.reduce(
+        (acc, r) => acc + (parseFloat(r.precio || 0) || 0),
+        0
+    );
+    
     const pedidosVentaIds = new Set(
     pedidosFil.map(p => p.id)
 );
@@ -414,10 +426,48 @@ const totalCobradoPedidos =
         0
     );
     
-    const totalCobradoReparaciones = abonosRepFil.reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0) + reparacionesFil.reduce((acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0), 0);
+const reparacionesVentaIds = new Set(
+    reparacionesVenta.map(r => String(r.id))
+);
+
+const totalCobradoReparaciones =
+    abonosRepFil
+        .filter(a => reparacionesVentaIds.has(String(a.reparacion_id)))
+        .reduce(
+            (acc, a) => acc + (parseFloat(a.monto || 0) || 0),
+            0
+        )
+    +
+    reparacionesVenta.reduce(
+        (acc, r) =>
+            acc +
+            (parseFloat(
+                r.anticipo_inicial || r.anticipo || 0
+            ) || 0),
+        0
+    );
+    
     const totalCobrado = totalCobradoPedidos + totalCobradoReparaciones;
-    const totalCompras = comprasFil.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
-    const totalNomina = pagosArtesanosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+    const totalCompras = comprasFil.reduce(
+    (acc, c) => {
+        const total = parseFloat(c.total || 0) || 0;
+
+        const pagado =
+            c.monto_pagado !== undefined &&
+            c.monto_pagado !== ''
+                ? parseFloat(c.monto_pagado || 0) || 0
+                : total;
+
+        return acc + pagado;
+    },
+    0
+);
+    const totalNomina = pagosArtesanosFil
+    .filter(p => String(p.estado || '').toLowerCase().trim() === 'pagado')
+    .reduce(
+        (acc, p) => acc + (parseFloat(p.total || 0) || 0),
+        0
+    );
     const totalCotizado = cotizacionesFil.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
     
     const gastosOperativosPuros = gastosFil
@@ -428,7 +478,31 @@ const totalCobradoPedidos =
         .reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
     
     const porCobrarPedidos = pedidosFil.reduce((acc, p) => { const ab = abonos.filter(a => a.pedido_id === p.id).reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0); const saldo = (parseFloat(p.total || 0) || 0) - (parseFloat(p.anticipo || 0) || 0) - ab; return acc + (saldo > 0 ? saldo : 0); }, 0);
-    const porCobrarReparaciones = reparacionesFil.reduce((acc, r) => { const ant = parseFloat(r.anticipo_inicial || 0) || 0; const ab = abonosReparaciones.filter(a => a.reparacion_id === r.id).reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0); const saldo = (parseFloat(r.precio || 0) || 0) - ant - ab; return acc + (saldo > 0 ? saldo : 0); }, 0);
+
+    const porCobrarReparaciones = reparacionesVenta.reduce(
+    (acc, r) => {
+        const ant =
+            parseFloat(r.anticipo_inicial || 0) || 0;
+
+        const ab =
+            abonosReparaciones
+                .filter(a => String(a.reparacion_id) === String(r.id))
+                .reduce(
+                    (s, a) =>
+                        s + (parseFloat(a.monto || 0) || 0),
+                    0
+                );
+
+        const saldo =
+            (parseFloat(r.precio || 0) || 0) -
+            ant -
+            ab;
+
+        return acc + (saldo > 0 ? saldo : 0);
+    },
+    0
+);
+    
     const dineroEnLaCalle = porCobrarPedidos + porCobrarReparaciones;
     const porPagarCompras = comprasFil.reduce((acc, c) => { const total = parseFloat(c.total || 0) || 0; const pagado = c.monto_pagado !== undefined && c.monto_pagado !== '' ? parseFloat(c.monto_pagado || 0) : total; const deuda = total - pagado; return acc + (deuda > 0 ? deuda : 0); }, 0);
     const porPagarNomina = pagosArtesanos.filter(p => String(p.estado || '').toLowerCase() === 'pendiente').reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
@@ -555,89 +629,193 @@ const reportesHTML = `
     <div class="dm-mb-4">
 
         <!-- ========================================== -->
-        <!-- RESUMEN OPERATIVO -->
+        <!-- RESUMEN FINANCIERO EJECUTIVO -->
         <!-- ========================================== -->
 
         <div class="dm-card dm-mb-4">
-            <div class="dm-card-title">Resumen operativo</div>
+
+            <div class="dm-card-title">
+                Resumen financiero
+            </div>
+
             <div class="dm-muted dm-mt-2">
-                Estado actual de los pedidos que requieren seguimiento.
+                Indicadores principales del periodo seleccionado.
             </div>
 
             <div
                 class="dm-mt-3"
                 style="
                     display:grid;
-                    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+                    grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
                     gap:12px;
                 "
             >
 
-                <div class="dm-card" style="background:var(--dm-surface-2);">
-                    <div class="dm-kpi-label">Pedidos activos</div>
-                    <div
-                        id="finanzasPedidosActivos"
-                        class="dm-kpi-value"
-                    >
-                        0
-                    </div>
-                </div>
+                ${kpi(
+                    'Ventas',
+                    money(totalVentas)
+                )}
 
-                <div class="dm-card" style="background:var(--dm-surface-2);">
-                    <div class="dm-kpi-label">Nuevos</div>
-                    <div
-                        id="finanzasPedidosNuevos"
-                        class="dm-kpi-value"
-                    >
-                        0
-                    </div>
-                </div>
+                ${kpi(
+                    'Cobrado',
+                    money(totalCobrado)
+                )}
 
-                <div class="dm-card" style="background:var(--dm-surface-2);">
-                    <div class="dm-kpi-label">En taller</div>
-                    <div
-                        id="finanzasPedidosTaller"
-                        class="dm-kpi-value"
-                    >
-                        0
-                    </div>
-                </div>
+                ${kpi(
+                    'Por cobrar',
+                    money(dineroEnLaCalle)
+                )}
 
-                <div class="dm-card" style="background:var(--dm-surface-2);">
-                    <div class="dm-kpi-label">Listos para entregar</div>
-                    <div
-                        id="finanzasPedidosListos"
-                        class="dm-kpi-value"
-                    >
-                        0
-                    </div>
-                </div>
+                ${kpi(
+                    'Egresos',
+                    money(totalCompras + totalNomina + gastosOperativosPuros)
+                )}
+
+                ${kpi(
+                    'Utilidad operativa',
+                    money(utilidadOperativaReal),
+                    utilidadOperativaReal >= 0 ? 'green' : 'red'
+                )}
+
+                ${kpi(
+                    'Flujo operativo',
+                    money(flujoOperativo),
+                    flujoOperativo >= 0 ? 'green' : 'red'
+                )}
 
             </div>
+
         </div>
 
+
         <!-- ========================================== -->
-        <!-- DISTRIBUCIÓN OPERATIVA -->
+        <!-- RENTABILIDAD POR LÍNEA -->
         <!-- ========================================== -->
 
         <div class="dm-card dm-mb-4">
 
             <div class="dm-card-title">
-                Distribución de pedidos
+                Rentabilidad por línea
             </div>
 
             <div class="dm-muted dm-mt-2">
-                Pedidos activos agrupados por etapa operativa.
+                Comparativo de ventas, utilidad y margen por tipo de operación.
             </div>
 
             <div
                 class="dm-mt-3"
-                style="height:280px;"
+                style="
+                    display:grid;
+                    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+                    gap:12px;
+                "
             >
-                <canvas id="miniGraficaOperacion"></canvas>
+
+                <div class="dm-card">
+                    <div class="dm-kpi-label">
+                        Producción
+                    </div>
+
+                    <div class="dm-muted dm-mt-2">
+                        Venta
+                    </div>
+
+                    <div class="dm-kpi-value">
+                        ${money(resFab.venta)}
+                    </div>
+
+                    <div class="dm-muted dm-mt-2">
+                        Utilidad
+                    </div>
+
+                    <div
+                        class="dm-kpi-value"
+                        style="color:${resFab.utilidad >= 0 ? 'green' : 'red'};"
+                    >
+                        ${money(resFab.utilidad)}
+                    </div>
+
+                    <div class="dm-muted dm-mt-2">
+                        Margen
+                    </div>
+
+                    <div class="dm-kpi-value">
+                        ${((resFab.margen || 0) * 100).toFixed(1)}%
+                    </div>
+                </div>
+
+
+                <div class="dm-card">
+                    <div class="dm-kpi-label">
+                        Reventa
+                    </div>
+
+                    <div class="dm-muted dm-mt-2">
+                        Venta
+                    </div>
+
+                    <div class="dm-kpi-value">
+                        ${money(resRev.venta)}
+                    </div>
+
+                    <div class="dm-muted dm-mt-2">
+                        Utilidad
+                    </div>
+
+                    <div
+                        class="dm-kpi-value"
+                        style="color:${resRev.utilidad >= 0 ? 'green' : 'red'};"
+                    >
+                        ${money(resRev.utilidad)}
+                    </div>
+
+                    <div class="dm-muted dm-mt-2">
+                        Margen
+                    </div>
+
+                    <div class="dm-kpi-value">
+                        ${((resRev.margen || 0) * 100).toFixed(1)}%
+                    </div>
+                </div>
+
+
+                <div class="dm-card">
+                    <div class="dm-kpi-label">
+                        Reparaciones
+                    </div>
+
+                    <div class="dm-muted dm-mt-2">
+                        Venta
+                    </div>
+
+                    <div class="dm-kpi-value">
+                        ${money(resRep.venta)}
+                    </div>
+
+                    <div class="dm-muted dm-mt-2">
+                        Utilidad
+                    </div>
+
+                    <div
+                        class="dm-kpi-value"
+                        style="color:${resRep.utilidad >= 0 ? 'green' : 'red'};"
+                    >
+                        ${money(resRep.utilidad)}
+                    </div>
+
+                    <div class="dm-muted dm-mt-2">
+                        Margen
+                    </div>
+
+                    <div class="dm-kpi-value">
+                        ${((resRep.margen || 0) * 100).toFixed(1)}%
+                    </div>
+                </div>
+
             </div>
 
         </div>
+
 
         <!-- ========================================== -->
         <!-- TENDENCIAS FINANCIERAS -->
@@ -650,7 +828,7 @@ const reportesHTML = `
             </div>
 
             <div class="dm-muted dm-mt-2">
-                Gráficas ejecutivas con datos reales.
+                Evolución de los principales indicadores financieros.
             </div>
 
             <div
@@ -675,7 +853,7 @@ const reportesHTML = `
         </div>
 
     </div>
-`;    
+`;
     const body = tab === 'cobranza' ? cobranzaHTML : tab === 'egresos' ? egresosHTML : tab === 'nomina' ? nominaHTML : tab === 'costos' ? costosHTML : tab === 'reportes' ? reportesHTML : resumenHTML;
     return `<div class="dm-section" style="padding-bottom:90px;"><div class="dm-card dm-mb-4" style="background:linear-gradient(135deg, #ffffff 0%, #faf7ff 100%);"><h3 class="dm-card-title">Finanzas por pestañas PRO</h3><p class="dm-muted dm-mt-2">Vista ejecutiva separada en flujo de caja y rentabilidad de producción.</p></div>${filtrosHTML}${tabsHTML}${body}<div id="finanzas-contenedor"></div></div>`;
 };
