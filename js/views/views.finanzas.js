@@ -536,7 +536,6 @@ const totalCobradoReparaciones =
     const cotPendientes = cotizacionesFil.filter(c => String(c.estado_conversion || '').toLowerCase() !== 'convertida').length;
     const registrosGastos = gastosFil.length;
     
-    setTimeout(() => { if (App.logic && App.logic.renderMiniGraficasDashboard) App.logic.renderMiniGraficasDashboard(); if (App.logic && App.logic.renderGraficasFinanzas) App.logic.renderGraficasFinanzas(filtro); }, 120);
     
     const activeFiltro = (x) => filtro === x ? 'dm-btn-primary' : 'dm-btn-secondary';
     const activeTab = (x) => tab === x ? 'dm-btn-primary' : 'dm-btn-secondary';
