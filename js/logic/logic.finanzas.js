@@ -858,9 +858,9 @@ const ingresosMesAbonos = abonos
         const compras = App.state.compras || [];
         const pagosArtesanos = App.state.pago_artesanos || [];
 
-       const pedidosFil = pedidos
-    .filter(p => App.logic.estado.cuentaComoCobro(p))
-    .filter(p => entraEnFiltro(p.fecha_creacion || p.fecha));
+const ventasPedidosFil = pedidos
+    .filter(p => App.logic.estado.cuentaParaFinanzas(p))
+    .filter(p => entraEnFiltro(p.fecha_entrega || p.fecha_creacion || p.fecha));
         const reparacionesFil = reparaciones.filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
         const abonosFil = abonos.filter(a => entraEnFiltro(a.fecha));
         const abonosRepFil = abonosReparaciones.filter(a => entraEnFiltro(a.fecha));
@@ -868,13 +868,15 @@ const ingresosMesAbonos = abonos
         const comprasFil = compras.filter(c => entraEnFiltro(c.fecha || c.fecha_creacion));
         const pagosArtesanosFil = pagosArtesanos.filter(p => entraEnFiltro(p.fecha_pago || p.fecha || p.fecha_creacion));
 
-        const ventas = ventasPedidosFil.reduce(
+const ventas = ventasPedidosFil.reduce(
     (acc, p) => acc + (parseFloat(p.total || 0) || 0),
     0
-) + reparacionesFil.reduce(
-    (acc, r) => acc + (parseFloat(r.precio || 0) || 0),
-    0
-);
+) + reparacionesFil
+    .filter(r => String(r.estado || '').toLowerCase().trim() === 'entregada')
+    .reduce(
+        (acc, r) => acc + (parseFloat(r.precio || 0) || 0),
+        0
+    );
 
        const abonosPedidosValidosFil = abonosFil.filter(a => {
     const pedido = pedidos.find(p =>
@@ -902,8 +904,21 @@ const ingresos = abonosPedidosValidosFil.reduce(
     0
 );
 
-        const totalCompras = comprasFil.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
-        const totalNomina = pagosArtesanosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+        const totalCompras = comprasFil.reduce((acc, c) => {
+    const total = parseFloat(c.total || 0) || 0;
+
+    const pagado = c.monto_pagado !== undefined && c.monto_pagado !== ''
+        ? parseFloat(c.monto_pagado || 0)
+        : 0;
+
+    return acc + pagado;
+}, 0);
+      const totalNomina = pagosArtesanosFil
+    .filter(p => String(p.estado || '').toLowerCase().trim() === 'pagado')
+    .reduce(
+        (acc, p) => acc + (parseFloat(p.total || 0) || 0),
+        0
+    );
         
         // Filtramos los gastos operativos puros para que no dupliquen lo que ya registras en compras
         const gastosOperativosPuros = gastosFil
