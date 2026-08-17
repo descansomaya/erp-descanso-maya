@@ -590,211 +590,150 @@ Object.assign(App.logic, {
         this.imprimirComprobantePagoMasivo(ids, "Comprobante de pagos seleccionados");
     },
 
-    renderMiniGraficasDashboard() {
-        if (!window.Chart) {
-            console.warn("Chart.js no está cargado para mini gráficas.");
-            return;
-        }
+   renderMiniGraficasDashboard() {
+    if (!window.Chart) {
+        console.warn("Chart.js no está cargado para indicadores operativos.");
+        return;
+    }
 
-        window.miniGraficaIG = window.miniGraficaIG || null;
-        window.miniGraficaCP = window.miniGraficaCP || null;
-        window.miniGraficaOperacion = window.miniGraficaOperacion || null;
+    window.miniGraficaOperacion = window.miniGraficaOperacion || null;
 
-        const hoy = new Date();
-        const mesActual = hoy.getMonth();
-        const anioActual = hoy.getFullYear();
+    const pedidos = App.state.pedidos || [];
 
-        const esMismoMes = (fechaStr) => {
-            if (!fechaStr) return false;
-            const f = new Date(fechaStr);
-            return !isNaN(f.getTime()) && f.getMonth() === mesActual && f.getFullYear() === anioActual;
-        };
+    // ==========================================
+    // FUENTE CENTRAL DE ESTADOS
+    // ==========================================
 
-        const pedidos = App.state.pedidos || [];
-        const reparaciones = App.state.reparaciones || [];
-        const abonos = App.state.abonos || [];
-        const abonosReparaciones = App.state.abonos_reparaciones || [];
-        const gastos = App.state.gastos || [];
-        const pagosArtesanos = App.state.pago_artesanos || [];
-        const compras = App.state.compras || [];
+    const pedidosActivos = App.logic.estado.pedidosActivos(pedidos);
 
-       const pedidosConCobroValido = pedidos.filter(p =>
-    App.logic.estado.cuentaComoCobro(p)
-);
+    const normalizarEstado = (pedido) =>
+        App.logic.estado.normalizar(pedido?.estado);
 
-const ingresosMesPedidos = pedidosConCobroValido
-    .filter(p => esMismoMes(p.fecha_creacion))
-    .reduce(
-        (acc, p) => acc + (parseFloat(p.anticipo || 0) || 0),
-        0
-    );
+    // ==========================================
+    // DISTRIBUCIÓN OPERATIVA
+    // ==========================================
 
-const ingresosMesAbonos = abonos
-    .filter(a => {
-        if (!esMismoMes(a.fecha)) return false;
+    const pedidosNuevos = pedidosActivos.filter(p => {
+        const estado = normalizarEstado(p);
 
-        const pedido = pedidos.find(p =>
-            String(p.id) === String(a.pedido_id)
+        return (
+            estado === "nuevo" ||
+            estado === "pendiente"
         );
+    });
 
-        return pedido &&
-            App.logic.estado.cuentaComoCobro(pedido);
-    })
-    .reduce(
-        (acc, a) => acc + (parseFloat(a.monto || 0) || 0),
-        0
+    const pedidosTaller = pedidosActivos.filter(p =>
+        normalizarEstado(p) === "taller"
     );
 
-        const ingresosMesReparacionesInicial = reparaciones
-            .filter(r => esMismoMes(r.fecha_creacion))
-            .reduce((acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0), 0);
+    const pedidosListos = pedidosActivos.filter(p =>
+        normalizarEstado(p) === "listo para entregar"
+    );
 
-        const ingresosMesAbonosReparacion = abonosReparaciones
-            .filter(a => esMismoMes(a.fecha))
-            .reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0);
+    const pedidosActivosTotal = pedidosActivos.length;
 
-        const ingresosMes = ingresosMesPedidos + ingresosMesAbonos + ingresosMesReparacionesInicial + ingresosMesAbonosReparacion;
+    // ==========================================
+    // ELEMENTOS RESUMEN
+    // ==========================================
 
-        const gastosMes = gastos
-            .filter(g => esMismoMes(g.fecha))
-            .reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
+    const actualizarTexto = (id, valor) => {
+        const elemento = document.getElementById(id);
+        if (elemento) elemento.textContent = valor;
+    };
 
-      const porCobrarPedidos = pedidos
-    .filter(p => App.logic.estado.apareceEnCobranza(p))
-    .reduce((acc, p) => {
-        const resumen = App.logic.estado.getResumenFinanciero(p);
+    actualizarTexto(
+        "finanzasPedidosActivos",
+        pedidosActivosTotal
+    );
 
-        return acc + (resumen ? resumen.saldo : 0);
-    }, 0);
+    actualizarTexto(
+        "finanzasPedidosTaller",
+        pedidosTaller.length
+    );
 
-        const porCobrarReparaciones = reparaciones.reduce((acc, r) => {
-            const anticipoInicial = parseFloat(r.anticipo_inicial || 0) || 0;
-            const totalAbonosRep = abonosReparaciones
-                .filter(a => a.reparacion_id === r.id)
-                .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+    actualizarTexto(
+        "finanzasPedidosListos",
+        pedidosListos.length
+    );
 
-            const saldo = (parseFloat(r.precio || 0) || 0) - anticipoInicial - totalAbonosRep;
-            return acc + (saldo > 0 ? saldo : 0);
-        }, 0);
+    actualizarTexto(
+        "finanzasPedidosNuevos",
+        pedidosNuevos.length
+    );
 
-        const porPagarArtesanos = pagosArtesanos
-            .filter(p => String(p.estado || '').toLowerCase() === 'pendiente')
-            .reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
+    // ==========================================
+    // GRÁFICA DE ESTADO OPERATIVO
+    // ==========================================
 
-        const porPagarCompras = compras.reduce((acc, c) => {
-            const total = parseFloat(c.total || 0) || 0;
-            const pagado = c.monto_pagado !== undefined && c.monto_pagado !== ''
-                ? parseFloat(c.monto_pagado || 0)
-                : total;
-            const deuda = total - pagado;
-            return acc + (deuda > 0 ? deuda : 0);
-        }, 0);
+    const ctxOp = document.getElementById("miniGraficaOperacion");
 
-        const totalPorCobrar = porCobrarPedidos + porCobrarReparaciones;
-        const totalPorPagar = porPagarArtesanos + porPagarCompras;
+    if (!ctxOp) return;
 
-        const pedidosActivos = pedidos.filter(p => {
-            const e = String(p.estado || '').toLowerCase();
-            return e !== 'entregado' && e !== 'pagado';
-        }).length;
+    if (
+        window.miniGraficaOperacion &&
+        typeof window.miniGraficaOperacion.destroy === "function"
+    ) {
+        window.miniGraficaOperacion.destroy();
+    }
 
-        const reparacionesActivas = reparaciones.filter(r => {
-            const e = String(r.estado || '').toLowerCase();
-            return e !== 'entregada';
-        }).length;
+    window.miniGraficaOperacion = new Chart(ctxOp, {
+        type: "bar",
 
-        const listos = pedidos.filter(p => String(p.estado || '').toLowerCase() === 'listo para entregar').length
-            + reparaciones.filter(r => String(r.estado || '').toLowerCase() === 'lista').length;
+        data: {
+            labels: [
+                "Nuevos",
+                "En taller",
+                "Listos para entregar"
+            ],
 
-        const baseOptions = {
+            datasets: [{
+                label: "Pedidos",
+                data: [
+                    pedidosNuevos.length,
+                    pedidosTaller.length,
+                    pedidosListos.length
+                ],
+
+                backgroundColor: [
+                    "#3182CE",
+                    "#805AD5",
+                    "#D69E2E"
+                ],
+
+                borderRadius: 8
+            }]
+        },
+
+        options: {
+            indexAxis: "y",
             responsive: true,
             maintainAspectRatio: false,
+
             plugins: {
-                legend: { display: false }
-            }
-        };
-
-        const ctxIG = document.getElementById("miniGraficaIngresosGastos");
-        if (ctxIG) {
-            if (window.miniGraficaIG && typeof window.miniGraficaIG.destroy === 'function') {
-                window.miniGraficaIG.destroy();
-            }
-            window.miniGraficaIG = new Chart(ctxIG, {
-                type: "bar",
-                data: {
-                    labels: ["Ingresos", "Gastos"],
-                    datasets: [{
-                        data: [ingresosMes, gastosMes],
-                        backgroundColor: ["#38A169", "#E53E3E"],
-                        borderRadius: 8
-                    }]
+                legend: {
+                    display: false
                 },
-                options: {
-                    ...baseOptions,
-                    scales: {
-                        y: { beginAtZero: true }
-                    }
-                }
-            });
-        }
 
-        const ctxCP = document.getElementById("miniGraficaCobrarPagar");
-        if (ctxCP) {
-            if (window.miniGraficaCP && typeof window.miniGraficaCP.destroy === 'function') {
-                window.miniGraficaCP.destroy();
-            }
-            window.miniGraficaCP = new Chart(ctxCP, {
-                type: "doughnut",
-                data: {
-                    labels: ["Por cobrar", "Por pagar"],
-                    datasets: [{
-                        data: [totalPorCobrar, totalPorPagar],
-                        backgroundColor: ["#D69E2E", "#805AD5"]
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: "bottom",
-                            labels: { boxWidth: 12, font: { size: 11 } }
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return ` ${context.raw} pedido(s)`;
                         }
                     }
                 }
-            });
-        }
+            },
 
-        const ctxOp = document.getElementById("miniGraficaOperacion");
-        if (ctxOp) {
-            if (window.miniGraficaOperacion && typeof window.miniGraficaOperacion.destroy === 'function') {
-                window.miniGraficaOperacion.destroy();
-            }
-            window.miniGraficaOperacion = new Chart(ctxOp, {
-                type: "bar",
-                data: {
-                    labels: ["Pedidos", "Reparaciones", "Listos"],
-                    datasets: [{
-                        data: [pedidosActivos, reparacionesActivas, listos],
-                        backgroundColor: ["#3182CE", "#805AD5", "#D69E2E"],
-                        borderRadius: 8
-                    }]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        x: { beginAtZero: true }
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    ticks: {
+                        precision: 0
                     }
                 }
-            });
+            }
         }
-    },
+    );
+},
 
     renderGraficasFinanzas(filtro) {
         if (!window.Chart) {
