@@ -1328,18 +1328,18 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
         try {
             const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
             if (!pedido) throw new Error("Pedido no encontrado");
-            const estado = String(pedido.estado || '').toLowerCase().trim();
-        if (estado !== 'listo para entregar') {
+          const estado = String(pedido.estado || '').toLowerCase().trim();
+
+if (estado !== 'listo para entregar') {
     App.ui.toast(
         "El pedido debe estar listo para entregar antes de entregarlo.",
         "warning"
     );
     return false;
 }
-                App.ui.toast("El pedido debe estar listo para entregar antes de entregarlo.", "warning");
-                return false;
-            }
-            if (!confirm("¿Marcar este pedido como entregado?")) return false;
+
+if (!confirm("¿Marcar este pedido como entregado?")) return false;
+         
 
             App.ui.showLoader("Registrando entrega...");
             const detalles = (App.state.pedido_detalle || []).filter(d => d.pedido_id === pedidoId);
