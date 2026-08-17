@@ -896,16 +896,56 @@ const htmlFinanzas = `
 // Se ejecutan después de insertar los canvas
 // ==========================================
 
+// ==========================================
+// GRÁFICAS FINANCIERAS
+// Esperar a que el HTML ya esté montado en el DOM
+// ==========================================
+
 if (tab === 'reportes') {
-    setTimeout(() => {
+
+    const renderFinanzasCuandoEsteListo = (intento = 0) => {
+
+        const canvasIngresos = document.getElementById(
+            'graficaFinanzasIngresosGastos'
+        );
+
+        const canvasFlujo = document.getElementById(
+            'graficaFinanzasFlujo'
+        );
+
+        // Si los canvas todavía no existen, esperamos un poco más.
+        if (!canvasIngresos && !canvasFlujo) {
+
+            if (intento < 10) {
+                setTimeout(() => {
+                    renderFinanzasCuandoEsteListo(intento + 1);
+                }, 100);
+            }
+
+            return;
+        }
+
+        // Si ya existen, renderizamos.
         if (
             App.logic &&
             typeof App.logic.renderGraficasFinanzas === 'function'
         ) {
-            App.logic.renderGraficasFinanzas(filtro);
-        }
-    }, 150);
-}
 
+            try {
+                App.logic.renderGraficasFinanzas(filtro);
+            } catch (error) {
+                console.error(
+                    'Error al renderizar gráficas financieras:',
+                    error
+                );
+            }
+        }
+    };
+
+    // Primer intento después de que termine el ciclo actual.
+    setTimeout(() => {
+        renderFinanzasCuandoEsteListo();
+    }, 100);
+}
 return htmlFinanzas;
 };
