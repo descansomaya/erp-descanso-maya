@@ -618,13 +618,32 @@ Object.assign(App.logic, {
         const pagosArtesanos = App.state.pago_artesanos || [];
         const compras = App.state.compras || [];
 
-        const ingresosMesPedidos = pedidos
-            .filter(p => esMismoMes(p.fecha_creacion))
-            .reduce((acc, p) => acc + (parseFloat(p.anticipo || 0) || 0), 0);
+       const pedidosConCobroValido = pedidos.filter(p =>
+    App.logic.estado.cuentaComoCobro(p)
+);
 
-        const ingresosMesAbonos = abonos
-            .filter(a => esMismoMes(a.fecha))
-            .reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0);
+const ingresosMesPedidos = pedidosConCobroValido
+    .filter(p => esMismoMes(p.fecha_creacion))
+    .reduce(
+        (acc, p) => acc + (parseFloat(p.anticipo || 0) || 0),
+        0
+    );
+
+const ingresosMesAbonos = abonos
+    .filter(a => {
+        if (!esMismoMes(a.fecha)) return false;
+
+        const pedido = pedidos.find(p =>
+            String(p.id) === String(a.pedido_id)
+        );
+
+        return pedido &&
+            App.logic.estado.cuentaComoCobro(pedido);
+    })
+    .reduce(
+        (acc, a) => acc + (parseFloat(a.monto || 0) || 0),
+        0
+    );
 
         const ingresosMesReparacionesInicial = reparaciones
             .filter(r => esMismoMes(r.fecha_creacion))
@@ -640,14 +659,13 @@ Object.assign(App.logic, {
             .filter(g => esMismoMes(g.fecha))
             .reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
 
-        const porCobrarPedidos = pedidos.reduce((acc, p) => {
-            const totalAbonos = abonos
-                .filter(a => a.pedido_id === p.id)
-                .reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0);
+      const porCobrarPedidos = pedidos
+    .filter(p => App.logic.estado.apareceEnCobranza(p))
+    .reduce((acc, p) => {
+        const resumen = App.logic.estado.getResumenFinanciero(p);
 
-            const saldo = (parseFloat(p.total || 0) || 0) - (parseFloat(p.anticipo || 0) || 0) - totalAbonos;
-            return acc + (saldo > 0 ? saldo : 0);
-        }, 0);
+        return acc + (resumen ? resumen.saldo : 0);
+    }, 0);
 
         const porCobrarReparaciones = reparaciones.reduce((acc, r) => {
             const anticipoInicial = parseFloat(r.anticipo_inicial || 0) || 0;
@@ -840,7 +858,9 @@ Object.assign(App.logic, {
         const compras = App.state.compras || [];
         const pagosArtesanos = App.state.pago_artesanos || [];
 
-        const pedidosFil = pedidos.filter(p => entraEnFiltro(p.fecha_creacion || p.fecha));
+       const pedidosFil = pedidos
+    .filter(p => App.logic.estado.cuentaComoCobro(p))
+    .filter(p => entraEnFiltro(p.fecha_creacion || p.fecha));
         const reparacionesFil = reparaciones.filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
         const abonosFil = abonos.filter(a => entraEnFiltro(a.fecha));
         const abonosRepFil = abonosReparaciones.filter(a => entraEnFiltro(a.fecha));
@@ -848,13 +868,39 @@ Object.assign(App.logic, {
         const comprasFil = compras.filter(c => entraEnFiltro(c.fecha || c.fecha_creacion));
         const pagosArtesanosFil = pagosArtesanos.filter(p => entraEnFiltro(p.fecha_pago || p.fecha || p.fecha_creacion));
 
-        const ventas = pedidosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0)
-            + reparacionesFil.reduce((acc, r) => acc + (parseFloat(r.precio || 0) || 0), 0);
+        const ventas = ventasPedidosFil.reduce(
+    (acc, p) => acc + (parseFloat(p.total || 0) || 0),
+    0
+) + reparacionesFil.reduce(
+    (acc, r) => acc + (parseFloat(r.precio || 0) || 0),
+    0
+);
 
-        const ingresos = abonosFil.reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0)
-            + pedidosFil.reduce((acc, p) => acc + (parseFloat(p.anticipo || 0) || 0), 0)
-            + abonosRepFil.reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0)
-            + reparacionesFil.reduce((acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0), 0);
+       const abonosPedidosValidosFil = abonosFil.filter(a => {
+    const pedido = pedidos.find(p =>
+        String(p.id) === String(a.pedido_id)
+    );
+
+    return pedido &&
+        App.logic.estado.cuentaComoCobro(pedido);
+});
+
+const ingresos = abonosPedidosValidosFil.reduce(
+    (acc, a) => acc + (parseFloat(a.monto || 0) || 0),
+    0
+)
++ pedidosFil.reduce(
+    (acc, p) => acc + (parseFloat(p.anticipo || 0) || 0),
+    0
+)
++ abonosRepFil.reduce(
+    (acc, a) => acc + (parseFloat(a.monto || 0) || 0),
+    0
+)
++ reparacionesFil.reduce(
+    (acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0),
+    0
+);
 
         const totalCompras = comprasFil.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
         const totalNomina = pagosArtesanosFil.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
