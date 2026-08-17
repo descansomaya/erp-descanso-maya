@@ -858,15 +858,25 @@ const ingresosMesAbonos = abonos
         const compras = App.state.compras || [];
         const pagosArtesanos = App.state.pago_artesanos || [];
 
+const pedidosFil = pedidos
+    .filter(p => App.logic.estado.cuentaComoCobro(p))
+    .filter(p => entraEnFiltro(p.fecha_creacion || p.fecha));
+
 const ventasPedidosFil = pedidos
     .filter(p => App.logic.estado.cuentaParaFinanzas(p))
     .filter(p => entraEnFiltro(p.fecha_entrega || p.fecha_creacion || p.fecha));
-        const reparacionesFil = reparaciones.filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
-        const abonosFil = abonos.filter(a => entraEnFiltro(a.fecha));
-        const abonosRepFil = abonosReparaciones.filter(a => entraEnFiltro(a.fecha));
-        const gastosFil = gastos.filter(g => entraEnFiltro(g.fecha));
-        const comprasFil = compras.filter(c => entraEnFiltro(c.fecha || c.fecha_creacion));
-        const pagosArtesanosFil = pagosArtesanos.filter(p => entraEnFiltro(p.fecha_pago || p.fecha || p.fecha_creacion));
+
+const reparacionesFil = reparaciones.filter(
+    r => entraEnFiltro(r.fecha_creacion || r.fecha)
+);
+
+const abonosFil = abonos.filter(a => entraEnFiltro(a.fecha));
+const abonosRepFil = abonosReparaciones.filter(a => entraEnFiltro(a.fecha));
+const gastosFil = gastos.filter(g => entraEnFiltro(g.fecha));
+const comprasFil = compras.filter(c => entraEnFiltro(c.fecha || c.fecha_creacion));
+const pagosArtesanosFil = pagosArtesanos.filter(
+    p => entraEnFiltro(p.fecha_pago || p.fecha || p.fecha_creacion)
+);
 
 const ventas = ventasPedidosFil.reduce(
     (acc, p) => acc + (parseFloat(p.total || 0) || 0),
