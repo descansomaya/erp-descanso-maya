@@ -34,19 +34,12 @@ App.views.detalleFinanzas = function(tipo, filtro) {
     let resumen = '';
     let tabla = '';
     
-    if (tipo === 'ventas') {
-        titulo = 'Ventas totales';
-       const pedidos = (App.state.pedidos || []).filter(
-    p => {
-        const estado = String(p.estado || '').toLowerCase().trim();
+   if (tipo === 'ventas') {
+    titulo = 'Ventas totales';
 
-        return (
-            p.cliente_id !== 'STOCK_INTERNO' &&
-            estado === 'entregado' &&
-            entraEnFiltro(p.fecha_creacion || p.fecha)
-        );
-    }
-);
+    const pedidos = (App.state.pedidos || [])
+        .filter(p => App.logic.estado.cuentaParaFinanzas(p))
+        .filter(p => entraEnFiltro(p.fecha_creacion || p.fecha));
         const reparaciones = (App.state.reparaciones || []).filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
         
         const totalPedidos = pedidos.reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
@@ -142,17 +135,9 @@ App.views.calcularCostoRealHamacas = function(filtro = App.state.finanzasFiltro 
     const resRep = { ordenes: 0, venta: 0, costo_materiales: 0, mano_obra: 0, costo_real: 0, utilidad: 0, margen: 0 };
 
     // 1. PROCESAR PEDIDOS (TALLER Y REVENTA)
-    const pedidosValidos = pedidos.filter(
-    p => {
-        const estado = String(p.estado || '').toLowerCase().trim();
-
-        return (
-            p.cliente_id !== 'STOCK_INTERNO' &&
-            estado === 'entregado' &&
-            entraEnFiltro(p.fecha_creacion || p.fecha)
-        );
-    }
-);
+    const pedidosValidos = pedidos
+    .filter(p => App.logic.estado.cuentaParaFinanzas(p))
+    .filter(p => entraEnFiltro(p.fecha_creacion || p.fecha));
 
     pedidosValidos.forEach(p => {
         const cliente = clientes.find(c => c.id === p.cliente_id) || {};
@@ -380,14 +365,7 @@ App.views.finanzas = function () {
     // Solo un pedido ENTREGADO cuenta como venta.
     // Cancelados, devueltos, pendientes, listos para entregar
     // y stock interno NO cuentan en Finanzas.
-    const pedidoEsVenta = (p) => {
-    const estado = String(p.estado || '').toLowerCase().trim();
-
-    return (
-        p.cliente_id !== 'STOCK_INTERNO' &&
-        estado === 'entregado'
-    );
-};
+    
     
     const money = (n) => '$' + ((parseFloat(n || 0) || 0).toFixed(2));
     const hoy = new Date();
@@ -406,10 +384,9 @@ App.views.finanzas = function () {
         return true;
     };
     
-    const pedidosFil = pedidos.filter(
-    p => pedidoEsVenta(p) &&
-         entraEnFiltro(p.fecha_creacion || p.fecha)
-);
+const pedidosFil = pedidos
+    .filter(p => App.logic.estado.cuentaParaFinanzas(p))
+    .filter(p => entraEnFiltro(p.fecha_creacion || p.fecha));
     const reparacionesFil = reparaciones.filter(r => entraEnFiltro(r.fecha_creacion || r.fecha));
     const gastosFil = gastos.filter(g => entraEnFiltro(g.fecha));
     const abonosFil = abonos.filter(a => entraEnFiltro(a.fecha));
@@ -476,7 +453,11 @@ const totalCobradoPedidos =
     
     const salud = flujoOperativo >= 0 && saldoProyectado >= 0 ? 'Sana' : (flujoOperativo < 0 && saldoProyectado < 0 ? 'Crítica' : 'En observación');
     const saludColor = salud === 'Sana' ? 'green' : (salud === 'Crítica' ? 'red' : '#B7791F');
-    const pedidosPendientes = pedidosFil.filter(p => !['pagado', 'entregado'].includes(String(p.estado || '').toLowerCase())).length;
+
+    const pedidosPendientes = pedidos.filter(p =>
+    App.logic.estado.estaActivo(p)
+).length;
+    
     const reparacionesPendientes = reparacionesFil.filter(r => !['entregada'].includes(String(r.estado || '').toLowerCase())).length;
     const cotPendientes = cotizacionesFil.filter(c => String(c.estado_conversion || '').toLowerCase() !== 'convertida').length;
     const registrosGastos = gastosFil.length;
@@ -570,8 +551,131 @@ const totalCobradoPedidos =
             <button class="dm-btn dm-btn-primary" onclick="App.views.detalleFinanzas('costo_real', '${filtro}')">Ver costo detallado por artículo</button>
         </div>`;
 
-    const reportesHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;" class="dm-mb-4"><div class="dm-card"><div class="dm-card-title">Vista rápida</div><div class="dm-muted dm-mt-2">Mini gráficas del estado del negocio.</div><div class="dm-mt-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;"><div style="height:220px;"><canvas id="miniGraficaIngresosGastos"></canvas></div><div style="height:220px;"><canvas id="miniGraficaCobrarPagar"></canvas></div><div style="height:220px;"><canvas id="miniGraficaOperacion"></canvas></div></div></div><div class="dm-card"><div class="dm-card-title">Tendencias financieras</div><div class="dm-muted dm-mt-2">Gráficas ejecutivas con datos reales.</div><div class="dm-mt-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;"><div style="height:240px;"><canvas id="graficaFinanzasIngresosGastos"></canvas></div><div style="height:240px;"><canvas id="graficaFinanzasFlujo"></canvas></div></div></div></div>`;
-    
+const reportesHTML = `
+    <div class="dm-mb-4">
+
+        <!-- ========================================== -->
+        <!-- RESUMEN OPERATIVO -->
+        <!-- ========================================== -->
+
+        <div class="dm-card dm-mb-4">
+            <div class="dm-card-title">Resumen operativo</div>
+            <div class="dm-muted dm-mt-2">
+                Estado actual de los pedidos que requieren seguimiento.
+            </div>
+
+            <div
+                class="dm-mt-3"
+                style="
+                    display:grid;
+                    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+                    gap:12px;
+                "
+            >
+
+                <div class="dm-card" style="background:var(--dm-surface-2);">
+                    <div class="dm-kpi-label">Pedidos activos</div>
+                    <div
+                        id="finanzasPedidosActivos"
+                        class="dm-kpi-value"
+                    >
+                        0
+                    </div>
+                </div>
+
+                <div class="dm-card" style="background:var(--dm-surface-2);">
+                    <div class="dm-kpi-label">Nuevos</div>
+                    <div
+                        id="finanzasPedidosNuevos"
+                        class="dm-kpi-value"
+                    >
+                        0
+                    </div>
+                </div>
+
+                <div class="dm-card" style="background:var(--dm-surface-2);">
+                    <div class="dm-kpi-label">En taller</div>
+                    <div
+                        id="finanzasPedidosTaller"
+                        class="dm-kpi-value"
+                    >
+                        0
+                    </div>
+                </div>
+
+                <div class="dm-card" style="background:var(--dm-surface-2);">
+                    <div class="dm-kpi-label">Listos para entregar</div>
+                    <div
+                        id="finanzasPedidosListos"
+                        class="dm-kpi-value"
+                    >
+                        0
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- DISTRIBUCIÓN OPERATIVA -->
+        <!-- ========================================== -->
+
+        <div class="dm-card dm-mb-4">
+
+            <div class="dm-card-title">
+                Distribución de pedidos
+            </div>
+
+            <div class="dm-muted dm-mt-2">
+                Pedidos activos agrupados por etapa operativa.
+            </div>
+
+            <div
+                class="dm-mt-3"
+                style="height:280px;"
+            >
+                <canvas id="miniGraficaOperacion"></canvas>
+            </div>
+
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TENDENCIAS FINANCIERAS -->
+        <!-- ========================================== -->
+
+        <div class="dm-card">
+
+            <div class="dm-card-title">
+                Tendencias financieras
+            </div>
+
+            <div class="dm-muted dm-mt-2">
+                Gráficas ejecutivas con datos reales.
+            </div>
+
+            <div
+                class="dm-mt-3"
+                style="
+                    display:grid;
+                    grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+                    gap:12px;
+                "
+            >
+
+                <div style="height:240px;">
+                    <canvas id="graficaFinanzasIngresosGastos"></canvas>
+                </div>
+
+                <div style="height:240px;">
+                    <canvas id="graficaFinanzasFlujo"></canvas>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+`;    
     const body = tab === 'cobranza' ? cobranzaHTML : tab === 'egresos' ? egresosHTML : tab === 'nomina' ? nominaHTML : tab === 'costos' ? costosHTML : tab === 'reportes' ? reportesHTML : resumenHTML;
     return `<div class="dm-section" style="padding-bottom:90px;"><div class="dm-card dm-mb-4" style="background:linear-gradient(135deg, #ffffff 0%, #faf7ff 100%);"><h3 class="dm-card-title">Finanzas por pestañas PRO</h3><p class="dm-muted dm-mt-2">Vista ejecutiva separada en flujo de caja y rentabilidad de producción.</p></div>${filtrosHTML}${tabsHTML}${body}<div id="finanzas-contenedor"></div></div>`;
 };
