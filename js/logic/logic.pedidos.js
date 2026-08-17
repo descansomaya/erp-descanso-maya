@@ -612,7 +612,7 @@ if (datosFormulario.cliente_id === "STOCK_INTERNO") {
 
         return false;
     }
-}
+},
    async eliminarPedido(id) {
     try {
         const pedido = (App.state.pedidos || []).find(p => p.id === id);
