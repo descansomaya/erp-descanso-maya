@@ -66,7 +66,11 @@ App.logic.estado.estaEntregado = function(pedido) {
 };
 
 App.logic.estado.estaActivo = function(pedido) {
-    const estado = this.normalizar(pedido?.estado);
+    if (!pedido) return false;
+
+    if (this.esStockInterno(pedido)) return false;
+
+    const estado = this.normalizar(pedido.estado);
 
     return ![
         DM_ESTADOS_PEDIDO.ENTREGADO,
@@ -264,6 +268,57 @@ App.logic.estado.ventasValidas = function(lista) {
 
 App.logic.estado.pedidosActivos = function(lista) {
     return (lista || []).filter(p => this.estaActivo(p));
+};
+
+// ==========================================
+// RESUMEN OPERATIVO
+// ==========================================
+
+App.logic.estado.pedidosPorEstado = function(lista, estado) {
+    const estadoNormalizado = this.normalizar(estado);
+
+    return (lista || []).filter(p =>
+        this.estaActivo(p) &&
+        this.normalizar(p?.estado) === estadoNormalizado
+    );
+};
+
+App.logic.estado.pedidosNuevos = function(lista) {
+    return this.pedidosPorEstado(
+        lista,
+        DM_ESTADOS_PEDIDO.NUEVO
+    );
+};
+
+App.logic.estado.pedidosEnTaller = function(lista) {
+    return this.pedidosPorEstado(
+        lista,
+        DM_ESTADOS_PEDIDO.TALLER
+    );
+};
+
+App.logic.estado.pedidosListos = function(lista) {
+    return this.pedidosPorEstado(
+        lista,
+        DM_ESTADOS_PEDIDO.LISTO
+    );
+};
+
+App.logic.estado.getResumenOperativo = function(lista) {
+    const pedidos = lista || [];
+
+    const activos = this.pedidosActivos(pedidos);
+
+    const nuevos = this.pedidosNuevos(pedidos);
+    const taller = this.pedidosEnTaller(pedidos);
+    const listos = this.pedidosListos(pedidos);
+
+    return {
+        activos: activos.length,
+        nuevos: nuevos.length,
+        taller: taller.length,
+        listos: listos.length
+    };
 };
 
 App.logic.estado.pedidosEnCobranza = function(lista) {
