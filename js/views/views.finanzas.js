@@ -854,6 +854,59 @@ const reportesHTML = `
 
     </div>
 `;
-    const body = tab === 'cobranza' ? cobranzaHTML : tab === 'egresos' ? egresosHTML : tab === 'nomina' ? nominaHTML : tab === 'costos' ? costosHTML : tab === 'reportes' ? reportesHTML : resumenHTML;
-    return `<div class="dm-section" style="padding-bottom:90px;"><div class="dm-card dm-mb-4" style="background:linear-gradient(135deg, #ffffff 0%, #faf7ff 100%);"><h3 class="dm-card-title">Finanzas por pestañas PRO</h3><p class="dm-muted dm-mt-2">Vista ejecutiva separada en flujo de caja y rentabilidad de producción.</p></div>${filtrosHTML}${tabsHTML}${body}<div id="finanzas-contenedor"></div></div>`;
+  const body =
+    tab === 'cobranza'
+        ? cobranzaHTML
+        : tab === 'egresos'
+            ? egresosHTML
+            : tab === 'nomina'
+                ? nominaHTML
+                : tab === 'costos'
+                    ? costosHTML
+                    : tab === 'reportes'
+                        ? reportesHTML
+                        : resumenHTML;
+
+const htmlFinanzas = `
+    <div class="dm-section" style="padding-bottom:90px;">
+        <div
+            class="dm-card dm-mb-4"
+            style="background:linear-gradient(135deg, #ffffff 0%, #faf7ff 100%);"
+        >
+            <h3 class="dm-card-title">
+                Finanzas por pestañas PRO
+            </h3>
+
+            <p class="dm-muted dm-mt-2">
+                Vista ejecutiva separada en flujo de caja y rentabilidad de producción.
+            </p>
+        </div>
+
+        ${filtrosHTML}
+
+        ${tabsHTML}
+
+        ${body}
+
+        <div id="finanzas-contenedor"></div>
+    </div>
+`;
+
+// ==========================================
+// GRÁFICAS FINANCIERAS
+// Se ejecutan después de insertar los canvas
+// ==========================================
+
+if (tab === 'reportes') {
+    setTimeout(() => {
+        if (
+            App.logic &&
+            typeof App.logic.renderGraficasFinanzas === 'function'
+        ) {
+            App.logic.renderGraficasFinanzas(filtro);
+        }
+    }, 150);
+}
+
+return htmlFinanzas;
 };
