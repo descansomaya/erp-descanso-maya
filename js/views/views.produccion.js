@@ -120,7 +120,7 @@ App.views.runProduccionAction = async function (button, lockKey, actionFn, optio
 };
 
 App.views.descontarMaterialesProduccion = async function(ordenId) {
-    return await App.logic.produccion.descontarMaterialesProduccion(ordenId);
+    return await App.logic.descontarMaterialesProduccion(ordenId);
 };
 
 App.views.accionProduccion = function (button, ordenId, actionName) {
