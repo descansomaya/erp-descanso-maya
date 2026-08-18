@@ -25,14 +25,19 @@ Object.assign(App.logic, {
                     precio_unitario: totalNum / (parseInt(datosFormulario.cantidad) || 1)
                 }];
 
-            const todosReventa = listaProductos.every(item => {
-                const p = (App.state.productos || []).find(prod => prod.id === item.producto_id);
-                return p && p.categoria === "reventa";
-            });
+        const requiereTaller =
+    App.logic.estado.requiereTallerPorProductos(listaProductos);
 
-         let estadoCalculado = "nuevo";
+const todosReventa = listaProductos.every(item => {
+    const p = (App.state.productos || [])
+        .find(prod => String(prod.id) === String(item.producto_id));
 
-if (datosFormulario.cliente_id === "STOCK_INTERNO") {
+    return App.logic.estado.esProductoReventa(p);
+});
+
+let estadoCalculado = "nuevo";
+
+if (requiereTaller) {
     estadoCalculado = "taller";
 } else if (todosReventa) {
     estadoCalculado = "listo para entregar";
