@@ -36,26 +36,11 @@ App.views.inicio = function() {
 // Cancelados y devueltos quedan fuera.
 // ==========================================
 
-const esVentaValidaDashboard = (p) => {
-    if (!p) return false;
 
-    const estado =
-        String(p.estado || '')
-            .toLowerCase()
-            .trim();
 
-    const clienteId =
-        String(p.cliente_id || '')
-            .toUpperCase()
-            .trim();
-
-    return (
-        estado === 'entregado' &&
-        clienteId !== 'STOCK_INTERNO'
-    );
-};
-
-const pedidosVenta = pedidos.filter(esVentaValidaDashboard);
+const pedidosVenta = pedidos.filter(
+    p => App.logic.estado.esVenta(p)
+);
 
     const hoy = new Date();
     const mesActual = hoy.getMonth();
@@ -66,18 +51,8 @@ const pedidosVenta = pedidos.filter(esVentaValidaDashboard);
         return !isNaN(f.getTime()) && f.getMonth() === mesActual && f.getFullYear() === anioActual;
     };
 
-const pedidosActivos = pedidos.filter(p => {
-    const estado =
-        String(p.estado || '')
-            .toLowerCase()
-            .trim();
-
-    return ![
-        'entregado',
-        'cancelado',
-        'devuelto'
-    ].includes(estado);
-}).length;
+const pedidosActivos =
+    App.logic.estado.pedidosActivos(pedidos).length;
     
     const produccionActiva = produccion.filter(o => String(o.estado || '').toLowerCase() !== 'listo').length;
     const reparacionesActivas = reparaciones.filter(r => String(r.estado || '').toLowerCase() !== 'entregada').length;
@@ -86,7 +61,7 @@ const pedidosActivos = pedidos.filter(p => {
     const tasaConversion = cotizaciones.length ? (cotConvertidas / cotizaciones.length) * 100 : 0;
 
 const ventasMes = pedidosVenta
-    .filter(p => esMismoMes(p.fecha_creacion))
+    .filter(p => esMismoMes(p.fecha_entrega || p.fecha_creacion))
     .reduce(
         (acc, p) =>
             acc + (parseFloat(p.total || 0) || 0),
@@ -109,18 +84,8 @@ const ventasMes = pedidosVenta
         return (parseFloat(i.stock_minimo || 0) || 0) > 0 && libre <= (parseFloat(i.stock_minimo || 0) || 0);
     });
 
- const pendientesEntrega = pedidos.filter(p => {
-    const estado =
-        String(p.estado || '')
-            .toLowerCase()
-            .trim();
-
-    return ![
-        'entregado',
-        'cancelado',
-        'devuelto'
-    ].includes(estado);
-}).length;
+ const pendientesEntrega =
+    App.logic.estado.pedidosActivos(pedidos).length;
 
     const topClientes = clientes.map(c => {
       const ventasCliente = pedidosVenta
