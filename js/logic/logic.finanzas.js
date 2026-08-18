@@ -590,6 +590,262 @@ Object.assign(App.logic, {
         this.imprimirComprobantePagoMasivo(ids, "Comprobante de pagos seleccionados");
     },
 
+    // ==========================================
+// MOTOR FINANCIERO CENTRAL
+// ==========================================
+// VENTA:
+//   Solo pedidos entregados válidos.
+//
+// COBRADO:
+//   Anticipos + abonos de pedidos válidos,
+//   aunque todavía no estén entregados.
+//
+// STOCK INTERNO:
+//   Nunca genera venta ni cobro.
+//
+// CANCELADO / DEVUELTO:
+//   No cuentan como venta ni cobro.
+// ==========================================
+
+obtenerResumenFinancieroCentral(filtro = 'todo') {
+
+    const pedidos = App.state.pedidos || [];
+    const abonos = App.state.abonos || [];
+    const reparaciones = App.state.reparaciones || [];
+    const gastos = App.state.gastos || [];
+
+    const entraEnFiltro = (fechaStr) => {
+
+        if (!fechaStr) {
+            return filtro === 'todo';
+        }
+
+        const fecha = new Date(fechaStr);
+
+        if (isNaN(fecha.getTime())) {
+            return false;
+        }
+
+        if (filtro === 'todo') {
+            return true;
+        }
+
+        const hoy = new Date();
+        const mesActual = hoy.getMonth();
+        const anioActual = hoy.getFullYear();
+
+        if (filtro === 'mes_actual') {
+            return (
+                fecha.getMonth() === mesActual &&
+                fecha.getFullYear() === anioActual
+            );
+        }
+
+        if (filtro === 'trimestre_actual') {
+            return (
+                fecha.getFullYear() === anioActual &&
+                Math.floor(fecha.getMonth() / 3) ===
+                Math.floor(mesActual / 3)
+            );
+        }
+
+        if (filtro === 'anio_actual') {
+            return fecha.getFullYear() === anioActual;
+        }
+
+        if (filtro === 'custom') {
+
+            const desde = App.state.finanzasFechaDesde || '';
+            const hasta = App.state.finanzasFechaHasta || '';
+
+            if (!desde || !hasta) {
+                return true;
+            }
+
+            const fechaDesde =
+                new Date(desde + 'T00:00:00');
+
+            const fechaHasta =
+                new Date(hasta + 'T23:59:59');
+
+            return (
+                fecha >= fechaDesde &&
+                fecha <= fechaHasta
+            );
+        }
+
+        return true;
+    };
+
+    // ==========================================
+    // PEDIDOS VÁLIDOS PARA COBROS
+    // ==========================================
+
+    const pedidosCobro = pedidos.filter(p => {
+
+        if (!p) return false;
+
+        return (
+            App.logic.estado.cuentaComoCobro(p) &&
+            entraEnFiltro(
+                p.fecha_creacion ||
+                p.fecha_pedido ||
+                p.fecha
+            )
+        );
+    });
+
+    // ==========================================
+    // VENTAS VÁLIDAS
+    // ==========================================
+
+    const pedidosVenta = pedidosCobro.filter(p =>
+        App.logic.estado.esVenta(p)
+    );
+
+    const ventasPedidos = pedidosVenta.reduce(
+        (sum, p) =>
+            sum + (parseFloat(p.total || 0) || 0),
+        0
+    );
+
+    // ==========================================
+    // ANTICIPOS
+    // ==========================================
+
+    const anticipos = pedidosCobro.reduce(
+        (sum, p) =>
+            sum + (parseFloat(p.anticipo || 0) || 0),
+        0
+    );
+
+    // ==========================================
+    // ABONOS
+    // ==========================================
+
+    const pedidosCobroIds = new Set(
+        pedidosCobro.map(p => String(p.id))
+    );
+
+    const abonosValidos = abonos.filter(a => {
+
+        if (!a) return false;
+
+        if (!pedidosCobroIds.has(String(a.pedido_id))) {
+            return false;
+        }
+
+        return entraEnFiltro(
+            a.fecha ||
+            a.fecha_creacion
+        );
+    });
+
+    const totalAbonos = abonosValidos.reduce(
+        (sum, a) =>
+            sum + (parseFloat(a.monto || 0) || 0),
+        0
+    );
+
+    // ==========================================
+    // COBRADO REAL
+    // ==========================================
+
+    const cobrado =
+        anticipos +
+        totalAbonos;
+
+    // ==========================================
+    // REPARACIONES ENTREGADAS
+    // ==========================================
+
+    const reparacionesValidas = reparaciones.filter(r => {
+
+        if (!r) return false;
+
+        const estado = String(r.estado || '')
+            .toLowerCase()
+            .trim();
+
+        return (
+            estado === 'entregado' ||
+            estado === 'entregada'
+        ) &&
+        entraEnFiltro(
+            r.fecha_entrega ||
+            r.fecha_creacion ||
+            r.fecha
+        );
+    });
+
+    const ventasReparaciones =
+        reparacionesValidas.reduce(
+            (sum, r) =>
+                sum + (parseFloat(r.precio || 0) || 0),
+            0
+        );
+
+    // ==========================================
+    // VENTAS TOTALES
+    // ==========================================
+
+    const ventas =
+        ventasPedidos +
+        ventasReparaciones;
+
+    // ==========================================
+    // POR COBRAR
+    // ==========================================
+
+    const porCobrar = Math.max(
+        0,
+        ventas - cobrado
+    );
+
+    // ==========================================
+    // GASTOS
+    // ==========================================
+
+    const gastosValidos = gastos.filter(g =>
+        entraEnFiltro(g.fecha)
+    );
+
+    const totalGastos = gastosValidos.reduce(
+        (sum, g) =>
+            sum + (parseFloat(g.monto || 0) || 0),
+        0
+    );
+
+    return {
+        ventas,
+
+        ventasPedidos,
+        ventasReparaciones,
+
+        anticipos,
+        abonos: totalAbonos,
+
+        cobrado,
+        porCobrar,
+
+        gastos: totalGastos,
+
+        pedidosVenta: pedidosVenta.length,
+        pedidosCobro: pedidosCobro.length,
+
+        abonosValidos: abonosValidos.length,
+        reparacionesVenta: reparacionesValidas.length,
+
+        detalle: {
+            pedidosVenta,
+            pedidosCobro,
+            abonosValidos,
+            reparacionesValidas,
+            gastosValidos
+        }
+    };
+},
+
    renderMiniGraficasDashboard() {
     if (!window.Chart) {
         console.warn("Chart.js no está cargado para indicadores operativos.");
