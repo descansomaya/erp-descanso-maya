@@ -129,13 +129,21 @@ App.views.accionProduccion = function (button, ordenId, actionName) {
             fn: async () => {
                 await App.views.descontarMaterialesProduccion(ordenId);
                 await App.logic.cambiarEstadoProduccion(ordenId, 'proceso');
-                const orden = App.state?.ordenes_produccion?.find(o => o.id === ordenId);
+
+                const orden = App.state?.ordenes_produccion?.find(
+                    o => o.id === ordenId
+                );
+
                 if (orden) {
                     orden.estado = 'proceso';
                     orden.materiales_descontados = true;
                     orden.materiales_revertidos = false;
                 }
-                if (App.router?.handleRoute) App.router.handleRoute();
+
+                if (App.router?.handleRoute) {
+                    App.router.handleRoute();
+                }
+
                 return true;
             },
             loadingText: 'Iniciando...',
@@ -145,20 +153,18 @@ App.views.accionProduccion = function (button, ordenId, actionName) {
         },
 
         terminar: {
-    fn: async () => {
-        return await App.logic.cambiarEstadoProduccion(ordenId, 'listo');
-    },
-    loadingText: 'Terminando...',
-    loaderMessage: 'Finalizando orden y actualizando inventario...',
-    successMessage: 'Orden terminada y sincronizada',
-    errorTitle: 'No se pudo terminar la orden'
-},
-        
+            fn: async () => {
+                return await App.logic.cambiarEstadoProduccion(
+                    ordenId,
+                    'listo'
+                );
+            },
             loadingText: 'Terminando...',
-            loaderMessage: 'Marcando orden como lista y actualizando pedido...',
-            successMessage: 'Orden terminada y sincronizada con Pedidos',
+            loaderMessage: 'Finalizando orden y actualizando inventario...',
+            successMessage: 'Orden terminada y sincronizada',
             errorTitle: 'No se pudo terminar la orden'
         },
+
         regresarPendiente: {
             fn: () => App.views.revertirProduccionAPendiente(ordenId),
             loadingText: 'Regresando...',
@@ -166,11 +172,18 @@ App.views.accionProduccion = function (button, ordenId, actionName) {
             successMessage: 'Orden regresada a pendiente con reversa',
             errorTitle: 'No se pudo regresar la orden a pendiente'
         },
+
         eliminar: {
             fn: async () => {
                 const ok = window.confirm(`¿Eliminar la orden ${ordenId}?`);
+
                 if (!ok) return false;
-                return App.logic.eliminarRegistroGenerico('ordenes_produccion', ordenId, 'ordenes_produccion');
+
+                return App.logic.eliminarRegistroGenerico(
+                    'ordenes_produccion',
+                    ordenId,
+                    'ordenes_produccion'
+                );
             },
             loadingText: 'Eliminando...',
             loaderMessage: 'Eliminando orden de producción...',
@@ -180,12 +193,18 @@ App.views.accionProduccion = function (button, ordenId, actionName) {
     };
 
     const config = actions[actionName];
+
     if (!config) {
         App.ui.toast('Acción no disponible', 'warning');
         return;
     }
 
-    return App.views.runProduccionAction(button, `produccion:${ordenId}:${actionName}`, config.fn, config);
+    return App.views.runProduccionAction(
+        button,
+        `produccion:${ordenId}:${actionName}`,
+        config.fn,
+        config
+    );
 };
 
 App.views.accionAsignacionProduccion = function (button, ordenId, asignacionId, actionName) {
