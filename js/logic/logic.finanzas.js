@@ -732,7 +732,7 @@ Object.assign(App.logic, {
                 }
             }
         }
-    );
+      });
 },
 
     renderGraficasFinanzas(filtro) {
