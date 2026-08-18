@@ -64,9 +64,11 @@ App.logic.estado.esProductoReventa = function(producto) {
 App.logic.estado.esProductoFabricacion = function(producto) {
     if (!producto) return false;
 
-    return String(producto.categoria || "")
+    const categoria = String(producto.categoria || "")
         .toLowerCase()
-        .trim() === "fabricado";
+        .trim();
+
+    return ["fabricacion", "fabricado"].includes(categoria);
 };
 
 App.logic.estado.requiereTallerPorProductos = function(listaProductos) {
