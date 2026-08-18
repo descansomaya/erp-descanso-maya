@@ -68,11 +68,74 @@ const ventasMes = pedidosVenta
         0
     );
     
-    const cobradoMes =
-        pedidos.filter(p => esMismoMes(p.fecha_creacion)).reduce((acc, p) => acc + (parseFloat(p.anticipo || 0) || 0), 0) +
-        abonos.filter(a => esMismoMes(a.fecha)).reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0) +
-        reparaciones.filter(r => esMismoMes(r.fecha_creacion)).reduce((acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0), 0) +
-        abonosReparaciones.filter(a => esMismoMes(a.fecha)).reduce((acc, a) => acc + (parseFloat(a.monto || 0) || 0), 0);
+    const cobradoMes = (() => {
+
+    // ==========================================
+    // COBROS DE PEDIDOS
+    // ==========================================
+
+    const pedidosValidos = pedidos.filter(p =>
+        App.logic.estado.cuentaComoCobro(p)
+    );
+
+    // Anticipos registrados directamente en el pedido
+    const anticipos = pedidosValidos
+        .filter(p => esMismoMes(p.fecha_creacion || p.fecha))
+        .reduce(
+            (acc, p) =>
+                acc + (parseFloat(p.anticipo || 0) || 0),
+            0
+        );
+
+    // Abonos relacionados con pedidos válidos
+    const abonosPedidos = abonos
+        .filter(a => esMismoMes(a.fecha))
+        .filter(a => {
+            const pedido = pedidos.find(p =>
+                String(p.id) === String(a.pedido_id)
+            );
+
+            return pedido &&
+                App.logic.estado.cuentaComoCobro(pedido);
+        })
+        .reduce(
+            (acc, a) =>
+                acc + (parseFloat(a.monto || 0) || 0),
+            0
+        );
+
+    // ==========================================
+    // COBROS DE REPARACIONES
+    // ==========================================
+
+    const anticiposReparaciones = reparaciones
+        .filter(r => esMismoMes(r.fecha_creacion || r.fecha))
+        .reduce(
+            (acc, r) =>
+                acc + (
+                    parseFloat(
+                        r.anticipo_inicial || r.anticipo || 0
+                    ) || 0
+                ),
+            0
+        );
+
+    const abonosRep = abonosReparaciones
+        .filter(a => esMismoMes(a.fecha))
+        .reduce(
+            (acc, a) =>
+                acc + (parseFloat(a.monto || 0) || 0),
+            0
+        );
+
+    return (
+        anticipos +
+        abonosPedidos +
+        anticiposReparaciones +
+        abonosRep
+    );
+})();
+
 
     const cotizado = cotizaciones.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
     const montoConvertido = cotizaciones
