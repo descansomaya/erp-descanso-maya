@@ -1073,96 +1073,128 @@ obtenerResumenFinancieroCentral(filtro = 'todo') {
             return true;
         };
 
-        const pedidos = App.state.pedidos || [];
-        const reparaciones = App.state.reparaciones || [];
-        const abonos = App.state.abonos || [];
-        const abonosReparaciones = App.state.abonos_reparaciones || [];
+                // ==========================================
+        // FUENTE FINANCIERA CENTRAL
+        // ==========================================
+        // Las gráficas utilizan exactamente el mismo
+        // motor que utiliza el Resumen financiero.
+        // ==========================================
+
+        const resumen =
+            App.logic.obtenerResumenFinancieroCentral(filtro);
+
+        const ventas = resumen.ventas;
+        const ingresos = resumen.cobrado;
+
+        // ==========================================
+        // EGRESOS
+        // ==========================================
+
         const gastos = App.state.gastos || [];
         const compras = App.state.compras || [];
         const pagosArtesanos = App.state.pago_artesanos || [];
 
-const pedidosFil = pedidos
-    .filter(p => App.logic.estado.cuentaComoCobro(p))
-    .filter(p => entraEnFiltro(p.fecha_creacion || p.fecha));
+        const gastosFil = gastos.filter(g =>
+            entraEnFiltro(g.fecha)
+        );
 
-const ventasPedidosFil = pedidos
-    .filter(p => App.logic.estado.cuentaParaFinanzas(p))
-    .filter(p => entraEnFiltro(p.fecha_entrega || p.fecha_creacion || p.fecha));
+        const comprasFil = compras.filter(c =>
+            entraEnFiltro(
+                c.fecha ||
+                c.fecha_creacion
+            )
+        );
 
-const reparacionesFil = reparaciones.filter(
-    r => entraEnFiltro(r.fecha_creacion || r.fecha)
-);
+        const pagosArtesanosFil =
+            pagosArtesanos.filter(p =>
+                entraEnFiltro(
+                    p.fecha_pago ||
+                    p.fecha ||
+                    p.fecha_creacion
+                )
+            );
 
-const abonosFil = abonos.filter(a => entraEnFiltro(a.fecha));
-const abonosRepFil = abonosReparaciones.filter(a => entraEnFiltro(a.fecha));
-const gastosFil = gastos.filter(g => entraEnFiltro(g.fecha));
-const comprasFil = compras.filter(c => entraEnFiltro(c.fecha || c.fecha_creacion));
-const pagosArtesanosFil = pagosArtesanos.filter(
-    p => entraEnFiltro(p.fecha_pago || p.fecha || p.fecha_creacion)
-);
+        // ==========================================
+        // COMPRAS PAGADAS
+        // ==========================================
 
-const ventas = ventasPedidosFil.reduce(
-    (acc, p) => acc + (parseFloat(p.total || 0) || 0),
-    0
-) + reparacionesFil
-    .filter(r => String(r.estado || '').toLowerCase().trim() === 'entregada')
-    .reduce(
-        (acc, r) => acc + (parseFloat(r.precio || 0) || 0),
-        0
-    );
+        const totalCompras =
+            comprasFil.reduce(
+                (acc, c) => {
 
-       const abonosPedidosValidosFil = abonosFil.filter(a => {
-    const pedido = pedidos.find(p =>
-        String(p.id) === String(a.pedido_id)
-    );
+                    const pagado =
+                        c.monto_pagado !== undefined &&
+                        c.monto_pagado !== ""
+                            ? parseFloat(c.monto_pagado || 0)
+                            : 0;
 
-    return pedido &&
-        App.logic.estado.cuentaComoCobro(pedido);
-});
+                    return acc + pagado;
 
-const ingresos = abonosPedidosValidosFil.reduce(
-    (acc, a) => acc + (parseFloat(a.monto || 0) || 0),
-    0
-)
-+ pedidosFil.reduce(
-    (acc, p) => acc + (parseFloat(p.anticipo || 0) || 0),
-    0
-)
-+ abonosRepFil.reduce(
-    (acc, a) => acc + (parseFloat(a.monto || 0) || 0),
-    0
-)
-+ reparacionesFil.reduce(
-    (acc, r) => acc + (parseFloat(r.anticipo_inicial || r.anticipo || 0) || 0),
-    0
-);
+                },
+                0
+            );
 
-        const totalCompras = comprasFil.reduce((acc, c) => {
-    const total = parseFloat(c.total || 0) || 0;
+        // ==========================================
+        // NÓMINA PAGADA
+        // ==========================================
 
-    const pagado = c.monto_pagado !== undefined && c.monto_pagado !== ''
-        ? parseFloat(c.monto_pagado || 0)
-        : 0;
+        const totalNomina =
+            pagosArtesanosFil
+                .filter(p =>
+                    String(p.estado || "")
+                        .toLowerCase()
+                        .trim() === "pagado"
+                )
+                .reduce(
+                    (acc, p) =>
+                        acc +
+                        (parseFloat(p.total || 0) || 0),
+                    0
+                );
 
-    return acc + pagado;
-}, 0);
-      const totalNomina = pagosArtesanosFil
-    .filter(p => String(p.estado || '').toLowerCase().trim() === 'pagado')
-    .reduce(
-        (acc, p) => acc + (parseFloat(p.total || 0) || 0),
-        0
-    );
-        
-        // Filtramos los gastos operativos puros para que no dupliquen lo que ya registras en compras
-        const gastosOperativosPuros = gastosFil
-            .filter(g => {
-                const desc = String(g.concepto || g.descripcion || '').toLowerCase();
-                return !desc.includes('compra') && !desc.includes('materiales y insumos') && !desc.includes('hilo');
-            })
-            .reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
-        
-        const egresos = gastosOperativosPuros + totalCompras + totalNomina;
-        const flujoNeto = ingresos - egresos;
+        // ==========================================
+        // GASTOS OPERATIVOS
+        // ==========================================
+
+        const gastosOperativosPuros =
+            gastosFil
+                .filter(g => {
+
+                    const desc =
+                        String(
+                            g.concepto ||
+                            g.descripcion ||
+                            ""
+                        ).toLowerCase();
+
+                    return (
+                        !desc.includes("compra") &&
+                        !desc.includes("materiales y insumos") &&
+                        !desc.includes("hilo")
+                    );
+                })
+                .reduce(
+                    (acc, g) =>
+                        acc +
+                        (parseFloat(g.monto || 0) || 0),
+                    0
+                );
+
+        // ==========================================
+        // EGRESOS TOTALES
+        // ==========================================
+
+        const egresos =
+            gastosOperativosPuros +
+            totalCompras +
+            totalNomina;
+
+        // ==========================================
+        // FLUJO NETO
+        // ==========================================
+
+        const flujoNeto =
+            ingresos - egresos;
 
         if (ctxIngresosGastos) {
             if (window.graficaFinanzasIngresosGastos && typeof window.graficaFinanzasIngresosGastos.destroy === "function") {
