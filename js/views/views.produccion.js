@@ -275,45 +275,17 @@ App.views.accionProduccion = function (button, ordenId, actionName) {
             successMessage: 'Orden iniciada e inventario actualizado',
             errorTitle: 'No se pudo iniciar la orden'
         },
+
         terminar: {
-            fn: async () => {
-                // 1. Cambiar estado en Taller
-                const res = await App.logic.cambiarEstadoProduccion(ordenId, 'listo');
-                
-                const orden = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
-                if (orden) {
-                    const pedDet = (App.state?.pedido_detalle || []).find(d => d.id === orden.pedido_detalle_id);
-                    const pedido = (App.state?.pedidos || []).find(p => p.id === pedDet?.pedido_id);
-                    
-                    // 2. SINCRONIZACIÓN CON PEDIDOS: Si es cliente real, marcar pedido como "listo para entregar"
-                    if (pedido && pedido.cliente_id !== 'STOCK_INTERNO') {
-                        await App.logic.actualizarRegistroGenerico('pedidos', pedido.id, {
-                            estado: 'listo para entregar'
-                        }, 'pedidos');
-                        pedido.estado = 'listo para entregar';
-                        App.ui.toast(`Pedido ${pedido.id} actualizado a "Listo para entregar"`, 'info');
-                    }
-
-                    // FASE 3: Si es STOCK BODEGA, sumar piezas automáticamente al catálogo de bodega
-                    if (pedido && pedido.cliente_id === 'STOCK_INTERNO' && pedDet?.producto_id) {
-                        const prod = (App.state?.productos || []).find(p => p.id === pedDet.producto_id);
-                        if (prod) {
-                            const cantIncrementar = parseFloat(pedDet.cantidad || 1) || 1;
-                            const nuevoStock = (parseFloat(prod.stock_disponible || prod.stock_real || 0) || 0) + cantIncrementar;
-                            
-                            await App.logic.actualizarRegistroGenerico('productos', prod.id, {
-                                stock_disponible: nuevoStock
-                            }, 'productos');
-                            
-                            prod.stock_disponible = nuevoStock;
-                            App.ui.toast(`Se agregaron ${cantIncrementar} pza(s) a la Bodega de Productos Terminados`, 'success');
-                        }
-                    }
-                }
-
-                if (App.router?.handleRoute) App.router.handleRoute();
-                return res;
-            },
+    fn: async () => {
+        return await App.logic.cambiarEstadoProduccion(ordenId, 'listo');
+    },
+    loadingText: 'Terminando...',
+    loaderMessage: 'Finalizando orden y actualizando inventario...',
+    successMessage: 'Orden terminada y sincronizada',
+    errorTitle: 'No se pudo terminar la orden'
+},
+        
             loadingText: 'Terminando...',
             loaderMessage: 'Marcando orden como lista y actualizando pedido...',
             successMessage: 'Orden terminada y sincronizada con Pedidos',
