@@ -54,7 +54,8 @@ const pedidosVenta = pedidos.filter(
 const pedidosActivos =
     App.logic.estado.pedidosActivos(pedidos).length;
     
-    const produccionActiva = produccion.filter(o => String(o.estado || '').toLowerCase() !== 'listo').length;
+const produccionActiva =
+    App.logic.estado.produccionesActivas(produccion).length;
     const reparacionesActivas = reparaciones.filter(r => String(r.estado || '').toLowerCase() !== 'entregada').length;
     const cotPendientes = cotizaciones.filter(c => String(c.estado_conversion || '').toLowerCase() !== 'convertida').length;
     const cotConvertidas = cotizaciones.filter(c => String(c.estado_conversion || '').toLowerCase() === 'convertida').length;
