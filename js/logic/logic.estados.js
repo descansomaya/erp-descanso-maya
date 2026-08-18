@@ -50,6 +50,41 @@ App.logic.estado.esReventa = function(pedido) {
 };
 
 // ==========================================
+// TIPO DE PRODUCTO / PRODUCCIÓN
+// ==========================================
+
+App.logic.estado.esProductoReventa = function(producto) {
+    if (!producto) return false;
+
+    return String(producto.categoria || "")
+        .toLowerCase()
+        .trim() === "reventa";
+};
+
+App.logic.estado.esProductoFabricacion = function(producto) {
+    if (!producto) return false;
+
+    return String(producto.categoria || "")
+        .toLowerCase()
+        .trim() === "fabricado";
+};
+
+App.logic.estado.requiereTallerPorProductos = function(listaProductos) {
+    if (!Array.isArray(listaProductos) || !listaProductos.length) {
+        return false;
+    }
+
+    return listaProductos.some(item => {
+        const productoId = item?.producto_id || item?.id;
+
+        const producto = (App.state.productos || [])
+            .find(p => String(p.id) === String(productoId));
+
+        return this.esProductoFabricacion(producto);
+    });
+};
+
+// ==========================================
 // ESTADOS OPERATIVOS
 // ==========================================
 
