@@ -736,15 +736,43 @@ Object.assign(App.logic, {
 },
 
     renderGraficasFinanzas(filtro) {
-        if (!window.Chart) {
-            console.warn("Chart.js no está cargado para gráficas financieras.");
-            return;
-        }
 
-        const ctxIngresosGastos = document.getElementById("graficaFinanzasIngresosGastos");
-        const ctxFlujo = document.getElementById("graficaFinanzasFlujo");
+    console.log("========== GRÁFICAS FINANZAS ==========");
+    console.log("1. renderGraficasFinanzas fue llamado");
+    console.log("Filtro:", filtro);
+    console.log("Chart disponible:", typeof window.Chart);
 
-        if (!ctxIngresosGastos && !ctxFlujo) return;
+    if (!window.Chart) {
+        console.error("❌ Chart.js NO está disponible");
+        return;
+    }
+
+    const ctxIngresosGastos = document.getElementById(
+        "graficaFinanzasIngresosGastos"
+    );
+
+    const ctxFlujo = document.getElementById(
+        "graficaFinanzasFlujo"
+    );
+
+    console.log(
+        "2. Canvas ingresos/gastos:",
+        ctxIngresosGastos
+    );
+
+    console.log(
+        "3. Canvas flujo:",
+        ctxFlujo
+    );
+
+    if (!ctxIngresosGastos && !ctxFlujo) {
+        console.error(
+            "❌ No existen los canvas cuando se ejecutó renderGraficasFinanzas"
+        );
+        return;
+    }
+
+    console.log("4. Canvas encontrados. Continuando...");
 
         window.graficaFinanzasIngresosGastos = window.graficaFinanzasIngresosGastos || null;
         window.graficaFinanzasFlujo = window.graficaFinanzasFlujo || null;
