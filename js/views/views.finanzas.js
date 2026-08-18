@@ -545,68 +545,69 @@ const totalCobradoReparaciones =
     const filtrosHTML = `<div class="dm-card dm-mb-4"><div class="dm-card-title">Filtros de fecha</div><div class="dm-mt-3" style="display:flex; gap:8px; flex-wrap:wrap;"><button class="dm-btn ${activeFiltro('mes_actual')}" onclick="App.views.aplicarFiltroFinanzas('mes_actual')">Mes actual</button><button class="dm-btn ${activeFiltro('trimestre_actual')}" onclick="App.views.aplicarFiltroFinanzas('trimestre_actual')">Trimestre</button><button class="dm-btn ${activeFiltro('anio_actual')}" onclick="App.views.aplicarFiltroFinanzas('anio_actual')">Año</button><button class="dm-btn ${activeFiltro('todo')}" onclick="App.views.aplicarFiltroFinanzas('todo')">Todo</button></div><div class="dm-mt-3" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; align-items:end;"><div class="dm-form-group"><label class="dm-label">Desde</label><input type="date" id="finanzas-fecha-desde" class="dm-input" value="${fechaDesde}"></div><div class="dm-form-group"><label class="dm-label">Hasta</label><input type="date" id="finanzas-fecha-hasta" class="dm-input" value="${fechaHasta}"></div><div><button class="dm-btn dm-btn-primary" onclick="App.views.aplicarFiltroFinanzasCustom()">Aplicar rango</button></div></div></div>`;
     const tabsHTML = `<div class="dm-card dm-mb-4"><div style="display:flex; gap:8px; flex-wrap:wrap;"><button class="dm-btn ${activeTab('resumen')}" onclick="App.views.setFinanzasTab('resumen')">📊 Resumen</button><button class="dm-btn ${activeTab('cobranza')}" onclick="App.views.setFinanzasTab('cobranza')">💰 Cobranza</button><button class="dm-btn ${activeTab('egresos')}" onclick="App.views.setFinanzasTab('egresos')">💸 Egresos</button><button class="dm-btn ${activeTab('nomina')}" onclick="App.views.setFinanzasTab('nomina')">👷 Nómina</button><button class="dm-btn ${activeTab('costos')}" onclick="App.views.setFinanzasTab('costos')">🧮 Costos reales</button><button class="dm-btn ${activeTab('reportes')}" onclick="App.views.setFinanzasTab('reportes')">📈 Reportes</button></div></div>`;
     
-    const resumenHTML = `
-        <div class="dm-card dm-mb-4">
-            ${sectionTitle('Flujo de caja', 'Mide dinero cobrado, deudas y presión de efectivo.')}
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
-                ${kpi('Cobrado total', money(totalCobrado))}
-                ${kpi('Dinero en la calle', money(dineroEnLaCalle))}
-                ${kpi('Total por pagar', money(totalPorPagar))}
-                ${kpi('Saldo proyectado', money(saldoProyectado), saldoProyectado >= 0 ? 'green' : 'red')}
-                ${kpi('Flujo operativo', money(flujoOperativo), flujoOperativo >= 0 ? 'green' : 'red')}
-                ${kpi('Resultado caja simple', money(resultadoCaja), resultadoCaja >= 0 ? 'green' : 'red')}
-                ${kpi('Salud financiera', salud, saludColor)}
-            </div>
+ const resumenHTML = `
+    <!-- ========================================== -->
+    <!-- RESUMEN: FLUJO DE CAJA -->
+    <!-- ========================================== -->
+
+    <div class="dm-card dm-mb-4">
+
+        ${sectionTitle(
+            'Flujo de caja',
+            'Mide el dinero realmente cobrado, las obligaciones pendientes y la presión de efectivo.'
+        )}
+
+        <div
+            style="
+                display:grid;
+                grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+                gap:12px;
+            "
+        >
+
+            ${kpi(
+                'Cobrado total',
+                money(totalCobrado)
+            )}
+
+            ${kpi(
+                'Dinero en la calle',
+                money(dineroEnLaCalle)
+            )}
+
+            ${kpi(
+                'Total por pagar',
+                money(totalPorPagar)
+            )}
+
+            ${kpi(
+                'Saldo proyectado',
+                money(saldoProyectado),
+                saldoProyectado >= 0 ? 'green' : 'red'
+            )}
+
+            ${kpi(
+                'Flujo operativo',
+                money(flujoOperativo),
+                flujoOperativo >= 0 ? 'green' : 'red'
+            )}
+
+            ${kpi(
+                'Resultado caja simple',
+                money(resultadoCaja),
+                resultadoCaja >= 0 ? 'green' : 'red'
+            )}
+
+            ${kpi(
+                'Salud financiera',
+                salud,
+                saludColor
+            )}
+
         </div>
 
-        <!-- 1. PRODUCCIÓN -->
-        <div class="dm-card dm-mb-4">
-            ${sectionTitle('1. Rentabilidad: Producción (Taller)', 'Ganancia exclusiva de las hamacas tejidas.')}
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-                ${kpi('Artículos teñidos/tejidos', resFab.ordenes)}
-                ${kpi('Venta Producción', money(resFab.venta))}
-                ${kpi('Costo Directo', money(resFab.costo_real))}
-                ${kpi('Utilidad Bruta', money(resFab.utilidad), resFab.utilidad >= 0 ? 'green' : 'red')}
-                ${kpi('Margen', ((resFab.margen || 0) * 100).toFixed(1) + '%', resFab.margen >= 0 ? 'green' : 'red')}
-            </div>
-        </div>
-
-        <!-- 2. REVENTA -->
-        <div class="dm-card dm-mb-4">
-            ${sectionTitle('2. Rentabilidad: Reventa', 'Ganancia comercial pura de artículos comprados listos.')}
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-                ${kpi('Artículos revendidos', resRev.ordenes)}
-                ${kpi('Venta Reventa', money(resRev.venta))}
-                ${kpi('Costo Compra', money(resRev.costo_real))}
-                ${kpi('Utilidad Bruta', money(resRev.utilidad), resRev.utilidad >= 0 ? 'green' : 'red')}
-                ${kpi('Margen', ((resRev.margen || 0) * 100).toFixed(1) + '%', resRev.margen >= 0 ? 'green' : 'red')}
-            </div>
-        </div>
-
-        <!-- 3. REPARACIONES -->
-        <div class="dm-card dm-mb-4">
-            ${sectionTitle('3. Rentabilidad: Reparaciones', 'Servicios de mano de obra y restauración.')}
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-                ${kpi('Servicios realizados', resRep.ordenes || 0)}
-                ${kpi('Venta Reparaciones', money(resRep.venta || 0))}
-                ${kpi('Costo Directo', money(resRep.costo_real || 0))}
-                ${kpi('Utilidad Bruta', money(resRep.utilidad || 0), (resRep.utilidad || 0) >= 0 ? 'green' : 'red')}
-                ${kpi('Margen', (((resRep.margen || 0)) * 100).toFixed(1) + '%', (resRep.margen || 0) >= 0 ? 'green' : 'red')}
-            </div>
-        </div>
-
-        <!-- 4. GLOBAL Y OPERATIVA -->
-        <div class="dm-card dm-mb-4" style="background:#F0FFF4; border:1px solid #C6F6D5;">
-            ${sectionTitle('4. Rentabilidad: GLOBAL Y OPERATIVA', 'Visión integral: Ventas totales (-) Costos directos (-) Gastos operativos.')}
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-                ${kpi('Ventas Totales', money(ventaGlobal))}
-                ${kpi('Costo Directo Total', money(costoDirectoGlobal))}
-                ${kpi('Utilidad Bruta Global', money(utilidadBrutaGlobal), utilidadBrutaGlobal >= 0 ? 'green' : 'red')}
-                ${kpi('Gastos Operativos', money(gastosOperativosPuros), '#E53E3E')}
-                ${kpi('Utilidad Operativa Real', money(utilidadOperativaReal), utilidadOperativaReal >= 0 ? 'green' : 'red')}
-                ${kpi('Margen Operativo Real', margenOperativoReal.toFixed(1) + '%', margenOperativoReal >= 0 ? 'green' : 'red')}
-            </div>
-        </div>`;
+    </div>
+`;
         
     const cobranzaHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">${kpi('Por cobrar pedidos', money(porCobrarPedidos))}${kpi('Por cobrar reparaciones', money(porCobrarReparaciones))}${kpi('Pedidos pendientes', pedidosPendientes)}${kpi('Reparaciones pendientes', reparacionesPendientes)}${kpi('Ventas totales', money(totalVentas))}${kpi('Cotizado', money(totalCotizado))}${kpi('Cotizaciones pendientes', cotPendientes)}</div><div class="dm-card dm-mb-4"><button class="dm-btn dm-btn-primary" onclick="App.views.detalleFinanzas('ventas', '${filtro}')">Ver detalle de ventas</button></div>`;
     const egresosHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" class="dm-mb-4">${kpi('Gastos operativos', money(gastosOperativosPuros))}${kpi('Compras', money(totalCompras))}${kpi('Por pagar compras', money(porPagarCompras))}${kpi('Registros de gastos', registrosGastos)}</div><div class="dm-card dm-mb-4" style="display:flex; gap:8px; flex-wrap:wrap;"><button class="dm-btn dm-btn-danger" onclick="App.views.formGasto()">+ Nuevo gasto</button><button class="dm-btn dm-btn-secondary" onclick="App.views.detalleFinanzas('gastos', '${filtro}')">Ver detalle de gastos</button><button class="dm-btn dm-btn-secondary" onclick="App.router.navigate('compras')">Ver compras</button></div>`;
@@ -628,66 +629,6 @@ const reportesHTML = `
     <div class="dm-mb-4">
 
         <!-- ========================================== -->
-        <!-- RESUMEN FINANCIERO EJECUTIVO -->
-        <!-- ========================================== -->
-
-        <div class="dm-card dm-mb-4">
-
-            <div class="dm-card-title">
-                Resumen financiero
-            </div>
-
-            <div class="dm-muted dm-mt-2">
-                Indicadores principales del periodo seleccionado.
-            </div>
-
-            <div
-                class="dm-mt-3"
-                style="
-                    display:grid;
-                    grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
-                    gap:12px;
-                "
-            >
-
-                ${kpi(
-                    'Ventas',
-                    money(totalVentas)
-                )}
-
-                ${kpi(
-                    'Cobrado',
-                    money(totalCobrado)
-                )}
-
-                ${kpi(
-                    'Por cobrar',
-                    money(dineroEnLaCalle)
-                )}
-
-                ${kpi(
-                    'Egresos',
-                    money(totalCompras + totalNomina + gastosOperativosPuros)
-                )}
-
-                ${kpi(
-                    'Utilidad operativa',
-                    money(utilidadOperativaReal),
-                    utilidadOperativaReal >= 0 ? 'green' : 'red'
-                )}
-
-                ${kpi(
-                    'Flujo operativo',
-                    money(flujoOperativo),
-                    flujoOperativo >= 0 ? 'green' : 'red'
-                )}
-
-            </div>
-
-        </div>
-
-
-        <!-- ========================================== -->
         <!-- RENTABILIDAD POR LÍNEA -->
         <!-- ========================================== -->
 
@@ -698,7 +639,7 @@ const reportesHTML = `
             </div>
 
             <div class="dm-muted dm-mt-2">
-                Comparativo de ventas, utilidad y margen por tipo de operación.
+                Comparativo de ventas, costos, utilidad y margen por tipo de operación.
             </div>
 
             <div
@@ -710,9 +651,12 @@ const reportesHTML = `
                 "
             >
 
+                <!-- PRODUCCIÓN -->
+
                 <div class="dm-card">
+
                     <div class="dm-kpi-label">
-                        Producción
+                        🧵 Producción
                     </div>
 
                     <div class="dm-muted dm-mt-2">
@@ -721,6 +665,14 @@ const reportesHTML = `
 
                     <div class="dm-kpi-value">
                         ${money(resFab.venta)}
+                    </div>
+
+                    <div class="dm-muted dm-mt-2">
+                        Costo directo
+                    </div>
+
+                    <div class="dm-kpi-value">
+                        ${money(resFab.costo_real)}
                     </div>
 
                     <div class="dm-muted dm-mt-2">
@@ -741,12 +693,16 @@ const reportesHTML = `
                     <div class="dm-kpi-value">
                         ${((resFab.margen || 0) * 100).toFixed(1)}%
                     </div>
+
                 </div>
 
 
+                <!-- REVENTA -->
+
                 <div class="dm-card">
+
                     <div class="dm-kpi-label">
-                        Reventa
+                        🛍️ Reventa
                     </div>
 
                     <div class="dm-muted dm-mt-2">
@@ -755,6 +711,14 @@ const reportesHTML = `
 
                     <div class="dm-kpi-value">
                         ${money(resRev.venta)}
+                    </div>
+
+                    <div class="dm-muted dm-mt-2">
+                        Costo de compra
+                    </div>
+
+                    <div class="dm-kpi-value">
+                        ${money(resRev.costo_real)}
                     </div>
 
                     <div class="dm-muted dm-mt-2">
@@ -775,12 +739,16 @@ const reportesHTML = `
                     <div class="dm-kpi-value">
                         ${((resRev.margen || 0) * 100).toFixed(1)}%
                     </div>
+
                 </div>
 
 
+                <!-- REPARACIONES -->
+
                 <div class="dm-card">
+
                     <div class="dm-kpi-label">
-                        Reparaciones
+                        🔨 Reparaciones
                     </div>
 
                     <div class="dm-muted dm-mt-2">
@@ -789,6 +757,14 @@ const reportesHTML = `
 
                     <div class="dm-kpi-value">
                         ${money(resRep.venta)}
+                    </div>
+
+                    <div class="dm-muted dm-mt-2">
+                        Costo directo
+                    </div>
+
+                    <div class="dm-kpi-value">
+                        ${money(resRep.costo_real)}
                     </div>
 
                     <div class="dm-muted dm-mt-2">
@@ -809,7 +785,76 @@ const reportesHTML = `
                     <div class="dm-kpi-value">
                         ${((resRep.margen || 0) * 100).toFixed(1)}%
                     </div>
+
                 </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- ========================================== -->
+        <!-- RENTABILIDAD GLOBAL -->
+        <!-- ========================================== -->
+
+        <div
+            class="dm-card dm-mb-4"
+            style="
+                background:#F0FFF4;
+                border:1px solid #C6F6D5;
+            "
+        >
+
+            <div class="dm-card-title">
+                Rentabilidad global y operativa
+            </div>
+
+            <div class="dm-muted dm-mt-2">
+                Resultado integral del negocio: ventas menos costos directos y gastos operativos.
+            </div>
+
+            <div
+                class="dm-mt-3"
+                style="
+                    display:grid;
+                    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+                    gap:12px;
+                "
+            >
+
+                ${kpi(
+                    'Ventas totales',
+                    money(ventaGlobal)
+                )}
+
+                ${kpi(
+                    'Costo directo total',
+                    money(costoDirectoGlobal)
+                )}
+
+                ${kpi(
+                    'Utilidad bruta',
+                    money(utilidadBrutaGlobal),
+                    utilidadBrutaGlobal >= 0 ? 'green' : 'red'
+                )}
+
+                ${kpi(
+                    'Gastos operativos',
+                    money(gastosOperativosPuros),
+                    '#E53E3E'
+                )}
+
+                ${kpi(
+                    'Utilidad operativa real',
+                    money(utilidadOperativaReal),
+                    utilidadOperativaReal >= 0 ? 'green' : 'red'
+                )}
+
+                ${kpi(
+                    'Margen operativo',
+                    margenOperativoReal.toFixed(1) + '%',
+                    margenOperativoReal >= 0 ? 'green' : 'red'
+                )}
 
             </div>
 
@@ -827,7 +872,7 @@ const reportesHTML = `
             </div>
 
             <div class="dm-muted dm-mt-2">
-                Evolución de los principales indicadores financieros.
+                Comparativo visual de ingresos, egresos y flujo financiero del periodo seleccionado.
             </div>
 
             <div
