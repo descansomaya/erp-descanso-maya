@@ -259,6 +259,27 @@ App.logic.estado.puedeCancelar = function(pedido) {
 };
 
 // ==========================================
+// REGLAS DE PRODUCCIÓN
+// ==========================================
+
+App.logic.estado.estaProduccionActiva = function(orden) {
+    if (!orden) return false;
+
+    const estado = this.normalizar(orden.estado);
+
+    return [
+        "pendiente",
+        "proceso"
+    ].includes(estado);
+};
+
+App.logic.estado.produccionesActivas = function(lista) {
+    return (lista || []).filter(orden =>
+        this.estaProduccionActiva(orden)
+    );
+};
+
+// ==========================================
 // HELPERS PARA LISTADOS
 // ==========================================
 
