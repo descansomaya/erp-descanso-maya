@@ -230,6 +230,186 @@ Object.assign(App.logic, {
         }
     },
 
+        // ==========================================
+    // 1.2 DESCONTAR MATERIALES AL INICIAR PRODUCCIÓN
+    // ==========================================
+    async descontarMaterialesProduccion(ordenId) {
+        try {
+            App.ui.showLoader("Descontando materiales...");
+
+            const orden = this.obtenerOrdenProduccion(ordenId);
+
+            if (!orden) {
+                throw new Error("Orden de producción no encontrada.");
+            }
+
+            const receta = this.obtenerRecetaOrden(orden);
+
+            if (!receta.length) {
+                throw new Error("La orden no tiene una receta definida.");
+            }
+
+            const inventario = App.state?.inventario || [];
+
+            // Agrupar materiales por ID por si aparecen varias veces en la receta
+            const cantidades = {};
+
+            receta.forEach(item => {
+                const matId = item.mat_id;
+                const cantidad = parseFloat(item.cant || 0) || 0;
+
+                if (!matId || cantidad <= 0) return;
+
+                cantidades[matId] = (cantidades[matId] || 0) + cantidad;
+            });
+
+            const listaMovimientos = [];
+            const actualizacionesReservado = [];
+
+            // ==========================================
+            // VALIDAR TODO ANTES DE MODIFICAR
+            // ==========================================
+            for (const matId of Object.keys(cantidades)) {
+
+                const material = inventario.find(m => m.id === matId);
+
+                if (!material) {
+                    throw new Error(`Material no encontrado: ${matId}`);
+                }
+
+                const cantidad = cantidades[matId];
+
+                const stockReal =
+                    parseFloat(material.stock_real || 0) || 0;
+
+                const stockReservado =
+                    parseFloat(material.stock_reservado || 0) || 0;
+
+                if (stockReal < cantidad) {
+                    throw new Error(
+                        `Stock insuficiente para ${material.nombre || matId}. ` +
+                        `Disponible: ${stockReal}, requerido: ${cantidad}`
+                    );
+                }
+
+                /*
+                 * Al iniciar producción:
+                 *
+                 * stock_real      ↓
+                 * stock_reservado ↓
+                 *
+                 * Porque el material deja de estar apartado
+                 * y pasa físicamente al taller.
+                 */
+
+                listaMovimientos.push({
+                    material_id: matId,
+                    tipo: "salida",
+                    tipo_movimiento: "salida_produccion",
+                    origen: "orden",
+                    origen_id: ordenId,
+                    ref_tipo: "material",
+                    ref_id: matId,
+                    cantidad: cantidad,
+                    costo_unitario: parseFloat(material.costo_unitario || 0) || 0,
+                    motivo: `Salida de materiales para producción`,
+                    notas: `Orden de producción ${ordenId}`
+                });
+
+                actualizacionesReservado.push({
+                    material,
+                    nuevoReservado: Math.max(0, stockReservado - cantidad)
+                });
+            }
+
+            // ==========================================
+            // CREAR MOVIMIENTOS CENTRALES
+            // ==========================================
+            const lote =
+                App.logic.movimientos.crearLoteMovimientos(listaMovimientos);
+
+            const operaciones = [
+                ...lote.operaciones
+            ];
+
+            // ==========================================
+            // LIBERAR RESERVA
+            // ==========================================
+            actualizacionesReservado.forEach(item => {
+                operaciones.push({
+                    action: "actualizar_fila",
+                    nombreHoja: "materiales",
+                    idFila: item.material.id,
+                    datosNuevos: {
+                        stock_reservado: item.nuevoReservado
+                    }
+                });
+            });
+
+            // ==========================================
+            // MARCAR MATERIALES COMO DESCONTADOS
+            // ==========================================
+            operaciones.push({
+                action: "actualizar_fila",
+                nombreHoja: "ordenes_produccion",
+                idFila: ordenId,
+                datosNuevos: {
+                    materiales_descontados: "TRUE"
+                }
+            });
+
+            const res = await App.api.fetch("ejecutar_lote", {
+                operaciones
+            });
+
+            App.ui.hideLoader();
+
+            if (res.status !== "success") {
+                throw new Error(
+                    res.message || "No se pudieron descontar los materiales."
+                );
+            }
+
+            // ==========================================
+            // SINCRONIZAR ESTADO LOCAL
+            // ==========================================
+            App.logic.movimientos.aplicarEnEstado(lote);
+
+            actualizacionesReservado.forEach(item => {
+                item.material.stock_reservado = item.nuevoReservado;
+            });
+
+            orden.materiales_descontados = "TRUE";
+
+            App.ui.toast(
+                "Materiales descontados y movimiento de inventario registrado"
+            );
+
+            App.logic.revisarAlertasStock();
+
+            return {
+                ok: true,
+                ordenId,
+                movimientos: lote.movimientos
+            };
+
+        } catch (error) {
+            console.error(
+                "Error en descontarMaterialesProduccion:",
+                error
+            );
+
+            App.ui.hideLoader();
+
+            App.ui.toast(
+                error.message || "Error al descontar materiales",
+                "danger"
+            );
+
+            throw error;
+        }
+    },
+
     // ==========================================
     // 2. GUARDAR RECETA Y DESCONTAR INVENTARIO
     // ==========================================
