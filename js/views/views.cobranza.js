@@ -120,16 +120,29 @@ const reembolsosVista = reembolsosPendientes.map(r => {
                         Motivo:
                     </span>
 
-                    <strong>
-                        ${App.ui.safe(r.motivo || 'Devolución de pedido')}
-                    </strong>
+            <strong>
+    ${App.ui.safe(r.motivo || 'Devolución de pedido')}
+</strong>
 
-                </div>
+</div>
 
-            </div>
+</div>
 
-        </div>
-    `;
+<div
+    class="dm-list-card-actions"
+    style="margin-top:10px;"
+>
+    <button
+        class="dm-btn dm-btn-primary dm-btn-sm"
+        style="background:var(--success); border-color:var(--success);"
+        onclick="App.logic.marcarReembolsoPagado('${r.id}')"
+    >
+        💸 Registrar devolución
+    </button>
+</div>
+
+</div>
+`;
 });
 
     // ==========================================
