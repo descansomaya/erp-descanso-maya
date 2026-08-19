@@ -846,33 +846,39 @@ obtenerResumenFinancieroCentral(filtro = 'todo') {
     };
 },
 
-    // ==========================================
-// MOTOR CENTRAL DE COBRANZA / CxC
+// ==========================================
+// MOTOR CENTRAL DE COBRANZA / CXC
 // ==========================================
 //
-// VENTA:
-//   Solo pedido entregado.
+// La vista NO calcula saldos.
+// Toda la regla financiera vive aquí.
+//
+// PEDIDOS:
+// - Stock interno      → excluido
+// - Cancelado          → excluido
+// - Devuelto           → excluido
+// - Nuevo/Taller/Listo → puede tener CxC
+// - Entregado          → puede tener CxC
 //
 // COBRADO:
-//   Anticipo + abonos de pedidos válidos,
-//   aunque todavía no estén entregados.
+// anticipo + abonos
 //
-// CxC:
-//   Saldo pendiente de pedidos válidos.
-//
-// STOCK INTERNO:
-//   Nunca genera cobro.
-//
-// CANCELADO / DEVUELTO:
-//   No generan cobro ni CxC.
+// CXC:
+// total - anticipo - abonos
 // ==========================================
 
 obtenerResumenCobranzaCentral(filtro = 'todo') {
 
     const pedidos = App.state.pedidos || [];
     const abonos = App.state.abonos || [];
+
     const reparaciones = App.state.reparaciones || [];
-    const abonosReparaciones = App.state.abonos_reparaciones || [];
+    const abonosReparaciones =
+        App.state.abonos_reparaciones || [];
+
+    // ==========================================
+    // FILTRO DE FECHAS
+    // ==========================================
 
     const entraEnFiltro = (fechaStr) => {
 
@@ -902,6 +908,7 @@ obtenerResumenCobranzaCentral(filtro = 'todo') {
         }
 
         if (filtro === 'trimestre_actual') {
+
             return (
                 fecha.getFullYear() === anioActual &&
                 Math.floor(fecha.getMonth() / 3) ===
@@ -910,6 +917,7 @@ obtenerResumenCobranzaCentral(filtro = 'todo') {
         }
 
         if (filtro === 'anio_actual') {
+
             return (
                 fecha.getFullYear() === anioActual
             );
@@ -917,8 +925,11 @@ obtenerResumenCobranzaCentral(filtro = 'todo') {
 
         if (filtro === 'custom') {
 
-            const desde = App.state.finanzasFechaDesde || '';
-            const hasta = App.state.finanzasFechaHasta || '';
+            const desde =
+                App.state.finanzasFechaDesde || '';
+
+            const hasta =
+                App.state.finanzasFechaHasta || '';
 
             if (!desde || !hasta) {
                 return true;
@@ -943,282 +954,372 @@ obtenerResumenCobranzaCentral(filtro = 'todo') {
     // PEDIDOS VÁLIDOS PARA COBRANZA
     // ==========================================
 
-    const pedidosValidos = pedidos.filter(p =>
-        App.logic.estado.cuentaComoCobro(p)
-    );
+    const pedidosValidos =
+        pedidos.filter(p =>
+            App.logic.estado.cuentaComoCobro(p)
+        );
 
     // ==========================================
-    // ANTICIPOS
+    // DETALLE DE PEDIDOS
     // ==========================================
 
-    const pedidosAnticipo = pedidosValidos.filter(p =>
-        entraEnFiltro(
+    const pedidosCobranza = [];
+
+    pedidosValidos.forEach(p => {
+
+        if (!entraEnFiltro(
             p.fecha_creacion ||
             p.fecha_pedido ||
             p.fecha
-        )
-    );
-
-    const anticiposPedidos =
-        pedidosAnticipo.reduce(
-            (sum, p) =>
-                sum +
-                (parseFloat(p.anticipo || 0) || 0),
-            0
-        );
-
-    // ==========================================
-    // ABONOS DE PEDIDOS
-    // ==========================================
-
-    const pedidosValidosIds = new Set(
-        pedidosValidos.map(p => String(p.id))
-    );
-
-    const abonosPedidosValidos = abonos.filter(a => {
-
-        if (!a) return false;
-
-        if (!pedidosValidosIds.has(String(a.pedido_id))) {
-            return false;
+        )) {
+            return;
         }
 
-        return entraEnFiltro(
-            a.fecha ||
-            a.fecha_creacion
-        );
+        const abonosPedido =
+            abonos.filter(a =>
+                String(a.pedido_id) === String(p.id)
+            );
+
+        const totalAbonos =
+            abonosPedido.reduce(
+                (sum, a) =>
+                    sum +
+                    (parseFloat(a.monto || 0) || 0),
+                0
+            );
+
+        const total =
+            parseFloat(p.total || 0) || 0;
+
+        const anticipo =
+            parseFloat(p.anticipo || 0) || 0;
+
+        const pagado =
+            anticipo +
+            totalAbonos;
+
+        const saldo =
+            Math.max(
+                0,
+                total - pagado
+            );
+
+        // Solo enviamos a la vista cuentas realmente pendientes.
+        if (saldo <= 0.05) {
+            return;
+        }
+
+        const abonosOrdenados =
+            [...abonosPedido].sort(
+                (a, b) =>
+                    new Date(
+                        b.fecha ||
+                        b.fecha_creacion ||
+                        0
+                    ) -
+                    new Date(
+                        a.fecha ||
+                        a.fecha_creacion ||
+                        0
+                    )
+            );
+
+        const ultimoAbono =
+            abonosOrdenados.length
+                ? abonosOrdenados[0]
+                : null;
+
+        const estado =
+            App.logic.estado.normalizar(
+                p.estado
+            );
+
+        const listo =
+            estado === 'listo para entregar';
+
+        pedidosCobranza.push({
+
+            id: p.id,
+
+            cliente_id:
+                p.cliente_id || '',
+
+            estado:
+                p.estado || '',
+
+            estadoNormalizado:
+                estado,
+
+            total,
+
+            anticipo,
+
+            abonos:
+                totalAbonos,
+
+            pagado,
+
+            saldo,
+
+            ultimoAbono,
+
+            listo,
+
+            fecha:
+                p.fecha_creacion ||
+                p.fecha_pedido ||
+                p.fecha ||
+                ''
+        });
     });
 
-    const totalAbonosPedidos =
-        abonosPedidosValidos.reduce(
-            (sum, a) =>
-                sum +
-                (parseFloat(a.monto || 0) || 0),
-            0
-        );
-
     // ==========================================
-    // COBRADO DE PEDIDOS
+    // REPARACIONES VÁLIDAS
     // ==========================================
 
-    const cobradoPedidos =
-        anticiposPedidos +
-        totalAbonosPedidos;
+    const reparacionesCobranza = [];
 
-    // ==========================================
-    // CxC PEDIDOS
-    // ==========================================
+    reparaciones.forEach(r => {
 
-    const cuentasPorCobrarPedidos =
-        pedidosAnticipo.reduce(
-            (sum, p) => {
+        const estado =
+            String(r.estado || '')
+                .toLowerCase()
+                .trim();
 
-                const abonosPedido =
-                    abonos
-                        .filter(a =>
-                            String(a.pedido_id) === String(p.id)
-                        )
-                        .reduce(
-                            (s, a) =>
-                                s +
-                                (parseFloat(a.monto || 0) || 0),
-                            0
-                        );
+        // Canceladas y devueltas no generan CxC.
+        if (
+            estado === 'cancelado' ||
+            estado === 'cancelada' ||
+            estado === 'devuelto' ||
+            estado === 'devuelta'
+        ) {
+            return;
+        }
 
-                const total =
-                    parseFloat(p.total || 0) || 0;
+        if (!entraEnFiltro(
+            r.fecha_creacion ||
+            r.fecha_entrega ||
+            r.fecha
+        )) {
+            return;
+        }
 
-                const anticipo =
-                    parseFloat(p.anticipo || 0) || 0;
-
-                const saldo =
-                    Math.max(
-                        0,
-                        total -
-                        anticipo -
-                        abonosPedido
-                    );
-
-                return sum + saldo;
-            },
-            0
-        );
-
-    // ==========================================
-    // REPARACIONES
-    // ==========================================
-
-    const reparacionesValidas =
-        reparaciones.filter(r => {
-
-            if (!r) return false;
-
-            return ![
-                'cancelada',
-                'cancelado',
-                'devuelta',
-                'devuelto'
-            ].includes(
-                String(r.estado || '')
-                    .toLowerCase()
-                    .trim()
+        const abonosRep =
+            abonosReparaciones.filter(a =>
+                String(a.reparacion_id) ===
+                String(r.id)
             );
-        });
 
-    const reparacionesFiltro =
-        reparacionesValidas.filter(r =>
-            entraEnFiltro(
+        const totalAbonos =
+            abonosRep.reduce(
+                (sum, a) =>
+                    sum +
+                    (parseFloat(a.monto || 0) || 0),
+                0
+            );
+
+        const total =
+            parseFloat(r.precio || 0) || 0;
+
+        const anticipo =
+            parseFloat(
+                r.anticipo_inicial ||
+                r.anticipo ||
+                0
+            ) || 0;
+
+        const pagado =
+            anticipo +
+            totalAbonos;
+
+        const saldo =
+            Math.max(
+                0,
+                total - pagado
+            );
+
+        if (saldo <= 0.05) {
+            return;
+        }
+
+        const abonosOrdenados =
+            [...abonosRep].sort(
+                (a, b) =>
+                    new Date(
+                        b.fecha ||
+                        b.fecha_creacion ||
+                        0
+                    ) -
+                    new Date(
+                        a.fecha ||
+                        a.fecha_creacion ||
+                        0
+                    )
+            );
+
+        const ultimoAbono =
+            abonosOrdenados.length
+                ? abonosOrdenados[0]
+                : null;
+
+        const listo =
+            estado === 'lista' ||
+            estado === 'listo' ||
+            estado === 'entregada';
+
+        reparacionesCobranza.push({
+
+            id: r.id,
+
+            cliente_id:
+                r.cliente_id || '',
+
+            estado:
+                r.estado || '',
+
+            estadoNormalizado:
+                estado,
+
+            total,
+
+            anticipo,
+
+            abonos:
+                totalAbonos,
+
+            pagado,
+
+            saldo,
+
+            ultimoAbono,
+
+            listo,
+
+            descripcion:
+                r.descripcion || '',
+
+            fecha:
                 r.fecha_creacion ||
-                r.fecha
-            )
-        );
-
-    const anticiposReparaciones =
-        reparacionesFiltro.reduce(
-            (sum, r) =>
-                sum +
-                (
-                    parseFloat(
-                        r.anticipo_inicial ||
-                        r.anticipo ||
-                        0
-                    ) || 0
-                ),
-            0
-        );
-
-    const reparacionesIds = new Set(
-        reparacionesValidas.map(r => String(r.id))
-    );
-
-    const abonosReparacionesValidos =
-        abonosReparaciones.filter(a => {
-
-            if (!a) return false;
-
-            if (!reparacionesIds.has(
-                String(a.reparacion_id)
-            )) {
-                return false;
-            }
-
-            return entraEnFiltro(
-                a.fecha ||
-                a.fecha_creacion
-            );
+                r.fecha_entrega ||
+                r.fecha ||
+                ''
         });
-
-    const totalAbonosReparaciones =
-        abonosReparacionesValidos.reduce(
-            (sum, a) =>
-                sum +
-                (parseFloat(a.monto || 0) || 0),
-            0
-        );
-
-    const cobradoReparaciones =
-        anticiposReparaciones +
-        totalAbonosReparaciones;
-
-    const cuentasPorCobrarReparaciones =
-        reparacionesFiltro.reduce(
-            (sum, r) => {
-
-                const anticipo =
-                    parseFloat(
-                        r.anticipo_inicial ||
-                        r.anticipo ||
-                        0
-                    ) || 0;
-
-                const abonos =
-                    abonosReparaciones
-                        .filter(a =>
-                            String(a.reparacion_id) ===
-                            String(r.id)
-                        )
-                        .reduce(
-                            (s, a) =>
-                                s +
-                                (
-                                    parseFloat(
-                                        a.monto || 0
-                                    ) || 0
-                                ),
-                            0
-                        );
-
-                const total =
-                    parseFloat(r.precio || 0) || 0;
-
-                const saldo =
-                    Math.max(
-                        0,
-                        total -
-                        anticipo -
-                        abonos
-                    );
-
-                return sum + saldo;
-            },
-            0
-        );
+    });
 
     // ==========================================
     // TOTALES
     // ==========================================
 
-    const cobrado =
-        cobradoPedidos +
-        cobradoReparaciones;
+    const anticiposPedidos =
+        pedidosCobranza.reduce(
+            (sum, p) =>
+                sum + p.anticipo,
+            0
+        );
 
-    const porCobrar =
-        cuentasPorCobrarPedidos +
-        cuentasPorCobrarReparaciones;
+    const abonosPedidos =
+        pedidosCobranza.reduce(
+            (sum, p) =>
+                sum + p.abonos,
+            0
+        );
+
+    const porCobrarPedidos =
+        pedidosCobranza.reduce(
+            (sum, p) =>
+                sum + p.saldo,
+            0
+        );
+
+    const anticiposReparaciones =
+        reparacionesCobranza.reduce(
+            (sum, r) =>
+                sum + r.anticipo,
+            0
+        );
+
+    const abonosReparacionesTotal =
+        reparacionesCobranza.reduce(
+            (sum, r) =>
+                sum + r.abonos,
+            0
+        );
+
+    const porCobrarReparaciones =
+        reparacionesCobranza.reduce(
+            (sum, r) =>
+                sum + r.saldo,
+            0
+        );
+
+const anticipos =
+    anticiposPedidos +
+    anticiposReparaciones;
+
+const abonos =
+    abonosPedidos +
+    abonosReparacionesTotal;
+
+// ==========================================
+// COBRADO POR TIPO
+// ==========================================
+
+const cobradoPedidos =
+    anticiposPedidos +
+    abonosPedidos;
+
+const cobradoReparaciones =
+    anticiposReparaciones +
+    abonosReparacionesTotal;
+
+// ==========================================
+// COBRADO TOTAL
+// ==========================================
+
+const cobrado =
+    cobradoPedidos +
+    cobradoReparaciones;
+
+// ==========================================
+// CXC TOTAL
+// ==========================================
+
+const porCobrar =
+    porCobrarPedidos +
+    porCobrarReparaciones;
+
+    // ==========================================
+    // RESULTADO CENTRAL
+    // ==========================================
 
     return {
 
+        // Totales
         cobrado,
-
         porCobrar,
 
-        anticipos:
-            anticiposPedidos +
-            anticiposReparaciones,
+        anticipos,
+        abonos,
 
-        abonos:
-            totalAbonosPedidos +
-            totalAbonosReparaciones,
-
-        cobradoPedidos,
-
-        cobradoReparaciones,
-
-        porCobrarPedidos:
-            cuentasPorCobrarPedidos,
-
-        porCobrarReparaciones:
-            cuentasPorCobrarReparaciones,
-
+        // Pedidos
         anticiposPedidos,
+        abonosPedidos,
+        cobradoPedidos,
+        porCobrarPedidos,
 
+        // Reparaciones
         anticiposReparaciones,
-
-        abonosPedidos:
-            totalAbonosPedidos,
-
         abonosReparaciones:
-            totalAbonosReparaciones,
+            abonosReparacionesTotal,
+        cobradoReparaciones,
+        porCobrarReparaciones,
 
-        pedidosCobranza:
-            pedidosAnticipo,
+        // Detalle para las vistas
+        pedidos:
+            pedidosCobranza,
 
-        reparacionesCobranza:
-            reparacionesFiltro,
-
-        abonosPedidosValidos,
-
-        abonosReparacionesValidos
+        reparaciones:
+            reparacionesCobranza
     };
 },
 
