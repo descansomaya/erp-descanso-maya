@@ -74,3 +74,118 @@ App.views._resumenCosteoPlaneacion = function () {
         saldoProyectado: totalEntradasEsperadas - totalSalidasComprometidas
     };
 };
+
+// ==========================================
+// CORRECCIÓN: SALIDAS REALES DE CAJA
+// ==========================================
+// Las compras se contabilizan únicamente por monto_pagado,
+// no por el total de la compra. Los pendientes siguen siendo
+// obligaciones, pero no representan una salida de efectivo.
+// Los reembolsos pagados sí representan una salida real.
+// ==========================================
+
+App.logic = App.logic || {};
+
+App.logic._obtenerSalidasRealesCaja = function (resumen, filtro = 'todo') {
+    const reembolsos = Array.isArray(App.state.reembolsos)
+        ? App.state.reembolsos
+        : [];
+
+    const entraEnFiltro = (fechaStr) => {
+        if (!fechaStr) return filtro === 'todo';
+
+        const fecha = new Date(fechaStr);
+        if (isNaN(fecha.getTime())) return false;
+        if (filtro === 'todo') return true;
+
+        const hoy = new Date();
+        const mesActual = hoy.getMonth();
+        const anioActual = hoy.getFullYear();
+
+        if (filtro === 'mes_actual') {
+            return fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual;
+        }
+
+        if (filtro === 'trimestre_actual') {
+            return fecha.getFullYear() === anioActual &&
+                Math.floor(fecha.getMonth() / 3) === Math.floor(mesActual / 3);
+        }
+
+        if (filtro === 'anio_actual') {
+            return fecha.getFullYear() === anioActual;
+        }
+
+        if (filtro === 'custom') {
+            const desde = App.state.finanzasFechaDesde || '';
+            const hasta = App.state.finanzasFechaHasta || '';
+            if (!desde || !hasta) return true;
+
+            return fecha >= new Date(desde + 'T00:00:00') &&
+                fecha <= new Date(hasta + 'T23:59:59');
+        }
+
+        return true;
+    };
+
+    const reembolsosPagados = reembolsos
+        .filter(r => String(r.estado || '').toLowerCase().trim() === 'pagado')
+        .filter(r => entraEnFiltro(r.fecha_pago || r.fecha || r.fecha_creacion))
+        .reduce((sum, r) => sum + (parseFloat(r.monto || 0) || 0), 0);
+
+    const gastosOperativos = parseFloat(resumen?.gastosOperativosPuros || 0) || 0;
+    const comprasPagadas = parseFloat(resumen?.totalComprasPagadas || 0) || 0;
+    const nominaPagada = parseFloat(resumen?.totalNominaPagada || 0) || 0;
+
+    return {
+        gastosOperativos,
+        comprasPagadas,
+        nominaPagada,
+        reembolsosPagados,
+        total: gastosOperativos + comprasPagadas + nominaPagada + reembolsosPagados
+    };
+};
+
+// Conservamos el motor financiero original y agregamos los indicadores
+// de caja real sin duplicar compras pendientes.
+if (typeof App.logic.obtenerResumenFinancieroCentral === 'function') {
+    const _obtenerResumenFinancieroCentralOriginal = App.logic.obtenerResumenFinancieroCentral;
+
+    App.logic.obtenerResumenFinancieroCentral = function (filtro = 'todo') {
+        const resumen = _obtenerResumenFinancieroCentralOriginal.call(this, filtro);
+        const salidas = App.logic._obtenerSalidasRealesCaja(resumen, filtro);
+
+        resumen.salidasRegistradas = salidas.total;
+        resumen.reembolsosPagados = salidas.reembolsosPagados;
+        resumen.flujoOperativo = (parseFloat(resumen.cobrado || 0) || 0) - salidas.total;
+        resumen.resultadoCajaReal = resumen.flujoOperativo;
+
+        return resumen;
+    };
+}
+
+// Ajusta la gráfica de flujo para utilizar exactamente la misma definición
+// de salida real que el resumen financiero.
+if (typeof App.logic.renderGraficasFinanzas === 'function') {
+    const _renderGraficasFinanzasOriginal = App.logic.renderGraficasFinanzas;
+
+    App.logic.renderGraficasFinanzas = function (filtro) {
+        _renderGraficasFinanzasOriginal.call(this, filtro);
+
+        const resumen = App.logic.obtenerResumenFinancieroCentral(filtro);
+        const grafica = window.graficaFinanzasFlujo;
+
+        if (grafica && grafica.data && grafica.data.datasets && grafica.data.datasets[0]) {
+            const ingresos = parseFloat(resumen.cobrado || 0) || 0;
+            const salidas = parseFloat(resumen.salidasRegistradas || 0) || 0;
+            const flujo = ingresos - salidas;
+
+            grafica.data.datasets[0].data = [
+                Math.max(ingresos, 0),
+                Math.max(salidas, 0),
+                Math.max(flujo, 0)
+            ];
+
+            grafica.update();
+        }
+    };
+}
