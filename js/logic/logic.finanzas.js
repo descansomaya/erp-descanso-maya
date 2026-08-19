@@ -698,6 +698,42 @@ const cotizaciones = App.state.cotizaciones || [];
         );
     });
 
+    // ==========================================
+// VENTAS VÁLIDAS
+// ==========================================
+
+const pedidosVenta = pedidosCobro.filter(p =>
+    App.logic.estado.esVenta(p)
+);
+
+const ventasPedidos = pedidosVenta.reduce(
+    (sum, p) =>
+        sum + (parseFloat(p.total || 0) || 0),
+    0
+);
+
+// ==========================================
+// ABONOS VÁLIDOS PARA EL PERIODO
+// ==========================================
+
+const pedidosCobroIds = new Set(
+    pedidosCobro.map(p => String(p.id))
+);
+
+const abonosValidos = abonos.filter(a => {
+
+    if (!a) return false;
+
+    if (!pedidosCobroIds.has(String(a.pedido_id))) {
+        return false;
+    }
+
+    return entraEnFiltro(
+        a.fecha ||
+        a.fecha_creacion
+    );
+});
+
   // ==========================================
 // COBRANZA CENTRAL
 // ==========================================
