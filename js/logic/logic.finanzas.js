@@ -698,65 +698,29 @@ const cotizaciones = App.state.cotizaciones || [];
         );
     });
 
-    // ==========================================
-    // VENTAS VÁLIDAS
-    // ==========================================
+  // ==========================================
+// COBRANZA CENTRAL
+// ==========================================
+// Finanzas NO calcula anticipos ni abonos por separado.
+// Utiliza el mismo motor central de Cobranza.
+// Esto garantiza que pedidos y reparaciones
+// tengan la misma lógica financiera.
+// ==========================================
 
-    const pedidosVenta = pedidosCobro.filter(p =>
-        App.logic.estado.esVenta(p)
-    );
+const resumenCobranza =
+    App.logic.obtenerResumenCobranzaCentral(filtro);
 
-    const ventasPedidos = pedidosVenta.reduce(
-        (sum, p) =>
-            sum + (parseFloat(p.total || 0) || 0),
-        0
-    );
+const anticipos =
+    resumenCobranza.anticipos || 0;
 
-    // ==========================================
-    // ANTICIPOS
-    // ==========================================
+const totalAbonos =
+    resumenCobranza.abonos || 0;
 
-    const anticipos = pedidosCobro.reduce(
-        (sum, p) =>
-            sum + (parseFloat(p.anticipo || 0) || 0),
-        0
-    );
+const cobrado =
+    resumenCobranza.cobrado || 0;
 
-    // ==========================================
-    // ABONOS
-    // ==========================================
-
-    const pedidosCobroIds = new Set(
-        pedidosCobro.map(p => String(p.id))
-    );
-
-    const abonosValidos = abonos.filter(a => {
-
-        if (!a) return false;
-
-        if (!pedidosCobroIds.has(String(a.pedido_id))) {
-            return false;
-        }
-
-        return entraEnFiltro(
-            a.fecha ||
-            a.fecha_creacion
-        );
-    });
-
-    const totalAbonos = abonosValidos.reduce(
-        (sum, a) =>
-            sum + (parseFloat(a.monto || 0) || 0),
-        0
-    );
-
-    // ==========================================
-    // COBRADO REAL
-    // ==========================================
-
-    const cobrado =
-        anticipos +
-        totalAbonos;
+const porCobrar =
+    resumenCobranza.porCobrar || 0;
 
     // ==========================================
     // REPARACIONES ENTREGADAS
@@ -796,14 +760,7 @@ const cotizaciones = App.state.cotizaciones || [];
         ventasPedidos +
         ventasReparaciones;
 
-    // ==========================================
-    // POR COBRAR
-    // ==========================================
-
-    const porCobrar = Math.max(
-        0,
-        ventas - cobrado
-    );
+   
 
     // ==========================================
     // GASTOS
