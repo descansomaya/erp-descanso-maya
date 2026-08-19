@@ -443,6 +443,45 @@ const cobranzaCentral =
 const totalCobrado =
     cobranzaCentral.cobrado;
 
+const resumenFinanciero =
+    App.logic.obtenerResumenFinancieroCentral(filtro);
+
+const gastosOperativosPuros =
+    resumenFinanciero.gastosOperativosPuros;
+
+const totalCompras =
+    resumenFinanciero.totalCompras;
+
+const totalNomina =
+    resumenFinanciero.totalNomina;
+
+const totalCotizado =
+    resumenFinanciero.totalCotizado;
+
+const totalComprasPagadas =
+    resumenFinanciero.totalComprasPagadas;
+
+const totalNominaPagada =
+    resumenFinanciero.totalNominaPagada;
+
+const porPagarCompras =
+    resumenFinanciero.porPagarCompras;
+
+const porPagarNomina =
+    resumenFinanciero.porPagarNomina;
+
+const totalPorPagar =
+    resumenFinanciero.totalPorPagar;
+
+const resultadoCaja =
+    resumenFinanciero.resultadoCaja;
+
+const flujoOperativo =
+    resumenFinanciero.flujoOperativo;
+
+const saldoProyectado =
+    resumenFinanciero.saldoProyectado;
+
 const porCobrarPedidos =
     cobranzaCentral.porCobrarPedidos;
 
@@ -453,9 +492,7 @@ const dineroEnLaCalle =
     cobranzaCentral.porCobrar;
     
     
-    const porPagarCompras = comprasFil.reduce((acc, c) => { const total = parseFloat(c.total || 0) || 0; const pagado = c.monto_pagado !== undefined && c.monto_pagado !== '' ? parseFloat(c.monto_pagado || 0) : total; const deuda = total - pagado; return acc + (deuda > 0 ? deuda : 0); }, 0);
-    const porPagarNomina = pagosArtesanos.filter(p => String(p.estado || '').toLowerCase() === 'pendiente').reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
-    const totalPorPagar = porPagarCompras + porPagarNomina;
+
     
     // RENTABILIDAD
     const costoRealData = App.views.calcularCostoRealHamacas(filtro);
@@ -470,9 +507,7 @@ const dineroEnLaCalle =
     const utilidadOperativaReal = utilidadBrutaGlobal - gastosOperativosPuros;
     const margenOperativoReal = ventaGlobal > 0 ? (utilidadOperativaReal / ventaGlobal) * 100 : 0;
 
-    const resultadoCaja = totalCobrado - gastosOperativosPuros;
-    const flujoOperativo = totalCobrado - gastosOperativosPuros - totalCompras - totalNomina;
-    const saldoProyectado = dineroEnLaCalle - totalPorPagar;
+
     
     const salud = flujoOperativo >= 0 && saldoProyectado >= 0 ? 'Sana' : (flujoOperativo < 0 && saldoProyectado < 0 ? 'Crítica' : 'En observación');
     const saludColor = salud === 'Sana' ? 'green' : (salud === 'Crítica' ? 'red' : '#B7791F');
