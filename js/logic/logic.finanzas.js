@@ -1164,6 +1164,7 @@ obtenerResumenCobranzaCentral(filtro = 'todo') {
     // ==========================================
 
     const pedidosCobranza = [];
+    const pedidosCobranzaTodos = [];
 
     pedidosValidos.forEach(p => {
 
@@ -1203,7 +1204,37 @@ obtenerResumenCobranzaCentral(filtro = 'todo') {
                 0,
                 total - pagado
             );
+pedidosCobranzaTodos.push({
 
+    id: p.id,
+
+    cliente_id:
+        p.cliente_id || '',
+
+    estado:
+        p.estado || '',
+
+    estadoNormalizado:
+        App.logic.estado.normalizar(p.estado),
+
+    total,
+
+    anticipo,
+
+    abonos:
+        totalAbonos,
+
+    pagado,
+
+    saldo,
+
+    fecha:
+        p.fecha_creacion ||
+        p.fecha_pedido ||
+        p.fecha ||
+        ''
+});
+        
         // Solo enviamos a la vista cuentas realmente pendientes.
         if (saldo <= 0.05) {
             return;
@@ -1278,6 +1309,7 @@ obtenerResumenCobranzaCentral(filtro = 'todo') {
     // ==========================================
 
     const reparacionesCobranza = [];
+    const reparacionesCobranzaTodas = [];
 
     reparaciones.forEach(r => {
 
@@ -1338,10 +1370,46 @@ obtenerResumenCobranzaCentral(filtro = 'todo') {
                 total - pagado
             );
 
+        reparacionesCobranzaTodas.push({
+
+    id: r.id,
+
+    cliente_id:
+        r.cliente_id || '',
+
+    estado:
+        r.estado || '',
+
+    estadoNormalizado:
+        estado,
+
+    total,
+
+    anticipo,
+
+    abonos:
+        totalAbonos,
+
+    pagado,
+
+    saldo,
+
+    descripcion:
+        r.descripcion || '',
+
+    fecha:
+        r.fecha_creacion ||
+        r.fecha_entrega ||
+        r.fecha ||
+        ''
+});
+
         if (saldo <= 0.05) {
             return;
         }
 
+        
+        
         const abonosOrdenados =
             [...abonosRep].sort(
                 (a, b) =>
@@ -1410,48 +1478,50 @@ obtenerResumenCobranzaCentral(filtro = 'todo') {
     // TOTALES
     // ==========================================
 
-    const anticiposPedidos =
-        pedidosCobranza.reduce(
-            (sum, p) =>
-                sum + p.anticipo,
-            0
-        );
+ const anticiposPedidos =
+    pedidosCobranzaTodos.reduce(
+        (sum, p) =>
+            sum + p.anticipo,
+        0
+    );
 
-    const abonosPedidos =
-        pedidosCobranza.reduce(
-            (sum, p) =>
-                sum + p.abonos,
-            0
-        );
+const abonosPedidos =
+    pedidosCobranzaTodos.reduce(
+        (sum, p) =>
+            sum + p.abonos,
+        0
+    );
 
-    const porCobrarPedidos =
-        pedidosCobranza.reduce(
-            (sum, p) =>
-                sum + p.saldo,
-            0
-        );
+const porCobrarPedidos =
+    pedidosCobranzaTodos.reduce(
+        (sum, p) =>
+            sum + p.saldo,
+        0
+    );
+
+
 
     const anticiposReparaciones =
-        reparacionesCobranza.reduce(
-            (sum, r) =>
-                sum + r.anticipo,
-            0
-        );
+    reparacionesCobranzaTodas.reduce(
+        (sum, r) =>
+            sum + r.anticipo,
+        0
+    );
 
-    const abonosReparacionesTotal =
-        reparacionesCobranza.reduce(
-            (sum, r) =>
-                sum + r.abonos,
-            0
-        );
+const abonosReparacionesTotal =
+    reparacionesCobranzaTodas.reduce(
+        (sum, r) =>
+            sum + r.abonos,
+        0
+    );
 
-    const porCobrarReparaciones =
-        reparacionesCobranza.reduce(
-            (sum, r) =>
-                sum + r.saldo,
-            0
-        );
-
+const porCobrarReparaciones =
+    reparacionesCobranzaTodas.reduce(
+        (sum, r) =>
+            sum + r.saldo,
+        0
+    );
+    
 const anticipos =
     anticiposPedidos +
     anticiposReparaciones;
