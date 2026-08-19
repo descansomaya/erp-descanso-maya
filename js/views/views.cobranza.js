@@ -6,6 +6,7 @@ window.App = window.App || {};
 App.views = App.views || {};
 
 App.views.cobranza = function() {
+
     const bottomNav = document.getElementById('bottom-nav');
     const title = document.getElementById('app-header-title');
     const subtitle = document.getElementById('app-header-subtitle');
@@ -14,258 +15,477 @@ App.views.cobranza = function() {
     if (title) title.innerText = 'Cobranza';
     if (subtitle) subtitle.innerText = 'Cuentas por cobrar';
 
-    const pedidos = App.state.pedidos || [];
-    const clientes = App.state.clientes || [];
-    const abonos = App.state.abonos || [];
-    const reparaciones = App.state.reparaciones || [];
-    const abonosReparaciones = App.state.abonos_reparaciones || [];
+    // ==========================================
+    // FUENTE CENTRAL DE COBRANZA
+    // ==========================================
 
-    let listosConDeuda = [];
-    let enProcesoConDeuda = [];
-    let totalPorCobrar = 0;
+    const resumen =
+        App.logic.obtenerResumenCobranzaCentral('todo');
 
-    pedidos.forEach(p => {
-        const abonosPedidoLista = abonos.filter(a => a.pedido_id === p.id);
-        const abonosPedido = abonosPedidoLista.reduce((s, a) => s + parseFloat(a.monto || 0), 0);
-        const ultimoAbono = abonosPedidoLista.length
-            ? [...abonosPedidoLista].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))[0]
-            : null;
+    const pedidosCobranza =
+        resumen.pedidos || [];
 
-        const saldo = parseFloat(p.total || 0) - parseFloat(p.anticipo || 0) - abonosPedido;
+    const reparacionesCobranza =
+        resumen.reparaciones || [];
 
-        if (saldo > 0) {
-            totalPorCobrar += saldo;
+    const clientes =
+        App.state.clientes || [];
 
-            const c = clientes.find(cli => cli.id === p.cliente_id);
-            const nombreCli = c
-                ? c.nombre
-                : (p.cliente_id === 'STOCK_INTERNO' ? 'Bodega' : 'Cliente');
+    // ==========================================
+    // SEPARACIÓN VISUAL
+    //
+    // IMPORTANTE:
+    // La vista NO decide quién tiene deuda.
+    // El motor central ya lo decidió.
+    //
+    // Aquí únicamente organizamos visualmente.
+    // ==========================================
 
-            const tarjeta = `
-                <div class="dm-list-card">
-                    <div class="dm-row-between" style="align-items:flex-start; gap:12px; margin-bottom:8px;">
-                        <div style="flex:1; min-width:0;">
-                            <div class="dm-fw-bold" style="word-break:break-word;">
-                                ${App.ui.safe((p.id || '').replace('PED-', ''))} - ${App.ui.safe(nombreCli)}
-                            </div>
-                            <div class="dm-text-sm dm-muted">
-                                Estado: ${App.ui.safe(p.estado || 'Sin estado')}
-                            </div>
+    const listosConDeuda = [];
+    const enProcesoConDeuda = [];
+
+    // ==========================================
+    // PEDIDOS
+    // ==========================================
+
+    pedidosCobranza.forEach(p => {
+
+        const cliente =
+            clientes.find(c =>
+                String(c.id) === String(p.cliente_id)
+            );
+
+        const nombreCliente =
+            cliente
+                ? cliente.nombre
+                : (
+                    p.cliente_id === 'STOCK_INTERNO'
+                        ? 'Bodega'
+                        : 'Cliente'
+                );
+
+        const ultimoAbono =
+            p.ultimoAbono;
+
+        const tarjeta = `
+            <div class="dm-list-card">
+
+                <div
+                    class="dm-row-between"
+                    style="align-items:flex-start; gap:12px; margin-bottom:8px;"
+                >
+
+                    <div style="flex:1; min-width:0;">
+
+                        <div
+                            class="dm-fw-bold"
+                            style="word-break:break-word;"
+                        >
+                            ${App.ui.safe(
+                                (p.id || '').replace('PED-', '')
+                            )}
+                            -
+                            ${App.ui.safe(nombreCliente)}
                         </div>
 
-                        <div style="text-align:right; flex:0 0 auto;">
-                            <div style="color:#D69E2E; font-weight:700; font-size:1.1rem;">
-                                $${saldo.toFixed(2)}
-                            </div>
-                            <div class="dm-text-sm dm-muted">Pendiente</div>
+                        <div class="dm-text-sm dm-muted">
+                            Estado:
+                            ${App.ui.safe(
+                                p.estado || 'Sin estado'
+                            )}
                         </div>
+
                     </div>
 
-                    <div class="dm-card dm-mb-3" style="background:var(--dm-surface-2); padding:10px;">
-                        <div class="dm-row-between dm-text-sm">
-                            <span class="dm-muted">Total:</span>
-                            <strong>$${parseFloat(p.total || 0).toFixed(2)}</strong>
+                    <div
+                        style="text-align:right; flex:0 0 auto;"
+                    >
+
+                        <div
+                            style="color:#D69E2E; font-weight:700; font-size:1.1rem;"
+                        >
+                            $${p.saldo.toFixed(2)}
                         </div>
-                        <div class="dm-row-between dm-text-sm">
-                            <span class="dm-muted">Pagado:</span>
-                            <strong>$${(parseFloat(p.anticipo || 0) + abonosPedido).toFixed(2)}</strong>
+
+                        <div class="dm-text-sm dm-muted">
+                            Pendiente
                         </div>
+
                     </div>
 
-                    <div class="dm-list-card-actions" style="flex-wrap:wrap;">
-                        <button
-                            class="dm-btn dm-btn-primary dm-btn-sm"
-                            style="background:var(--success); border-color:var(--success);"
-                            onclick="App.views.abrirCobroSeguro('${p.id}', '${p.cliente_id}', ${saldo})"
-                        >
-                            💰 Cobrar
-                        </button>
-
-                        <button
-                            class="dm-btn dm-btn-secondary dm-btn-sm"
-                            onclick="App.logic.imprimirNota('${p.id}')"
-                        >
-                            🖨️ Nota
-                        </button>
-
-                        ${ultimoAbono ? `
-                            <button
-                                class="dm-btn dm-btn-secondary dm-btn-sm"
-                                onclick="App.logic.imprimirReciboAbono('${ultimoAbono.id}')"
-                            >
-                                🧾 Últ. abono
-                            </button>
-                        ` : ''}
-
-                        <button
-                            class="dm-btn dm-btn-secondary dm-btn-sm"
-                            onclick="App.logic.imprimirReciboLiquidacion('${p.id}')"
-                        >
-                            ✅ Liquidación
-                        </button>
-
-                        ${c && c.telefono ? `
-                            <button
-                                class="dm-btn dm-btn-secondary dm-btn-sm"
-                                style="color:#38A169; border-color:#38A693;"
-                                onclick="App.views.enviarRecordatorioSeguro('${p.id}', '${p.estado === 'listo para entregar' ? 'listo' : 'cobro'}')"
-                            >
-                                💬 Recordatorio
-                            </button>
-                        ` : ''}
-                    </div>
                 </div>
-            `;
 
-            if (p.estado === 'listo para entregar') listosConDeuda.push(tarjeta);
-            else enProcesoConDeuda.push(tarjeta);
+                <div
+                    class="dm-card dm-mb-3"
+                    style="background:var(--dm-surface-2); padding:10px;"
+                >
+
+                    <div class="dm-row-between dm-text-sm">
+                        <span class="dm-muted">
+                            Total:
+                        </span>
+
+                        <strong>
+                            $${p.total.toFixed(2)}
+                        </strong>
+                    </div>
+
+                    <div class="dm-row-between dm-text-sm">
+                        <span class="dm-muted">
+                            Pagado:
+                        </span>
+
+                        <strong>
+                            $${p.pagado.toFixed(2)}
+                        </strong>
+                    </div>
+
+                </div>
+
+                <div
+                    class="dm-list-card-actions"
+                    style="flex-wrap:wrap;"
+                >
+
+                    <button
+                        class="dm-btn dm-btn-primary dm-btn-sm"
+                        style="background:var(--success); border-color:var(--success);"
+                        onclick="App.views.abrirCobroSeguro(
+                            '${p.id}',
+                            '${p.cliente_id}',
+                            ${p.saldo}
+                        )"
+                    >
+                        💰 Cobrar
+                    </button>
+
+                    <button
+                        class="dm-btn dm-btn-secondary dm-btn-sm"
+                        onclick="App.logic.imprimirNota('${p.id}')"
+                    >
+                        🖨️ Nota
+                    </button>
+
+                    ${ultimoAbono ? `
+                        <button
+                            class="dm-btn dm-btn-secondary dm-btn-sm"
+                            onclick="App.logic.imprimirReciboAbono('${ultimoAbono.id}')"
+                        >
+                            🧾 Últ. abono
+                        </button>
+                    ` : ''}
+
+                    <button
+                        class="dm-btn dm-btn-secondary dm-btn-sm"
+                        onclick="App.logic.imprimirReciboLiquidacion('${p.id}')"
+                    >
+                        ✅ Liquidación
+                    </button>
+
+                    ${cliente && cliente.telefono ? `
+                        <button
+                            class="dm-btn dm-btn-secondary dm-btn-sm"
+                            style="color:#38A169; border-color:#38A693;"
+                            onclick="App.views.enviarRecordatorioSeguro(
+                                '${p.id}',
+                                '${p.listo ? 'listo' : 'cobro'}'
+                            )"
+                        >
+                            💬 Recordatorio
+                        </button>
+                    ` : ''}
+
+                </div>
+
+            </div>
+        `;
+
+        if (p.listo) {
+            listosConDeuda.push(tarjeta);
+        } else {
+            enProcesoConDeuda.push(tarjeta);
         }
     });
 
-    reparaciones.forEach(r => {
-        const c = clientes.find(cli => cli.id === r.cliente_id);
-        const nombreCli = c ? c.nombre : 'Cliente';
+    // ==========================================
+    // REPARACIONES
+    // ==========================================
 
-        const abonosRepLista = abonosReparaciones
-            .filter(a => a.reparacion_id === r.id);
+    reparacionesCobranza.forEach(r => {
 
-        const totalAbonosRep = abonosRepLista.reduce((s, a) => s + parseFloat(a.monto || 0), 0);
-        const ultimoAbonoRep = abonosRepLista.length
-            ? [...abonosRepLista].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))[0]
-            : null;
+        const cliente =
+            clientes.find(c =>
+                String(c.id) === String(r.cliente_id)
+            );
 
-        const anticipoInicial = parseFloat(r.anticipo_inicial || 0) || 0;
-        const totalPagado = anticipoInicial + totalAbonosRep;
-        const saldo = parseFloat(r.precio || 0) - totalPagado;
+        const nombreCliente =
+            cliente
+                ? cliente.nombre
+                : 'Cliente';
 
-        if (saldo > 0) {
-            totalPorCobrar += saldo;
+        const ultimoAbono =
+            r.ultimoAbono;
 
-            const tarjeta = `
-                <div class="dm-list-card" style="border:1px dashed #805AD5; background:#FAF5FF;">
-                    <div class="dm-row-between" style="align-items:flex-start; gap:12px; margin-bottom:8px;">
-                        <div style="flex:1; min-width:0;">
-                            <div class="dm-fw-bold" style="color:#6B46C1; word-break:break-word;">
-                                ${App.ui.safe((r.id || '').replace('REP-', ''))} (Rep) - ${App.ui.safe(nombreCli)}
-                            </div>
-                            <div class="dm-text-sm dm-muted">
-                                ${App.ui.safe(r.descripcion || 'Servicio')}
-                            </div>
-                            <div class="dm-text-sm dm-muted dm-mt-2">
-                                Estado: ${App.ui.safe(r.estado || 'pendiente')}
-                            </div>
+        const tarjeta = `
+            <div
+                class="dm-list-card"
+                style="border:1px dashed #805AD5; background:#FAF5FF;"
+            >
+
+                <div
+                    class="dm-row-between"
+                    style="align-items:flex-start; gap:12px; margin-bottom:8px;"
+                >
+
+                    <div style="flex:1; min-width:0;">
+
+                        <div
+                            class="dm-fw-bold"
+                            style="color:#6B46C1; word-break:break-word;"
+                        >
+                            ${App.ui.safe(
+                                (r.id || '').replace('REP-', '')
+                            )}
+                            (Rep) -
+                            ${App.ui.safe(nombreCliente)}
                         </div>
 
-                        <div style="text-align:right; flex:0 0 auto;">
-                            <div style="color:#D69E2E; font-weight:700; font-size:1.1rem;">
-                                $${saldo.toFixed(2)}
-                            </div>
-                            <div class="dm-text-sm dm-muted">Pendiente</div>
+                        <div class="dm-text-sm dm-muted">
+                            ${App.ui.safe(
+                                r.descripcion || 'Servicio'
+                            )}
                         </div>
+
+                        <div class="dm-text-sm dm-muted dm-mt-2">
+                            Estado:
+                            ${App.ui.safe(
+                                r.estado || 'pendiente'
+                            )}
+                        </div>
+
                     </div>
 
-                    <div class="dm-card dm-mb-3" style="background:#fff; padding:10px;">
-                        <div class="dm-row-between dm-text-sm">
-                            <span class="dm-muted">Total:</span>
-                            <strong>$${parseFloat(r.precio || 0).toFixed(2)}</strong>
+                    <div
+                        style="text-align:right; flex:0 0 auto;"
+                    >
+
+                        <div
+                            style="color:#D69E2E; font-weight:700; font-size:1.1rem;"
+                        >
+                            $${r.saldo.toFixed(2)}
                         </div>
-                        <div class="dm-row-between dm-text-sm">
-                            <span class="dm-muted">Pagado:</span>
-                            <strong>$${totalPagado.toFixed(2)}</strong>
+
+                        <div class="dm-text-sm dm-muted">
+                            Pendiente
                         </div>
+
                     </div>
 
-                    <div class="dm-list-card-actions" style="flex-wrap:wrap;">
-                        <button
-                            class="dm-btn dm-btn-primary dm-btn-sm"
-                            style="background:var(--success); border-color:var(--success);"
-                            onclick="App.views.abrirCobroSeguro('${r.id}', '${r.cliente_id}', ${saldo})"
-                        >
-                            💰 Cobrar
-                        </button>
-
-                        <button
-                            class="dm-btn dm-btn-secondary dm-btn-sm"
-                            onclick="App.logic.imprimirNota('${r.id}')"
-                        >
-                            🖨️ Nota
-                        </button>
-
-                        ${ultimoAbonoRep ? `
-                            <button
-                                class="dm-btn dm-btn-secondary dm-btn-sm"
-                                onclick="App.logic.imprimirReciboAbono('${ultimoAbonoRep.id}')"
-                            >
-                                🧾 Últ. abono
-                            </button>
-                        ` : ''}
-
-                        <button
-                            class="dm-btn dm-btn-secondary dm-btn-sm"
-                            onclick="App.logic.imprimirReciboLiquidacion('${r.id}')"
-                        >
-                            ✅ Liquidación
-                        </button>
-
-                        ${c && c.telefono ? `
-                            <button
-                                class="dm-btn dm-btn-secondary dm-btn-sm"
-                                style="color:#38A169; border-color:#38A169;"
-                                onclick="App.views.enviarRecordatorioSeguro('${r.id}', '${r.estado === 'lista' || r.estado === 'entregada' ? 'listo' : 'cobro'}')"
-                            >
-                                💬 Recordatorio
-                            </button>
-                        ` : ''}
-                    </div>
                 </div>
-            `;
 
-            if (r.estado === 'lista' || r.estado === 'entregada') listosConDeuda.push(tarjeta);
-            else enProcesoConDeuda.push(tarjeta);
+                <div
+                    class="dm-card dm-mb-3"
+                    style="background:#fff; padding:10px;"
+                >
+
+                    <div class="dm-row-between dm-text-sm">
+
+                        <span class="dm-muted">
+                            Total:
+                        </span>
+
+                        <strong>
+                            $${r.total.toFixed(2)}
+                        </strong>
+
+                    </div>
+
+                    <div class="dm-row-between dm-text-sm">
+
+                        <span class="dm-muted">
+                            Pagado:
+                        </span>
+
+                        <strong>
+                            $${r.pagado.toFixed(2)}
+                        </strong>
+
+                    </div>
+
+                </div>
+
+                <div
+                    class="dm-list-card-actions"
+                    style="flex-wrap:wrap;"
+                >
+
+                    <button
+                        class="dm-btn dm-btn-primary dm-btn-sm"
+                        style="background:var(--success); border-color:var(--success);"
+                        onclick="App.views.abrirCobroSeguro(
+                            '${r.id}',
+                            '${r.cliente_id}',
+                            ${r.saldo}
+                        )"
+                    >
+                        💰 Cobrar
+                    </button>
+
+                    <button
+                        class="dm-btn dm-btn-secondary dm-btn-sm"
+                        onclick="App.logic.imprimirNota('${r.id}')"
+                    >
+                        🖨️ Nota
+                    </button>
+
+                    ${ultimoAbono ? `
+                        <button
+                            class="dm-btn dm-btn-secondary dm-btn-sm"
+                            onclick="App.logic.imprimirReciboAbono('${ultimoAbono.id}')"
+                        >
+                            🧾 Últ. abono
+                        </button>
+                    ` : ''}
+
+                    <button
+                        class="dm-btn dm-btn-secondary dm-btn-sm"
+                        onclick="App.logic.imprimirReciboLiquidacion('${r.id}')"
+                    >
+                        ✅ Liquidación
+                    </button>
+
+                    ${cliente && cliente.telefono ? `
+                        <button
+                            class="dm-btn dm-btn-secondary dm-btn-sm"
+                            style="color:#38A169; border-color:#38A169;"
+                            onclick="App.views.enviarRecordatorioSeguro(
+                                '${r.id}',
+                                '${r.listo ? 'listo' : 'cobro'}'
+                            )"
+                        >
+                            💬 Recordatorio
+                        </button>
+                    ` : ''}
+
+                </div>
+
+            </div>
+        `;
+
+        if (r.listo) {
+            listosConDeuda.push(tarjeta);
+        } else {
+            enProcesoConDeuda.push(tarjeta);
         }
     });
+
+    // ==========================================
+    // VISTA
+    // ==========================================
 
     return `
-        <div class="dm-section" style="padding-bottom:90px;">
+        <div
+            class="dm-section"
+            style="padding-bottom:90px;"
+        >
+
             <div class="dm-card dm-mb-4">
-                <h3 class="dm-card-title">Cuentas por Cobrar (CxC)</h3>
-                <p class="dm-muted" style="font-size:0.9rem; margin-bottom:0;">
+
+                <h3 class="dm-card-title">
+                    Cuentas por Cobrar (CxC)
+                </h3>
+
+                <p
+                    class="dm-muted"
+                    style="font-size:0.9rem; margin-bottom:0;"
+                >
                     Gestiona los saldos pendientes de tus clientes.
                 </p>
+
             </div>
 
-            <div class="dm-card dm-mb-4" style="background:#FEFCBF;">
-                <div class="dm-kpi-label" style="color:#B7791F;">Dinero Total en la Calle</div>
-                <div class="dm-kpi-value" style="color:#D69E2E; font-size:1.7rem;">$${totalPorCobrar.toFixed(2)}</div>
+            <div
+                class="dm-card dm-mb-4"
+                style="background:#FEFCBF;"
+            >
+
+                <div
+                    class="dm-kpi-label"
+                    style="color:#B7791F;"
+                >
+                    Dinero Total en la Calle
+                </div>
+
+                <div
+                    class="dm-kpi-value"
+                    style="color:#D69E2E; font-size:1.7rem;"
+                >
+                    $${resumen.porCobrar.toFixed(2)}
+                </div>
+
             </div>
 
             <div class="dm-mb-4">
-                <h4 style="margin-bottom:10px; color:#C53030; display:flex; align-items:center; gap:8px;">
+
+                <h4
+                    style="margin-bottom:10px; color:#C53030; display:flex; align-items:center; gap:8px;"
+                >
                     🚨 Listos para Entregar / Cerrar
-                    <span class="dm-badge dm-badge-danger">${listosConDeuda.length}</span>
+
+                    <span class="dm-badge dm-badge-danger">
+                        ${listosConDeuda.length}
+                    </span>
+
                 </h4>
 
-                ${listosConDeuda.length === 0
-                    ? `<div class="dm-alert dm-alert-info">No hay trabajos listos pendientes de pago.</div>`
-                    : `<div class="dm-list">${listosConDeuda.join('')}</div>`
+                ${
+                    listosConDeuda.length === 0
+                        ? `
+                            <div class="dm-alert dm-alert-info">
+                                No hay trabajos listos pendientes de pago.
+                            </div>
+                        `
+                        : `
+                            <div class="dm-list">
+                                ${listosConDeuda.join('')}
+                            </div>
+                        `
                 }
+
             </div>
 
             <div class="dm-mb-4">
-                <h4 style="margin-bottom:10px; color:#2B6CB0; display:flex; align-items:center; gap:8px;">
+
+                <h4
+                    style="margin-bottom:10px; color:#2B6CB0; display:flex; align-items:center; gap:8px;"
+                >
                     ⏳ En proceso / Abonos pendientes
-                    <span class="dm-badge dm-badge-primary">${enProcesoConDeuda.length}</span>
+
+                    <span class="dm-badge dm-badge-primary">
+                        ${enProcesoConDeuda.length}
+                    </span>
+
                 </h4>
 
-                ${enProcesoConDeuda.length === 0
-                    ? `<div class="dm-alert dm-alert-info">No hay saldos pendientes en proceso.</div>`
-                    : `<div class="dm-list">${enProcesoConDeuda.join('')}</div>`
+                ${
+                    enProcesoConDeuda.length === 0
+                        ? `
+                            <div class="dm-alert dm-alert-info">
+                                No hay saldos pendientes en proceso.
+                            </div>
+                        `
+                        : `
+                            <div class="dm-list">
+                                ${enProcesoConDeuda.join('')}
+                            </div>
+                        `
                 }
+
             </div>
+
         </div>
     `;
 };
-
 // ==========================================
 // Helpers seguros del módulo
 // ==========================================
