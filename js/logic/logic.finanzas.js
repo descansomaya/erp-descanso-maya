@@ -1256,7 +1256,7 @@ const anticipos =
     anticiposPedidos +
     anticiposReparaciones;
 
-const abonos =
+const abonosTotal =
     abonosPedidos +
     abonosReparacionesTotal;
 
@@ -1287,19 +1287,20 @@ const cobrado =
 const porCobrar =
     porCobrarPedidos +
     porCobrarReparaciones;
-
     // ==========================================
     // RESULTADO CENTRAL
     // ==========================================
 
     return {
 
-        // Totales
-        cobrado,
-        porCobrar,
+    // Totales
+    cobrado,
+    porCobrar,
 
-        anticipos,
-        abonos,
+    anticipos,
+    abonos: abonosTotal,
+
+    // Pedidos
 
         // Pedidos
         anticiposPedidos,
