@@ -1550,6 +1550,52 @@ const cobrado =
 const porCobrar =
     porCobrarPedidos +
     porCobrarReparaciones;
+
+// ==========================================
+// REEMBOLSOS
+// ==========================================
+// Los reembolsos NO forman parte de CxC.
+// Son dinero que el negocio debe devolver
+// al cliente.
+// Aquí solamente los exponemos al módulo
+// central de Cobranza.
+// ==========================================
+
+const reembolsos =
+    Array.isArray(App.state.reembolsos)
+        ? App.state.reembolsos
+        : [];
+
+const reembolsosPendientes =
+    reembolsos.filter(r =>
+        String(r.estado || '')
+            .toLowerCase()
+            .trim() === 'pendiente'
+    );
+
+const reembolsosPagados =
+    reembolsos.filter(r =>
+        String(r.estado || '')
+            .toLowerCase()
+            .trim() === 'pagado'
+    );
+
+const totalReembolsosPendientes =
+    reembolsosPendientes.reduce(
+        (sum, r) =>
+            sum +
+            (parseFloat(r.monto || 0) || 0),
+        0
+    );
+
+const totalReembolsosPagados =
+    reembolsosPagados.reduce(
+        (sum, r) =>
+            sum +
+            (parseFloat(r.monto || 0) || 0),
+        0
+    );
+    
     // ==========================================
     // RESULTADO CENTRAL
     // ==========================================
@@ -1557,11 +1603,18 @@ const porCobrar =
     return {
 
     // Totales
-    cobrado,
-    porCobrar,
+  cobrado,
+porCobrar,
 
-    anticipos,
-    abonos: abonosTotal,
+anticipos,
+abonos: abonosTotal,
+
+// Reembolsos
+reembolsos,
+reembolsosPendientes,
+reembolsosPagados,
+totalReembolsosPendientes,
+totalReembolsosPagados,
 
     // Pedidos
 
