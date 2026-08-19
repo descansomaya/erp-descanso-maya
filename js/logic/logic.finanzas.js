@@ -1998,3 +1998,255 @@ const porCobrar =
         }
     }
 });
+
+// ==========================================
+// REEMBOLSOS
+// ==========================================
+
+App.logic.reembolsos = App.logic.reembolsos || {};
+
+Object.assign(App.logic.reembolsos, {
+
+    generarId() {
+        return `RMB-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    },
+
+    toNumber(value, fallback = 0) {
+        const n = parseFloat(value);
+        return Number.isFinite(n) ? n : fallback;
+    },
+
+    normalizarEstado(estado) {
+        const e = String(estado || "")
+            .toLowerCase()
+            .trim();
+
+        if (["pendiente", "pagado", "cancelado"].includes(e)) {
+            return e;
+        }
+
+        return "pendiente";
+    },
+
+    crearReembolso(data = {}) {
+
+        const monto = this.toNumber(data.monto, 0);
+
+        if (monto <= 0) {
+            throw new Error(
+                "El monto del reembolso debe ser mayor a 0"
+            );
+        }
+
+        if (!data.pedido_id) {
+            throw new Error(
+                "El reembolso requiere un pedido_id"
+            );
+        }
+
+        return {
+            id:
+                data.id ||
+                this.generarId(),
+
+            pedido_id:
+                data.pedido_id,
+
+            cliente_id:
+                data.cliente_id || "",
+
+            fecha:
+                data.fecha ||
+                new Date().toISOString().split("T")[0],
+
+            monto,
+
+            motivo:
+                data.motivo ||
+                "Devolución de pedido",
+
+            estado:
+                this.normalizarEstado(
+                    data.estado
+                ),
+
+            fecha_pago:
+                data.fecha_pago || "",
+
+            metodo_pago:
+                data.metodo_pago || "",
+
+            notas:
+                data.notas || ""
+        };
+    },
+
+    crearOperacionRegistrarReembolso(data = {}) {
+
+        const reembolso =
+            this.crearReembolso(data);
+
+        return {
+            ok: true,
+
+            reembolso,
+
+            operacion: {
+                action: "guardar_fila",
+
+                nombreHoja:
+                    "reembolsos",
+
+                datos:
+                    reembolso
+            }
+        };
+    },
+
+    crearOperacionPagarReembolso(
+        reembolso,
+        data = {}
+    ) {
+
+        if (!reembolso) {
+            throw new Error(
+                "Reembolso no válido"
+            );
+        }
+
+        if (
+            this.normalizarEstado(
+                reembolso.estado
+            ) !== "pendiente"
+        ) {
+            throw new Error(
+                "El reembolso no está pendiente"
+            );
+        }
+
+        const monto =
+            this.toNumber(
+                reembolso.monto,
+                0
+            );
+
+        if (monto <= 0) {
+            throw new Error(
+                "El reembolso tiene un monto inválido"
+            );
+        }
+
+        const fechaPago =
+            data.fecha_pago ||
+            new Date()
+                .toISOString()
+                .split("T")[0];
+
+        return {
+            ok: true,
+
+            reembolso: {
+                ...reembolso,
+
+                estado: "pagado",
+
+                fecha_pago:
+                    fechaPago,
+
+                metodo_pago:
+                    data.metodo_pago ||
+                    reembolso.metodo_pago ||
+                    "",
+
+                notas:
+                    data.notas ||
+                    reembolso.notas ||
+                    ""
+            },
+
+            operacion: {
+                action: "actualizar_fila",
+
+                nombreHoja:
+                    "reembolsos",
+
+                idFila:
+                    reembolso.id,
+
+                datosNuevos: {
+                    estado: "pagado",
+
+                    fecha_pago:
+                        fechaPago,
+
+                    metodo_pago:
+                        data.metodo_pago ||
+                        reembolso.metodo_pago ||
+                        "",
+
+                    notas:
+                        data.notas ||
+                        reembolso.notas ||
+                        ""
+                }
+            }
+        };
+    },
+
+    obtenerReembolsos() {
+
+        return Array.isArray(
+            App.state?.reembolsos
+        )
+            ? App.state.reembolsos
+            : [];
+    },
+
+    obtenerPendientes() {
+
+        return this.obtenerReembolsos()
+            .filter(r =>
+                this.normalizarEstado(
+                    r.estado
+                ) === "pendiente"
+            );
+    },
+
+    obtenerPagados() {
+
+        return this.obtenerReembolsos()
+            .filter(r =>
+                this.normalizarEstado(
+                    r.estado
+                ) === "pagado"
+            );
+    },
+
+    totalPendiente() {
+
+        return this.obtenerPendientes()
+            .reduce(
+                (sum, r) =>
+                    sum +
+                    this.toNumber(
+                        r.monto,
+                        0
+                    ),
+                0
+            );
+    },
+
+    totalPagado() {
+
+        return this.obtenerPagados()
+            .reduce(
+                (sum, r) =>
+                    sum +
+                    this.toNumber(
+                        r.monto,
+                        0
+                    ),
+                0
+            );
+    }
+});
