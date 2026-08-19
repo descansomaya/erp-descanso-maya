@@ -25,6 +25,7 @@ App.logic.MAPA_TABLAS = [
     { hoja: "pago_artesanos", state: "pago_artesanos" },
     { hoja: "movimientos_inventario", state: "movimientos_inventario" },
     { hoja: "abonos_proveedores", state: "abonos_proveedores" },
+    { hoja: "reembolsos", state: "reembolsos" },
     { hoja: "vendedores", state: "vendedores" }
 ];
 
