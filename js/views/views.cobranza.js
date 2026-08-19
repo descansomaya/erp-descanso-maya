@@ -28,6 +28,9 @@ App.views.cobranza = function() {
     const reparacionesCobranza =
         resumen.reparaciones || [];
 
+    const reembolsosPendientes =
+    resumen.reembolsosPendientes || [];
+
     const clientes =
         App.state.clientes || [];
 
@@ -43,6 +46,91 @@ App.views.cobranza = function() {
 
     const listosConDeuda = [];
     const enProcesoConDeuda = [];
+
+    // ==========================================
+// REEMBOLSOS PENDIENTES
+// ==========================================
+
+const reembolsosVista = reembolsosPendientes.map(r => {
+
+    const cliente = clientes.find(c =>
+        String(c.id) === String(r.cliente_id)
+    );
+
+    const nombreCliente =
+        cliente
+            ? cliente.nombre
+            : 'Cliente';
+
+    return `
+        <div
+            class="dm-list-card"
+            style="border:1px solid #FEB2B2; background:#FFF5F5;"
+        >
+
+            <div
+                class="dm-row-between"
+                style="align-items:flex-start; gap:12px;"
+            >
+
+                <div style="flex:1; min-width:0;">
+
+                    <div
+                        class="dm-fw-bold"
+                        style="color:#C53030;"
+                    >
+                        💸 Reembolso
+                    </div>
+
+                    <div class="dm-text-sm dm-muted">
+                        ${App.ui.safe(nombreCliente)}
+                    </div>
+
+                    <div class="dm-text-sm dm-muted">
+                        Pedido:
+                        ${App.ui.safe(r.pedido_id || '')}
+                    </div>
+
+                </div>
+
+                <div style="text-align:right;">
+
+                    <div
+                        style="color:#C53030; font-weight:700; font-size:1.1rem;"
+                    >
+                        $${(parseFloat(r.monto || 0) || 0).toFixed(2)}
+                    </div>
+
+                    <div class="dm-text-sm dm-muted">
+                        Pendiente de devolución
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div
+                class="dm-card dm-mt-3"
+                style="background:#fff; padding:10px;"
+            >
+
+                <div class="dm-row-between dm-text-sm">
+
+                    <span class="dm-muted">
+                        Motivo:
+                    </span>
+
+                    <strong>
+                        ${App.ui.safe(r.motivo || 'Devolución de pedido')}
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </div>
+    `;
+});
 
     // ==========================================
     // PEDIDOS
@@ -482,6 +570,35 @@ App.views.cobranza = function() {
                 }
 
             </div>
+
+            <div class="dm-mb-4">
+
+    <h4
+        style="margin-bottom:10px; color:#C53030; display:flex; align-items:center; gap:8px;"
+    >
+        💸 Reembolsos pendientes
+
+        <span class="dm-badge dm-badge-danger">
+            ${reembolsosPendientes.length}
+        </span>
+
+    </h4>
+
+    ${
+        reembolsosPendientes.length === 0
+            ? `
+                <div class="dm-alert dm-alert-info">
+                    No hay reembolsos pendientes.
+                </div>
+            `
+            : `
+                <div class="dm-list">
+                    ${reembolsosVista.join('')}
+                </div>
+            `
+    }
+
+</div>
 
         </div>
     `;
