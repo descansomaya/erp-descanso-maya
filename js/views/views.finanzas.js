@@ -409,101 +409,50 @@ const totalVentas =
         0
     );
     
-    const pedidosVentaIds = new Set(
-    pedidosFil.map(p => p.id)
-);
+   
+// ==========================================
+// COBRANZA CENTRALIZADA
+// ==========================================
+//
+// IMPORTANTE:
+// Las ventas siguen dependiendo de pedidos ENTREGADOS.
+//
+// Pero el dinero cobrado se calcula independientemente
+// del estado operativo del pedido.
+//
+// Esto permite:
+//
+// Pedido en taller
+//      + anticipo
+//          ↓
+//      COBRADO
+//
+// Pedido pendiente
+//      + abono
+//          ↓
+//      COBRADO
+//
+// STOCK INTERNO
+//          ↓
+//      NO COBRA
+// ==========================================
 
-const totalCobradoPedidos =
-    abonosFil
-        .filter(a => pedidosVentaIds.has(a.pedido_id))
-        .reduce(
-            (acc, a) => acc + (parseFloat(a.monto || 0) || 0),
-            0
-        )
-    +
-    pedidosFil.reduce(
-        (acc, p) => acc + (parseFloat(p.anticipo || 0) || 0),
-        0
-    );
+const cobranzaCentral =
+    App.logic.obtenerResumenCobranzaCentral(filtro);
+
+const totalCobrado =
+    cobranzaCentral.cobrado;
+
+const porCobrarPedidos =
+    cobranzaCentral.porCobrarPedidos;
+
+const porCobrarReparaciones =
+    cobranzaCentral.porCobrarReparaciones;
+
+const dineroEnLaCalle =
+    cobranzaCentral.porCobrar;
     
-const reparacionesVentaIds = new Set(
-    reparacionesVenta.map(r => String(r.id))
-);
-
-const totalCobradoReparaciones =
-    abonosRepFil
-        .filter(a => reparacionesVentaIds.has(String(a.reparacion_id)))
-        .reduce(
-            (acc, a) => acc + (parseFloat(a.monto || 0) || 0),
-            0
-        )
-    +
-    reparacionesVenta.reduce(
-        (acc, r) =>
-            acc +
-            (parseFloat(
-                r.anticipo_inicial || r.anticipo || 0
-            ) || 0),
-        0
-    );
     
-    const totalCobrado = totalCobradoPedidos + totalCobradoReparaciones;
-    const totalCompras = comprasFil.reduce(
-    (acc, c) => {
-        const total = parseFloat(c.total || 0) || 0;
-
-        const pagado =
-            c.monto_pagado !== undefined &&
-            c.monto_pagado !== ''
-                ? parseFloat(c.monto_pagado || 0) || 0
-                : total;
-
-        return acc + pagado;
-    },
-    0
-);
-    const totalNomina = pagosArtesanosFil
-    .filter(p => String(p.estado || '').toLowerCase().trim() === 'pagado')
-    .reduce(
-        (acc, p) => acc + (parseFloat(p.total || 0) || 0),
-        0
-    );
-    const totalCotizado = cotizacionesFil.reduce((acc, c) => acc + (parseFloat(c.total || 0) || 0), 0);
-    
-    const gastosOperativosPuros = gastosFil
-        .filter(g => {
-            const desc = String(g.concepto || g.descripcion || '').toLowerCase();
-            return !desc.includes('compra') && !desc.includes('materiales y insumos') && !desc.includes('hilo');
-        })
-        .reduce((acc, g) => acc + (parseFloat(g.monto || 0) || 0), 0);
-    
-    const porCobrarPedidos = pedidosFil.reduce((acc, p) => { const ab = abonos.filter(a => a.pedido_id === p.id).reduce((s, a) => s + (parseFloat(a.monto || 0) || 0), 0); const saldo = (parseFloat(p.total || 0) || 0) - (parseFloat(p.anticipo || 0) || 0) - ab; return acc + (saldo > 0 ? saldo : 0); }, 0);
-
-    const porCobrarReparaciones = reparacionesVenta.reduce(
-    (acc, r) => {
-        const ant =
-            parseFloat(r.anticipo_inicial || 0) || 0;
-
-        const ab =
-            abonosReparaciones
-                .filter(a => String(a.reparacion_id) === String(r.id))
-                .reduce(
-                    (s, a) =>
-                        s + (parseFloat(a.monto || 0) || 0),
-                    0
-                );
-
-        const saldo =
-            (parseFloat(r.precio || 0) || 0) -
-            ant -
-            ab;
-
-        return acc + (saldo > 0 ? saldo : 0);
-    },
-    0
-);
-    
-    const dineroEnLaCalle = porCobrarPedidos + porCobrarReparaciones;
     const porPagarCompras = comprasFil.reduce((acc, c) => { const total = parseFloat(c.total || 0) || 0; const pagado = c.monto_pagado !== undefined && c.monto_pagado !== '' ? parseFloat(c.monto_pagado || 0) : total; const deuda = total - pagado; return acc + (deuda > 0 ? deuda : 0); }, 0);
     const porPagarNomina = pagosArtesanos.filter(p => String(p.estado || '').toLowerCase() === 'pendiente').reduce((acc, p) => acc + (parseFloat(p.total || 0) || 0), 0);
     const totalPorPagar = porPagarCompras + porPagarNomina;
