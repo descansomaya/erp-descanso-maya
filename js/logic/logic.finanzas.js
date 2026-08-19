@@ -591,6 +591,78 @@ Object.assign(App.logic, {
     },
 
     // ==========================================
+// REEMBOLSOS
+// ==========================================
+
+async marcarReembolsoPagado(reembolsoId) {
+    try {
+        const reembolso = (App.state.reembolsos || [])
+            .find(r => String(r.id) === String(reembolsoId));
+
+        if (!reembolso) {
+            App.ui.toast("Reembolso no encontrado", "danger");
+            return;
+        }
+
+        const monto = parseFloat(reembolso.monto || 0) || 0;
+
+        if (monto <= 0) {
+            App.ui.toast("El monto del reembolso no es válido", "danger");
+            return;
+        }
+
+        const confirmar = confirm(
+            `¿Confirmas que se devolvieron $${monto.toFixed(2)} al cliente?`
+        );
+
+        if (!confirmar) return;
+
+        App.ui.showLoader("Registrando reembolso...");
+
+        const datosActualizados = {
+            estado: "pagado",
+            fecha_pago: new Date().toISOString()
+        };
+
+        const res = await App.api.fetch("actualizar_fila", {
+            nombreHoja: "reembolsos",
+            idFila: reembolso.id,
+            datosNuevos: datosActualizados
+        });
+
+        App.ui.hideLoader();
+
+        if (res.status !== "success") {
+            App.ui.toast(
+                res.message || "No se pudo registrar el reembolso",
+                "danger"
+            );
+            return;
+        }
+
+        Object.assign(reembolso, datosActualizados);
+
+        App.ui.toast("Reembolso registrado como pagado");
+
+        App.router.handleRoute();
+
+    } catch (error) {
+
+        console.error(
+            "Error en marcarReembolsoPagado:",
+            error
+        );
+
+        App.ui.hideLoader();
+
+        App.ui.toast(
+            error.message || "Error al registrar reembolso",
+            "danger"
+        );
+    }
+},
+
+    // ==========================================
 // MOTOR FINANCIERO CENTRAL
 // ==========================================
 // VENTA:
