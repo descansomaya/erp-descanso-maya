@@ -7,7 +7,7 @@ App.config = {
 
     api: {
         gasUrl: 'https://script.google.com/macros/s/AKfycbxL3KzjesyZIfiC-Dyr0SwwzwNnPsv5FgHpt-JhyscNpN1eTvRwAh_rdgoxdVnKTAwu/exec',
-        timeoutMs: 60000
+        timeoutMs: 30000
     },
 
     ui: {
