@@ -523,6 +523,101 @@ if (requiereTaller) {
         }
 
         /*
+ * ==========================================
+ * GENERAR REEMBOLSO PENDIENTE
+ * ==========================================
+ *
+ * La devolución NO elimina los pagos realizados.
+ * Se genera un reembolso pendiente por el
+ * importe realmente pagado por el cliente.
+ */
+
+const anticipoPedido =
+    parseFloat(pedido.anticipo || 0) || 0;
+
+const abonosPedido =
+    (App.state.abonos || [])
+        .filter(a =>
+            String(a.pedido_id) ===
+            String(pedidoId)
+        )
+        .reduce(
+            (sum, a) =>
+                sum +
+                (parseFloat(a.monto || 0) || 0),
+            0
+        );
+
+const totalPagadoPedido =
+    anticipoPedido +
+    abonosPedido;
+
+const totalPedido =
+    parseFloat(pedido.total || 0) || 0;
+
+const montoReembolso =
+    Math.min(
+        totalPagadoPedido,
+        totalPedido
+    );
+
+/*
+ * Solo generamos reembolso si realmente
+ * existe dinero recibido.
+ */
+if (montoReembolso > 0.05) {
+
+    /*
+     * Evitar duplicados.
+     */
+    const reembolsoExistente =
+        (App.state.reembolsos || [])
+            .find(r =>
+                String(r.pedido_id) ===
+                String(pedidoId) &&
+                !["cancelado"]
+                    .includes(
+                        String(r.estado || "")
+                            .toLowerCase()
+                            .trim()
+                    )
+            );
+
+    if (!reembolsoExistente) {
+
+        const resultadoReembolso =
+            App.logic.reembolsos
+                .crearOperacionRegistrarReembolso({
+                    pedido_id:
+                        pedidoId,
+
+                    cliente_id:
+                        pedido.cliente_id || "",
+
+                    fecha:
+                        ahora
+                            .split("T")[0],
+
+                    monto:
+                        montoReembolso,
+
+                    motivo:
+                        "Devolución de pedido",
+
+                    estado:
+                        "pendiente",
+
+                    notas:
+                        `Reembolso generado automáticamente por devolución del pedido ${pedidoId}`
+                });
+
+        operaciones.push(
+            resultadoReembolso.operacion
+        );
+    }
+}
+
+        /*
          * CAMBIAR ESTADO DEL PEDIDO
          */
         operaciones.push({
