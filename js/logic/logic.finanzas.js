@@ -609,10 +609,13 @@ Object.assign(App.logic, {
 
 obtenerResumenFinancieroCentral(filtro = 'todo') {
 
-    const pedidos = App.state.pedidos || [];
-    const abonos = App.state.abonos || [];
-    const reparaciones = App.state.reparaciones || [];
-    const gastos = App.state.gastos || [];
+   const pedidos = App.state.pedidos || [];
+const abonos = App.state.abonos || [];
+const reparaciones = App.state.reparaciones || [];
+const gastos = App.state.gastos || [];
+const compras = App.state.compras || [];
+const pagosArtesanos = App.state.pago_artesanos || [];
+const cotizaciones = App.state.cotizaciones || [];
 
     const entraEnFiltro = (fechaStr) => {
 
@@ -806,17 +809,194 @@ obtenerResumenFinancieroCentral(filtro = 'todo') {
     // GASTOS
     // ==========================================
 
-    const gastosValidos = gastos.filter(g =>
-        entraEnFiltro(g.fecha)
+   const gastosValidos = gastos.filter(g =>
+    entraEnFiltro(g.fecha)
+);
+
+const totalGastos = gastosValidos.reduce(
+    (sum, g) =>
+        sum + (parseFloat(g.monto || 0) || 0),
+    0
+);
+
+// ==========================================
+// COMPRAS
+// ==========================================
+
+const comprasValidas = compras.filter(c =>
+    entraEnFiltro(
+        c.fecha ||
+        c.fecha_creacion
+    )
+);
+
+const totalCompras = comprasValidas.reduce(
+    (sum, c) =>
+        sum + (parseFloat(c.total || 0) || 0),
+    0
+);
+
+const totalComprasPagadas = comprasValidas.reduce(
+    (sum, c) => {
+
+        const pagado =
+            c.monto_pagado !== undefined &&
+            c.monto_pagado !== ''
+                ? parseFloat(c.monto_pagado || 0)
+                : 0;
+
+        return sum + pagado;
+    },
+    0
+);
+
+const porPagarCompras = Math.max(
+    0,
+    totalCompras - totalComprasPagadas
+);
+
+// ==========================================
+// NÓMINA
+// ==========================================
+
+const pagosArtesanosValidos =
+    pagosArtesanos.filter(p =>
+        entraEnFiltro(
+            p.fecha_pago ||
+            p.fecha ||
+            p.fecha_creacion
+        )
     );
 
-    const totalGastos = gastosValidos.reduce(
-        (sum, g) =>
-            sum + (parseFloat(g.monto || 0) || 0),
+const totalNomina = pagosArtesanosValidos.reduce(
+    (sum, p) =>
+        sum + (parseFloat(p.total || 0) || 0),
+    0
+);
+
+const totalNominaPagada =
+    pagosArtesanosValidos
+        .filter(p =>
+            String(p.estado || '')
+                .toLowerCase()
+                .trim() === 'pagado'
+        )
+        .reduce(
+            (sum, p) =>
+                sum + (parseFloat(p.total || 0) || 0),
+            0
+        );
+
+const porPagarNomina =
+    pagosArtesanosValidos
+        .filter(p =>
+            String(p.estado || '')
+                .toLowerCase()
+                .trim() === 'pendiente'
+        )
+        .reduce(
+            (sum, p) =>
+                sum + (parseFloat(p.total || 0) || 0),
+            0
+        );
+
+// ==========================================
+// GASTOS OPERATIVOS PUROS
+// ==========================================
+
+const gastosOperativosPuros =
+    gastosValidos
+        .filter(g => {
+
+            const desc =
+                String(
+                    g.concepto ||
+                    g.descripcion ||
+                    ''
+                ).toLowerCase();
+
+            return (
+                !desc.includes('compra') &&
+                !desc.includes('materiales y insumos') &&
+                !desc.includes('hilo')
+            );
+        })
+        .reduce(
+            (sum, g) =>
+                sum + (parseFloat(g.monto || 0) || 0),
+            0
+        );
+
+// ==========================================
+// COTIZACIONES
+// ==========================================
+
+const cotizacionesValidas =
+    cotizaciones.filter(c =>
+        entraEnFiltro(
+            c.fecha ||
+            c.fecha_creacion
+        )
+    );
+
+const totalCotizado =
+    cotizacionesValidas.reduce(
+        (sum, c) =>
+            sum + (
+                parseFloat(
+                    c.total ||
+                    c.precio_total ||
+                    c.monto ||
+                    0
+                ) || 0
+            ),
         0
     );
 
-    return {
+const cotizacionesPendientes =
+    cotizacionesValidas.filter(c =>
+        String(c.estado_conversion || '')
+            .toLowerCase() !== 'convertida'
+    ).length;
+
+// ==========================================
+// TOTAL POR PAGAR
+// ==========================================
+
+const totalPorPagar =
+    porPagarCompras +
+    porPagarNomina;
+
+// ==========================================
+// FLUJOS
+// ==========================================
+
+const resultadoCaja =
+    cobrado -
+    gastosOperativosPuros;
+
+const flujoOperativo =
+    cobrado -
+    gastosOperativosPuros -
+    totalComprasPagadas -
+    totalNominaPagada;
+
+const saldoProyectado =
+    porCobrar -
+    totalPorPagar;
+
+const saludFinanciera =
+    flujoOperativo >= 0 &&
+    saldoProyectado >= 0
+        ? 'Sana'
+        : (
+            flujoOperativo < 0 &&
+            saldoProyectado < 0
+                ? 'Crítica'
+                : 'En observación'
+        );
+
+return {
         ventas,
 
         ventasPedidos,
@@ -829,6 +1009,26 @@ obtenerResumenFinancieroCentral(filtro = 'todo') {
         porCobrar,
 
         gastos: totalGastos,
+
+    gastosOperativosPuros,
+
+totalCompras,
+totalComprasPagadas,
+porPagarCompras,
+
+totalNomina,
+totalNominaPagada,
+porPagarNomina,
+
+totalPorPagar,
+
+totalCotizado,
+cotizacionesPendientes,
+
+resultadoCaja,
+flujoOperativo,
+saldoProyectado,
+saludFinanciera,
 
         pedidosVenta: pedidosVenta.length,
         pedidosCobro: pedidosCobro.length,
