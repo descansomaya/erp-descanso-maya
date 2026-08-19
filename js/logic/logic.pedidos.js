@@ -328,18 +328,21 @@ if (requiereTaller) {
         }
     },
 
-    // ==========================================
-    // DEVOLVER PEDIDO ENTREGADO
-    // ==========================================
-    async devolverPedido(pedidoId) {
+// ==========================================
+// DEVOLVER PEDIDO ENTREGADO
+// ==========================================
+async devolverPedido(pedidoId) {
     try {
-        const pedido = (App.state.pedidos || []).find(p => p.id === pedidoId);
+        const pedido = (App.state.pedidos || [])
+            .find(p => String(p.id) === String(pedidoId));
 
         if (!pedido) {
             throw new Error("Pedido no encontrado");
         }
 
-        const estado = String(pedido.estado || "").toLowerCase().trim();
+        const estado = String(pedido.estado || "")
+            .toLowerCase()
+            .trim();
 
         if (estado !== "entregado") {
             App.ui.toast(
@@ -351,34 +354,30 @@ if (requiereTaller) {
 
         if (!confirm(
             "¿Registrar la devolución de este pedido?\n\n" +
-            "Se devolverá al inventario físico exactamente lo que salió al momento de la entrega."
+            "Se reintegrará al inventario físico lo que salió al momento de la entrega " +
+            "y se generará el reembolso correspondiente al dinero pagado."
         )) {
             return false;
         }
 
-        App.ui.showLoader("Registrando devolución y reintegrando inventario...");
-
-        const movimientosInventario =
-            App.state.movimientos_inventario || [];
-
-        /*
-         * BUSCAMOS LAS SALIDAS FÍSICAS REALMENTE REGISTRADAS
-         * POR ESTE PEDIDO.
-         *
-         * Esto es mucho más seguro que volver a calcular
-         * la receta del producto.
-         */
-        const salidasVenta = movimientosInventario.filter(m =>
-            String(m.origen_id || "") === String(pedidoId) &&
-            String(m.tipo_movimiento || "").toLowerCase() === "salida_venta"
+        App.ui.showLoader(
+            "Registrando devolución y reintegrando inventario..."
         );
 
-        if (salidasVenta.length === 0) {
-            App.ui.hideLoader();
+        const movimientosInventario =
+            Array.isArray(App.state.movimientos_inventario)
+                ? App.state.movimientos_inventario
+                : [];
 
+        const detalles =
+            (App.state.pedido_detalle || [])
+                .filter(d =>
+                    String(d.pedido_id) === String(pedidoId)
+                );
+
+        if (!detalles.length) {
             throw new Error(
-                "No se encontraron movimientos de salida física para este pedido. " +
-                "No se modificó el inventario."
+                "No se encontraron los artículos del pedido."
             );
         }
 
@@ -391,257 +390,558 @@ if (requiereTaller) {
 
         let secuencia = 0;
 
-        /*
-         * REVERTIR CADA SALIDA FÍSICA
-         */
-        for (const salida of salidasVenta) {
+        // ==========================================
+        // 1. BUSCAR SALIDAS FÍSICAS REALES
+        // ==========================================
 
-            const materialId =
-                salida.material_id ||
-                salida.ref_id;
+        const salidasVenta = movimientosInventario.filter(m =>
+            String(m.origen_id || "") === String(pedidoId) &&
+            String(m.tipo_movimiento || "")
+                .toLowerCase()
+                .trim() === "salida_venta"
+        );
 
-            if (!materialId) {
-                continue;
-            }
+        // ==========================================
+        // 2. PEDIDOS NUEVOS:
+        //    USAR LAS SALIDAS REALES REGISTRADAS
+        // ==========================================
 
-            const material =
-                (App.state.inventario || [])
-                    .find(m => String(m.id) === String(materialId));
+        if (salidasVenta.length > 0) {
 
-            if (!material) {
-                throw new Error(
-                    `No se encontró en inventario el artículo ${materialId}.`
-                );
-            }
+            for (const salida of salidasVenta) {
 
-            /*
-             * Las salidas se guardan negativas.
-             *
-             * Ejemplo:
-             * salida = -1
-             *
-             * devolución:
-             * stock_real + 1
-             */
-            const cantidadSalida =
-                Math.abs(parseFloat(salida.cantidad || 0) || 0);
+                const materialId =
+                    salida.material_id ||
+                    salida.ref_id;
 
-            if (cantidadSalida <= 0) {
-                continue;
-            }
-
-            const stockActual =
-                parseFloat(material.stock_real || 0) || 0;
-
-            const nuevoStock =
-                stockActual + cantidadSalida;
-
-            operaciones.push({
-                action: "actualizar_fila",
-                nombreHoja: "materiales",
-                idFila: material.id,
-                datosNuevos: {
-                    stock_real: nuevoStock
+                if (!materialId) {
+                    continue;
                 }
-            });
 
-            cambiosMemoria.push({
-                material,
-                nuevoStock
-            });
+                const material =
+                    (App.state.inventario || [])
+                        .find(m =>
+                            String(m.id) === String(materialId)
+                        );
 
-            const costoUnitario =
-                parseFloat(material.costo_unitario || 0) || 0;
+                if (!material) {
+                    throw new Error(
+                        `No se encontró en inventario el artículo ${materialId}.`
+                    );
+                }
 
-            const movimientoDevolucion = {
-                id:
-                    `MOV-${Date.now()}-DEV-${secuencia++}`,
+                const cantidadSalida =
+                    Math.abs(
+                        parseFloat(salida.cantidad || 0) || 0
+                    );
 
-                fecha:
-                    fechaMovimiento,
+                if (cantidadSalida <= 0) {
+                    continue;
+                }
 
-                tipo_movimiento:
-                    "devolucion_venta",
+                const stockActual =
+                    parseFloat(material.stock_real || 0) || 0;
 
-                origen:
-                    "pedido",
+                const nuevoStock =
+                    stockActual + cantidadSalida;
 
-                origen_id:
-                    pedidoId,
+                operaciones.push({
+                    action: "actualizar_fila",
+                    nombreHoja: "materiales",
+                    idFila: material.id,
+                    datosNuevos: {
+                        stock_real: nuevoStock
+                    }
+                });
 
-                ref_tipo:
-                    salida.ref_tipo ||
-                    "material",
+                cambiosMemoria.push({
+                    material,
+                    nuevoStock
+                });
 
-                ref_id:
-                    material.id,
+                const costoUnitario =
+                    parseFloat(material.costo_unitario || 0) || 0;
 
-                material_id:
-                    material.id,
+                const movimientoDevolucion = {
+                    id:
+                        `MOV-${Date.now()}-DEV-${secuencia++}`,
 
-                tipo:
-                    "entrada",
+                    fecha:
+                        fechaMovimiento,
 
-                cantidad:
-                    cantidadSalida,
+                    tipo_movimiento:
+                        "devolucion_venta",
 
-                costo_unitario:
-                    costoUnitario,
+                    origen:
+                        "pedido",
 
-                total:
-                    cantidadSalida * costoUnitario,
+                    origen_id:
+                        pedidoId,
 
-                motivo:
-                    "Devolución de venta",
+                    ref_tipo:
+                        salida.ref_tipo ||
+                        "material",
 
-                notas:
-                    `Reintegro de salida física del pedido ${pedidoId}`
-            };
+                    ref_id:
+                        material.id,
 
-            movimientosDevolucion.push(
-                movimientoDevolucion
-            );
+                    material_id:
+                        material.id,
 
-            operaciones.push({
-                action:
-                    "guardar_fila",
+                    tipo:
+                        "entrada",
 
-                nombreHoja:
-                    "movimientos_inventario",
+                    cantidad:
+                        cantidadSalida,
 
-                datos:
+                    costo_unitario:
+                        costoUnitario,
+
+                    total:
+                        cantidadSalida * costoUnitario,
+
+                    motivo:
+                        "Devolución de venta",
+
+                    notas:
+                        `Reintegro de salida física del pedido ${pedidoId}`
+                };
+
+                movimientosDevolucion.push(
                     movimientoDevolucion
-            });
+                );
+
+                operaciones.push({
+                    action: "guardar_fila",
+                    nombreHoja: "movimientos_inventario",
+                    datos: movimientoDevolucion
+                });
+            }
+
+        } else {
+
+            // ==========================================
+            // 3. PEDIDOS ANTIGUOS:
+            //    NO EXISTE SALIDA_VENTA
+            //
+            //    Reconstruimos la salida utilizando
+            //    el detalle histórico del pedido.
+            // ==========================================
+
+            for (const detalle of detalles) {
+
+                const producto =
+                    (App.state.productos || [])
+                        .find(p =>
+                            String(p.id) ===
+                            String(detalle.producto_id)
+                        );
+
+                if (!producto) {
+                    throw new Error(
+                        `No se encontró el producto ${detalle.producto_id} ` +
+                        `del pedido ${pedidoId}.`
+                    );
+                }
+
+                const cantidadPedido =
+                    parseFloat(detalle.cantidad || 1) || 1;
+
+                const categoria =
+                    String(producto.categoria || "")
+                        .toLowerCase()
+                        .trim();
+
+                const esReventa =
+                    categoria === "reventa";
+
+                // ==========================================
+                // 3A. REVENTA
+                //
+                // Regresamos el material que representaba
+                // físicamente al producto vendido.
+                // ==========================================
+
+                if (esReventa) {
+
+                    let encontroMaterial = false;
+
+                    for (let i = 1; i <= 20; i++) {
+
+                        const matId =
+                            producto[`mat_${i}`];
+
+                        const cantidadPorProducto =
+                            parseFloat(
+                                producto[`cant_${i}`] || 0
+                            ) || 0;
+
+                        const cantidadDevuelta =
+                            cantidadPorProducto *
+                            cantidadPedido;
+
+                        if (
+                            !matId ||
+                            cantidadDevuelta <= 0
+                        ) {
+                            continue;
+                        }
+
+                        const material =
+                            (App.state.inventario || [])
+                                .find(m =>
+                                    String(m.id) ===
+                                    String(matId)
+                                );
+
+                        if (!material) {
+                            throw new Error(
+                                `No se encontró en inventario el material ` +
+                                `${matId} del producto ${producto.nombre || producto.id}.`
+                            );
+                        }
+
+                        encontroMaterial = true;
+
+                        const stockActual =
+                            parseFloat(material.stock_real || 0) || 0;
+
+                        const nuevoStock =
+                            stockActual +
+                            cantidadDevuelta;
+
+                        operaciones.push({
+                            action: "actualizar_fila",
+                            nombreHoja: "materiales",
+                            idFila: material.id,
+                            datosNuevos: {
+                                stock_real: nuevoStock
+                            }
+                        });
+
+                        cambiosMemoria.push({
+                            material,
+                            nuevoStock
+                        });
+
+                        const costoUnitario =
+                            parseFloat(
+                                material.costo_unitario || 0
+                            ) || 0;
+
+                        const movimientoDevolucion = {
+                            id:
+                                `MOV-${Date.now()}-DEV-${secuencia++}`,
+
+                            fecha:
+                                fechaMovimiento,
+
+                            tipo_movimiento:
+                                "devolucion_venta_historica",
+
+                            origen:
+                                "pedido",
+
+                            origen_id:
+                                pedidoId,
+
+                            ref_tipo:
+                                "material",
+
+                            ref_id:
+                                material.id,
+
+                            material_id:
+                                material.id,
+
+                            tipo:
+                                "entrada",
+
+                            cantidad:
+                                cantidadDevuelta,
+
+                            costo_unitario:
+                                costoUnitario,
+
+                            total:
+                                cantidadDevuelta *
+                                costoUnitario,
+
+                            motivo:
+                                "Devolución de venta histórica",
+
+                            notas:
+                                `Pedido antiguo sin movimiento salida_venta. ` +
+                                `Inventario reconstruido desde el detalle del pedido ${pedidoId}.`
+                        };
+
+                        movimientosDevolucion.push(
+                            movimientoDevolucion
+                        );
+
+                        operaciones.push({
+                            action: "guardar_fila",
+                            nombreHoja: "movimientos_inventario",
+                            datos: movimientoDevolucion
+                        });
+                    }
+
+                    if (!encontroMaterial) {
+                        throw new Error(
+                            `No se pudo determinar el material físico ` +
+                            `del producto de reventa ${producto.nombre || producto.id}.`
+                        );
+                    }
+
+                } else {
+
+                    // ==========================================
+                    // 3B. PRODUCTO FABRICADO
+                    //
+                    // Regresamos el producto terminado
+                    // que salió de inventario al entregarse.
+                    // ==========================================
+
+                    const nombreProducto =
+                        String(producto.nombre || "")
+                            .toLowerCase()
+                            .trim();
+
+                    const invPT =
+                        (App.state.inventario || [])
+                            .find(m =>
+                                String(m.nombre || "")
+                                    .toLowerCase()
+                                    .trim() === nombreProducto
+                            );
+
+                    if (!invPT) {
+                        throw new Error(
+                            `No se encontró en inventario el producto terminado ` +
+                            `"${producto.nombre}".`
+                        );
+                    }
+
+                    const stockActual =
+                        parseFloat(invPT.stock_real || 0) || 0;
+
+                    const nuevoStock =
+                        stockActual +
+                        cantidadPedido;
+
+                    operaciones.push({
+                        action: "actualizar_fila",
+                        nombreHoja: "materiales",
+                        idFila: invPT.id,
+                        datosNuevos: {
+                            stock_real: nuevoStock
+                        }
+                    });
+
+                    cambiosMemoria.push({
+                        material: invPT,
+                        nuevoStock
+                    });
+
+                    const costoUnitario =
+                        parseFloat(
+                            invPT.costo_unitario || 0
+                        ) || 0;
+
+                    const movimientoDevolucion = {
+                        id:
+                            `MOV-${Date.now()}-DEV-${secuencia++}`,
+
+                        fecha:
+                            fechaMovimiento,
+
+                        tipo_movimiento:
+                            "devolucion_venta_historica",
+
+                        origen:
+                            "pedido",
+
+                        origen_id:
+                            pedidoId,
+
+                        ref_tipo:
+                            "producto_terminado",
+
+                        ref_id:
+                            invPT.id,
+
+                        material_id:
+                            invPT.id,
+
+                        tipo:
+                            "entrada",
+
+                        cantidad:
+                            cantidadPedido,
+
+                        costo_unitario:
+                            costoUnitario,
+
+                        total:
+                            cantidadPedido *
+                            costoUnitario,
+
+                        motivo:
+                            "Devolución de venta histórica",
+
+                        notas:
+                            `Pedido antiguo sin movimiento salida_venta. ` +
+                            `Producto terminado reintegrado por devolución del pedido ${pedidoId}.`
+                    };
+
+                    movimientosDevolucion.push(
+                        movimientoDevolucion
+                    );
+
+                    operaciones.push({
+                        action: "guardar_fila",
+                        nombreHoja: "movimientos_inventario",
+                        datos: movimientoDevolucion
+                    });
+                }
+            }
         }
 
-        if (cambiosMemoria.length === 0) {
-            App.ui.hideLoader();
+        // ==========================================
+        // 4. VALIDAR QUE REALMENTE HAYA ALGO
+        //    QUE DEVOLVER
+        // ==========================================
 
+        if (cambiosMemoria.length === 0) {
             throw new Error(
                 "No se encontró inventario físico válido para revertir."
             );
         }
 
-        /*
- * ==========================================
- * GENERAR REEMBOLSO PENDIENTE
- * ==========================================
- *
- * La devolución NO elimina los pagos realizados.
- * Se genera un reembolso pendiente por el
- * importe realmente pagado por el cliente.
- */
+        // ==========================================
+        // 5. CALCULAR DINERO REALMENTE PAGADO
+        // ==========================================
 
-const anticipoPedido =
-    parseFloat(pedido.anticipo || 0) || 0;
+        const anticipoPedido =
+            parseFloat(pedido.anticipo || 0) || 0;
 
-const abonosPedido =
-    (App.state.abonos || [])
-        .filter(a =>
-            String(a.pedido_id) ===
-            String(pedidoId)
-        )
-        .reduce(
-            (sum, a) =>
-                sum +
-                (parseFloat(a.monto || 0) || 0),
-            0
-        );
+        const abonosPedido =
+            (App.state.abonos || [])
+                .filter(a =>
+                    String(a.pedido_id) ===
+                    String(pedidoId)
+                )
+                .reduce(
+                    (sum, a) =>
+                        sum +
+                        (parseFloat(a.monto || 0) || 0),
+                    0
+                );
 
-const totalPagadoPedido =
-    anticipoPedido +
-    abonosPedido;
+        const totalPagadoPedido =
+            anticipoPedido +
+            abonosPedido;
 
-const totalPedido =
-    parseFloat(pedido.total || 0) || 0;
+        const totalPedido =
+            parseFloat(pedido.total || 0) || 0;
 
-const montoReembolso =
-    Math.min(
-        totalPagadoPedido,
-        totalPedido
-    );
-
-/*
- * Solo generamos reembolso si realmente
- * existe dinero recibido.
- */
-if (montoReembolso > 0.05) {
-
-    /*
-     * Evitar duplicados.
-     */
-    const reembolsoExistente =
-        (App.state.reembolsos || [])
-            .find(r =>
-                String(r.pedido_id) ===
-                String(pedidoId) &&
-                !["cancelado"]
-                    .includes(
-                        String(r.estado || "")
-                            .toLowerCase()
-                            .trim()
-                    )
+        const montoReembolso =
+            Math.min(
+                totalPagadoPedido,
+                totalPedido
             );
 
-    if (!reembolsoExistente) {
+        // ==========================================
+        // 6. CREAR REEMBOLSO PENDIENTE
+        // ==========================================
 
-        const resultadoReembolso =
-            App.logic.reembolsos
-                .crearOperacionRegistrarReembolso({
-                    pedido_id:
-                        pedidoId,
+        if (montoReembolso > 0.05) {
 
-                    cliente_id:
-                        pedido.cliente_id || "",
+            const reembolsoExistente =
+                (App.state.reembolsos || [])
+                    .find(r =>
+                        String(r.pedido_id) ===
+                        String(pedidoId) &&
+                        ![
+                            "cancelado"
+                        ].includes(
+                            String(r.estado || "")
+                                .toLowerCase()
+                                .trim()
+                        )
+                    );
 
-                    fecha:
-                        ahora
-                            .split("T")[0],
+            if (!reembolsoExistente) {
 
-                    monto:
-                        montoReembolso,
+                if (
+                    !App.logic.reembolsos ||
+                    !App.logic.reembolsos.crearOperacionRegistrarReembolso
+                ) {
+                    throw new Error(
+                        "La lógica de reembolsos no está disponible."
+                    );
+                }
 
-                    motivo:
-                        "Devolución de pedido",
+                const resultadoReembolso =
+                    App.logic.reembolsos
+                        .crearOperacionRegistrarReembolso({
 
-                    estado:
-                        "pendiente",
+                            pedido_id:
+                                pedidoId,
 
-                    notas:
-                        `Reembolso generado automáticamente por devolución del pedido ${pedidoId}`
-                });
+                            cliente_id:
+                                pedido.cliente_id || "",
 
-        operaciones.push(
-            resultadoReembolso.operacion
-        );
-    }
-}
+                            fecha:
+                                fechaMovimiento,
 
-        /*
-         * CAMBIAR ESTADO DEL PEDIDO
-         */
+                            monto:
+                                montoReembolso,
+
+                            motivo:
+                                "Devolución de pedido",
+
+                            estado:
+                                "pendiente",
+
+                            notas:
+                                `Reembolso generado automáticamente ` +
+                                `por devolución del pedido ${pedidoId}.`
+                        });
+
+                if (
+                    !resultadoReembolso ||
+                    !resultadoReembolso.operacion
+                ) {
+                    throw new Error(
+                        "No se pudo preparar el reembolso."
+                    );
+                }
+
+                operaciones.push(
+                    resultadoReembolso.operacion
+                );
+            }
+        }
+
+        // ==========================================
+        // 7. CAMBIAR ESTADO DEL PEDIDO
+        // ==========================================
+
         operaciones.push({
-            action:
-                "actualizar_fila",
-
-            nombreHoja:
-                "pedidos",
-
-            idFila:
-                pedidoId,
-
+            action: "actualizar_fila",
+            nombreHoja: "pedidos",
+            idFila: pedidoId,
             datosNuevos: {
-                estado:
-                    "devuelto",
-
-                fecha_devolucion:
-                    ahora
+                estado: "devuelto",
+                fecha_devolucion: ahora
             }
         });
 
-        /*
-         * EJECUTAR TODO EN UNA SOLA OPERACIÓN
-         */
+        // ==========================================
+        // 8. EJECUTAR TODO EN UNA SOLA OPERACIÓN
+        // ==========================================
+
         const res =
             await App.api.fetch(
                 "ejecutar_lote",
@@ -659,9 +959,10 @@ if (montoReembolso > 0.05) {
             );
         }
 
-        /*
-         * ACTUALIZAR MEMORIA LOCAL
-         */
+        // ==========================================
+        // 9. ACTUALIZAR MEMORIA LOCAL
+        // ==========================================
+
         pedido.estado =
             "devuelto";
 
@@ -685,13 +986,21 @@ if (montoReembolso > 0.05) {
             ...movimientosDevolucion
         );
 
+        // ==========================================
+        // 10. RECARGAR INTERFAZ
+        // ==========================================
+
         App.ui.toast(
-            "Devolución registrada e inventario físico reintegrado correctamente."
+            montoReembolso > 0.05
+                ? `Devolución registrada. Reembolso pendiente: $${montoReembolso.toFixed(2)}`
+                : "Devolución registrada e inventario físico reintegrado correctamente."
         );
 
         App.router.handleRoute();
 
-        App.logic.revisarAlertasStock?.();
+        if (App.logic.revisarAlertasStock) {
+            App.logic.revisarAlertasStock();
+        }
 
         return true;
 
@@ -713,6 +1022,7 @@ if (montoReembolso > 0.05) {
         return false;
     }
 },
+    
    async eliminarPedido(id) {
     try {
         const pedido = (App.state.pedidos || []).find(p => p.id === id);
