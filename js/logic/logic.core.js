@@ -172,13 +172,14 @@ if (callback) {
 
         App.router.handleRoute();
 
-    } else {
+     } else {
 
         App.router.handleRoute();
     }
+
 },
 
-    async guardarNuevoGenerico(hoja, datos, prefijo, estado, callback = null) {
+async guardarNuevoGenerico(hoja, datos, prefijo, estado, callback = null) {
         App.ui.showLoader("Registrando...");
         datos.id = prefijo + "-" + Date.now();
         if (!datos.fecha_creacion) datos.fecha_creacion = new Date().toISOString();
