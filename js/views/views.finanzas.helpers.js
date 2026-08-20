@@ -22,16 +22,13 @@ App.views._resumenCosteoPlaneacion = function () {
         detallesPedido.forEach(d => {
             const orden = ordenes.find(o => o.pedido_detalle_id === d.id);
             if (!orden) return;
-
             let receta = [];
             try { receta = JSON.parse(orden.receta_personalizada || '[]'); } catch (e) { receta = []; }
-
             receta.forEach(item => {
                 const mat = inventario.find(m => m.id === item.mat_id);
                 if (!mat) return;
                 costoMateriales += (parseFloat(item.cant || 0) || 0) * (parseFloat(mat.costo_unitario || 0) || 0);
             });
-
             costoArtesanos += asignaciones
                 .filter(a => a.orden_id === orden.id && String(a.estado || '').toLowerCase() !== 'cancelado')
                 .reduce((acc, a) => acc + (parseFloat(a.pago_estimado || 0) || 0), 0);
@@ -41,7 +38,6 @@ App.views._resumenCosteoPlaneacion = function () {
         const costoTotal = costoMateriales + costoArtesanos;
         const utilidad = venta - costoTotal;
         const margen = venta > 0 ? (utilidad / venta) * 100 : 0;
-
         return { pedido_id: p.id, estado: p.estado || '', venta, costoMateriales, costoArtesanos, costoTotal, utilidad, margen };
     });
 
@@ -90,22 +86,18 @@ App.logic._resumenReembolsosFinanzas = function (filtro = 'todo') {
         const fecha = new Date(fechaStr);
         if (isNaN(fecha.getTime())) return false;
         if (filtro === 'todo') return true;
-
         const hoy = new Date();
         const mesActual = hoy.getMonth();
         const anioActual = hoy.getFullYear();
-
         if (filtro === 'mes_actual') return fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual;
         if (filtro === 'trimestre_actual') return fecha.getFullYear() === anioActual && Math.floor(fecha.getMonth() / 3) === Math.floor(mesActual / 3);
         if (filtro === 'anio_actual') return fecha.getFullYear() === anioActual;
-
         if (filtro === 'custom') {
             const desde = App.state.finanzasFechaDesde || '';
             const hasta = App.state.finanzasFechaHasta || '';
             if (!desde || !hasta) return true;
             return fecha >= new Date(desde + 'T00:00:00') && fecha <= new Date(hasta + 'T23:59:59');
         }
-
         return true;
     };
 
@@ -138,16 +130,19 @@ if (typeof App.logic.obtenerResumenFinancieroCentral === 'function' && !App.logi
         const resumen = resumenFinancieroOriginal.call(this, filtro);
         const reembolsos = App.logic._resumenReembolsosFinanzas(filtro);
 
+        const gastosOperativos = parseFloat(resumen.gastosOperativosPuros || 0) || 0;
+        const comprasPagadas = parseFloat(resumen.totalComprasPagadas || 0) || 0;
+        const nominaPagada = parseFloat(resumen.totalNominaPagada || 0) || 0;
+        const salidasBase = gastosOperativos + comprasPagadas + nominaPagada;
+
         resumen.totalReembolsosPagados = reembolsos.totalPagados;
         resumen.totalReembolsosPendientes = reembolsos.totalPendientes;
         resumen.reembolsos = reembolsos.rows;
         resumen.reembolsosPagados = reembolsos.pagados;
         resumen.reembolsosPendientes = reembolsos.pendientes;
 
-        // Una devolución pendiente todavía NO es salida de caja.
-        // Una devolución pagada SÍ es salida real.
-        resumen.salidasRegistradas = (parseFloat(resumen.salidasRegistradas || 0) || 0) + reembolsos.totalPagados;
-        resumen.reembolsosPagados = reembolsos.pagados;
+        // Solo un reembolso PAGADO afecta caja. Uno pendiente no es salida.
+        resumen.salidasRegistradas = salidasBase + reembolsos.totalPagados;
         resumen.flujoOperativo = (parseFloat(resumen.cobrado || 0) || 0) - resumen.salidasRegistradas;
         resumen.resultadoCajaReal = resumen.flujoOperativo;
         resumen.saldoProyectado = (parseFloat(resumen.saldoProyectado || 0) || 0) - reembolsos.totalPendientes;
@@ -186,41 +181,27 @@ setTimeout(() => {
                     <div class="dm-card-title" style="color:#C53030">💸 Reembolsos</div>
                     <div class="dm-muted dm-mt-2">Devoluciones de dinero registradas.</div>
                     <div class="dm-mt-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
-                        <div class="dm-card">
-                            <div class="dm-kpi-label">Pagados</div>
-                            <div class="dm-kpi-value" style="color:#C53030">${money(reembolsos.totalPagados)}</div>
-                        </div>
-                        <div class="dm-card">
-                            <div class="dm-kpi-label">Pendientes</div>
-                            <div class="dm-kpi-value" style="color:#B7791F">${money(reembolsos.totalPendientes)}</div>
-                        </div>
-                        <div class="dm-card">
-                            <div class="dm-kpi-label">Salidas registradas</div>
-                            <div class="dm-kpi-value">${money(salidasReales)}</div>
-                        </div>
+                        <div class="dm-card"><div class="dm-kpi-label">Pagados</div><div class="dm-kpi-value" style="color:#C53030">${money(reembolsos.totalPagados)}</div></div>
+                        <div class="dm-card"><div class="dm-kpi-label">Pendientes</div><div class="dm-kpi-value" style="color:#B7791F">${money(reembolsos.totalPendientes)}</div></div>
+                        <div class="dm-card"><div class="dm-kpi-label">Salidas registradas</div><div class="dm-kpi-value">${money(salidasReales)}</div></div>
                     </div>
                     <div class="dm-mt-3" style="overflow:auto">
                         ${reembolsos.rows.length ? `
                             <table class="dm-table" style="width:100%;min-width:720px">
                                 <thead><tr><th>Reembolso</th><th>Pedido</th><th>Fecha</th><th>Estado</th><th>Motivo</th><th>Monto</th></tr></thead>
-                                <tbody>
-                                    ${reembolsos.rows.map(r => {
-                                        const estado = String(r.estado || '').toLowerCase().trim();
-                                        const fecha = estado === 'pagado'
-                                            ? (r.fecha_pago || r.fecha || r.fecha_creacion)
-                                            : (r.fecha || r.fecha_creacion || r.fecha_pago);
-                                        return `<tr style="background:${estado === 'pagado' ? '#FFF5F5' : '#FFFBEB'}">
-                                            <td>${App.ui.safe(r.id || '')}</td>
-                                            <td>${App.ui.safe(r.pedido_id || '')}</td>
-                                            <td>${App.ui.safe(String(fecha || '').split('T')[0])}</td>
-                                            <td>${App.ui.safe(r.estado || '')}</td>
-                                            <td>${App.ui.safe(r.motivo || 'Devolución de pedido')}</td>
-                                            <td style="text-align:right;font-weight:700">${money(r.monto)}</td>
-                                        </tr>`;
-                                    }).join('')}
-                                </tbody>
-                            </table>`
-                            : '<div class="dm-alert dm-alert-info">No hay reembolsos para este filtro.</div>'}
+                                <tbody>${reembolsos.rows.map(r => {
+                                    const estado = String(r.estado || '').toLowerCase().trim();
+                                    const fecha = estado === 'pagado' ? (r.fecha_pago || r.fecha || r.fecha_creacion) : (r.fecha || r.fecha_creacion || r.fecha_pago);
+                                    return `<tr style="background:${estado === 'pagado' ? '#FFF5F5' : '#FFFBEB'}">
+                                        <td>${App.ui.safe(r.id || '')}</td>
+                                        <td>${App.ui.safe(r.pedido_id || '')}</td>
+                                        <td>${App.ui.safe(String(fecha || '').split('T')[0])}</td>
+                                        <td>${App.ui.safe(r.estado || '')}</td>
+                                        <td>${App.ui.safe(r.motivo || 'Devolución de pedido')}</td>
+                                        <td style="text-align:right;font-weight:700">${money(r.monto)}</td>
+                                    </tr>`;
+                                }).join('')}</tbody>
+                            </table>` : '<div class="dm-alert dm-alert-info">No hay reembolsos para este filtro.</div>'}
                     </div>
                 </div>
             </div>`;
@@ -238,13 +219,12 @@ setTimeout(() => {
     }
 }, 0);
 
-// Ajusta la gráfica de flujo para utilizar la misma definición de salida real.
+// La gráfica usa exactamente la misma salida real que los KPIs.
 if (typeof App.logic.renderGraficasFinanzas === 'function' && !App.logic.__graficaFinanzasIntegrada) {
     const renderGraficasOriginal = App.logic.renderGraficasFinanzas;
 
     App.logic.renderGraficasFinanzas = function (filtro) {
         renderGraficasOriginal.call(this, filtro);
-
         const resumen = App.logic.obtenerResumenFinancieroCentral(filtro);
         const grafica = window.graficaFinanzasFlujo;
 
@@ -252,12 +232,7 @@ if (typeof App.logic.renderGraficasFinanzas === 'function' && !App.logic.__grafi
             const ingresos = parseFloat(resumen.cobrado || 0) || 0;
             const salidas = parseFloat(resumen.salidasRegistradas || 0) || 0;
             const flujo = ingresos - salidas;
-
-            grafica.data.datasets[0].data = [
-                Math.max(ingresos, 0),
-                Math.max(salidas, 0),
-                Math.max(flujo, 0)
-            ];
+            grafica.data.datasets[0].data = [Math.max(ingresos, 0), Math.max(salidas, 0), Math.max(flujo, 0)];
             grafica.update();
         }
     };
