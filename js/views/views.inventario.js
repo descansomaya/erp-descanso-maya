@@ -13,6 +13,230 @@ App.views.eliminarInsumo = async function (insumoId) {
     return App.logic.eliminarRegistroGenerico('materiales', insumoId, 'inventario');
 };
 
+// ==========================================================
+// EDICIÓN / ELIMINACIÓN DE INVENTARIO DE BODEGA
+// ==========================================================
+
+App.views.eliminarProductoBodega = async function (itemId) {
+
+    const item = (App.state.inventario || [])
+        .find(x => String(x.id) === String(itemId));
+
+    if (!item) {
+        App.ui.toast('Registro de inventario no encontrado', 'warning');
+        return false;
+    }
+
+    const tipo = String(item.tipo || '')
+        .toLowerCase()
+        .trim();
+
+    if (tipo !== 'producto_terminado' && tipo !== 'reventa') {
+        App.ui.toast('Este registro no corresponde a Bodega', 'warning');
+        return false;
+    }
+
+    const stock =
+        parseFloat(item.stock_real || 0) || 0;
+
+    const reservado =
+        parseFloat(item.stock_reservado || 0) || 0;
+
+    const comprometido =
+        parseFloat(item.stock_comprometido || 0) || 0;
+
+    if (stock > 0 || reservado > 0 || comprometido > 0) {
+        App.ui.toast(
+            'No se puede eliminar un producto con existencia, apartado o comprometido.',
+            'warning'
+        );
+        return false;
+    }
+
+    const movimientos = (App.state.movimientos_inventario || [])
+        .filter(m =>
+            String(m.ref_id || '') === String(itemId) ||
+            String(m.material_id || '') === String(itemId)
+        );
+
+    if (movimientos.length > 0) {
+        App.ui.toast(
+            'No se puede eliminar porque el producto tiene movimientos en Kardex.',
+            'warning'
+        );
+        return false;
+    }
+
+    const ok = window.confirm(
+        `¿Eliminar "${item.nombre || itemId}" de Bodega?\n\n` +
+        `Esta acción no podrá deshacerse.`
+    );
+
+    if (!ok) return false;
+
+    const resultado =
+        await App.logic.eliminarRegistroGenerico(
+            'materiales',
+            itemId,
+            'inventario'
+        );
+
+    return resultado;
+};
+
+
+App.views.formProductoBodega = function (itemId) {
+
+    const item = (App.state.inventario || [])
+        .find(x => String(x.id) === String(itemId));
+
+    if (!item) {
+        App.ui.toast('Registro de inventario no encontrado', 'warning');
+        return;
+    }
+
+    const tipoActual =
+        String(item.tipo || '').toLowerCase().trim();
+
+    if (tipoActual !== 'producto_terminado' &&
+        tipoActual !== 'reventa') {
+        App.ui.toast('Este registro no corresponde a Bodega', 'warning');
+        return;
+    }
+
+    const formHTML = `
+        <form id="dynamic-form">
+
+            <div class="dm-form-group">
+                <label class="dm-label">Nombre</label>
+                <input
+                    type="text"
+                    class="dm-input"
+                    name="nombre"
+                    value="${App.ui.escapeHTML(item.nombre || '')}"
+                    required>
+            </div>
+
+            <div class="dm-form-group">
+                <label class="dm-label">Tipo</label>
+                <select class="dm-select" name="tipo" required>
+                    <option value="producto_terminado"
+                        ${tipoActual === 'producto_terminado' ? 'selected' : ''}>
+                        Producto terminado
+                    </option>
+
+                    <option value="reventa"
+                        ${tipoActual === 'reventa' ? 'selected' : ''}>
+                        Reventa
+                    </option>
+                </select>
+            </div>
+
+            <div class="dm-form-group">
+                <label class="dm-label">Unidad</label>
+                <input
+                    type="text"
+                    class="dm-input"
+                    name="unidad"
+                    value="${App.ui.escapeHTML(item.unidad || 'Pzas')}"
+                    required>
+            </div>
+
+            <div class="dm-form-row"
+                 style="display:grid;
+                        grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+                        gap:12px;">
+
+                <div class="dm-form-group">
+                    <label class="dm-label">Costo unitario</label>
+                    <input
+                        type="number"
+                        step="0.01"
+                        class="dm-input"
+                        name="costo_unitario"
+                        value="${parseFloat(item.costo_unitario || 0) || 0}">
+                </div>
+
+                <div class="dm-form-group">
+                    <label class="dm-label">Stock mínimo</label>
+                    <input
+                        type="number"
+                        step="0.01"
+                        class="dm-input"
+                        name="stock_minimo"
+                        value="${parseFloat(item.stock_minimo || 0) || 0}">
+                </div>
+
+            </div>
+
+            <div class="dm-alert dm-alert-info">
+                El stock físico, apartado y comprometido
+                se controlan mediante las operaciones de inventario.
+            </div>
+
+            <button
+                type="submit"
+                class="dm-btn dm-btn-primary dm-btn-block">
+                💾 Guardar cambios
+            </button>
+
+        </form>
+    `;
+
+    App.ui.openSheet(
+        tipoActual === 'reventa'
+            ? 'Editar mercancía de reventa'
+            : 'Editar producto terminado',
+        formHTML,
+        async data => {
+
+            return App.ui.runSafeAction({
+                lockKey: `inventario:bodega:editar:${itemId}`,
+                loadingText: 'Guardando...',
+                loaderMessage: 'Actualizando registro de Bodega...',
+                successMessage: 'Registro actualizado',
+                closeSheetOnSuccess: true
+            }, async () => {
+
+                const datos = {
+                    nombre: data.nombre,
+                    tipo: data.tipo,
+                    unidad: data.unidad || 'Pzas',
+                    costo_unitario:
+                        parseFloat(data.costo_unitario || 0) || 0,
+                    stock_minimo:
+                        parseFloat(data.stock_minimo || 0) || 0
+                };
+
+                const resultado =
+                    await App.api.fetch(
+                        'actualizar_fila',
+                        {
+                            nombreHoja: 'materiales',
+                            idFila: itemId,
+                            datosNuevos: datos
+                        }
+                    );
+
+                if (resultado.status !== 'success') {
+                    throw new Error(
+                        resultado.message ||
+                        'No se pudo actualizar el registro'
+                    );
+                }
+
+                Object.assign(item, datos);
+
+                if (App.router?.handleRoute) {
+                    App.router.handleRoute();
+                }
+
+                return resultado;
+            });
+        }
+    );
+};
+
 App.views._resumenInventario = function () {
     const inventario = App.state.inventario || [];
     const movimientos = App.state.movimientos_inventario || [];
@@ -362,10 +586,22 @@ App.views._renderProductosTerminadosBodega = function () {
                              style="display:flex; gap:8px; flex-wrap:wrap;">
 
                             <button
-                                class="dm-btn dm-btn-secondary dm-btn-sm"
-                                onclick="App.views.modalKardex('${i.id}')">
-                                📋 Kardex
-                            </button>
+    class="dm-btn dm-btn-secondary dm-btn-sm"
+    onclick="App.views.modalKardex('${i.id}')">
+    📋 Kardex
+</button>
+
+<button
+    class="dm-btn dm-btn-primary dm-btn-sm"
+    onclick="App.views.formProductoBodega('${i.id}')">
+    ✏️ Editar
+</button>
+
+<button
+    class="dm-btn dm-btn-danger dm-btn-sm"
+    onclick="App.views.eliminarProductoBodega('${i.id}')">
+    🗑️ Eliminar
+</button>
 
                         </div>
 
@@ -505,10 +741,22 @@ App.views._renderProductosTerminadosBodega = function () {
                              style="display:flex; gap:8px; flex-wrap:wrap;">
 
                             <button
-                                class="dm-btn dm-btn-secondary dm-btn-sm"
-                                onclick="App.views.modalKardex('${i.id}')">
-                                📋 Kardex
-                            </button>
+    class="dm-btn dm-btn-secondary dm-btn-sm"
+    onclick="App.views.modalKardex('${i.id}')">
+    📋 Kardex
+</button>
+
+<button
+    class="dm-btn dm-btn-primary dm-btn-sm"
+    onclick="App.views.formProductoBodega('${i.id}')">
+    ✏️ Editar
+</button>
+
+<button
+    class="dm-btn dm-btn-danger dm-btn-sm"
+    onclick="App.views.eliminarProductoBodega('${i.id}')">
+    🗑️ Eliminar
+</button>
 
                         </div>
 
