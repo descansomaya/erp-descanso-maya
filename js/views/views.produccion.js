@@ -2,108 +2,408 @@ window.App = window.App || {};
 App.views = App.views || {};
 
 App.views.revertirProduccionAPendiente = async function (ordenId) {
-    const orden = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
-    if (!orden) throw new Error('Orden no encontrada');
 
-    const estadoActual = String(orden.estado || '').toLowerCase();
-    const yaRevertida = String(orden.materiales_revertidos || '').toLowerCase() === 'true' || orden.materiales_revertidos === true;
+    const orden = (App.state?.ordenes_produccion || [])
+        .find(o => o.id === ordenId);
 
-    if (estadoActual === 'pendiente') { App.ui.toast('La orden ya está en pendiente', 'warning'); return false; }
-    if (yaRevertida) { App.ui.toast('Esta orden ya tuvo reversa de materiales', 'warning'); return false; }
+    if (!orden) {
+        throw new Error('Orden no encontrada');
+    }
 
-    const ok = window.confirm(`¿Regresar la orden ${ordenId} a pendiente y restaurar materiales físicos?`);
+    const estadoActual = String(orden.estado || '')
+        .toLowerCase()
+        .trim();
+
+    const yaRevertida =
+        String(orden.materiales_revertidos || '').toLowerCase() === 'true' ||
+        orden.materiales_revertidos === true;
+
+    if (estadoActual === 'pendiente') {
+        App.ui.toast('La orden ya está en pendiente', 'warning');
+        return false;
+    }
+
+    if (yaRevertida) {
+        App.ui.toast('Esta orden ya tuvo reversa de materiales', 'warning');
+        return false;
+    }
+
+    const esStock =
+        String(
+            ((App.state?.pedido_detalle || [])
+                .find(d => d.id === orden.pedido_detalle_id) || {})
+                .pedido_id || ''
+        );
+
+    const detalle = (App.state?.pedido_detalle || [])
+        .find(d => d.id === orden.pedido_detalle_id);
+
+    const pedido = detalle
+        ? (App.state?.pedidos || [])
+            .find(p => p.id === detalle.pedido_id)
+        : null;
+
+    const esPedidoStock =
+        pedido && pedido.cliente_id === 'STOCK_INTERNO';
+
+    const ok = window.confirm(
+        esPedidoStock && estadoActual === 'listo'
+            ? `¿Reabrir la producción de ${ordenId}?\n\n` +
+              `El producto terminado volverá a salir de Bodega, ` +
+              `se restaurarán los materiales y la orden regresará a pendiente.`
+            : `¿Regresar la orden ${ordenId} a pendiente y restaurar materiales físicos?`
+    );
+
     if (!ok) return false;
 
     let receta = [];
-    try { receta = JSON.parse(orden.receta_personalizada || '[]'); } catch (e) { receta = []; }
+
+    try {
+        receta = JSON.parse(
+            orden.receta_personalizada || '[]'
+        );
+    } catch (e) {
+        receta = [];
+    }
 
     const operaciones = [];
     const ahora = new Date().toISOString();
     const movBase = Date.now();
 
+    // ==========================================================
+    // 1. RESTAURAR MATERIALES
+    // ==========================================================
+
     receta.forEach((item, i) => {
+
         const matId = item.mat_id;
         const cant = parseFloat(item.cant || 0) || 0;
+
         if (!matId || cant <= 0) return;
 
-        const mat = (App.state?.inventario || []).find(m => m.id === matId);
+        const mat = (App.state?.inventario || [])
+            .find(m => m.id === matId);
+
         if (!mat) return;
 
-        const stockActual = parseFloat(mat.stock_real || 0) || 0;
-        const reservadoActual = parseFloat(mat.stock_reservado || 0) || 0;
-        
-        const nuevoStock = stockActual + cant;
-        const nuevoReservado = reservadoActual + cant;
+        const stockActual =
+            parseFloat(mat.stock_real || 0) || 0;
 
-        const costoUnitario = parseFloat(mat.costo_unitario || 0) || 0;
-        const totalMovimiento = cant * costoUnitario;
+        const reservadoActual =
+            parseFloat(mat.stock_reservado || 0) || 0;
+
+        const nuevoStock =
+            stockActual + cant;
+
+        const nuevoReservado =
+            reservadoActual + cant;
+
+        const costoUnitario =
+            parseFloat(mat.costo_unitario || 0) || 0;
+
+        const totalMovimiento =
+            cant * costoUnitario;
 
         operaciones.push({
             action: 'actualizar_fila',
             nombreHoja: 'materiales',
             idFila: matId,
-            datosNuevos: { stock_real: nuevoStock, stock_reservado: nuevoReservado }
+            datosNuevos: {
+                stock_real: nuevoStock,
+                stock_reservado: nuevoReservado
+            }
         });
 
         operaciones.push({
             action: 'guardar_fila',
             nombreHoja: 'movimientos_inventario',
             datos: {
-                id: `REV-${movBase}-${i}`, fecha: ahora, tipo_movimiento: 'reversa_produccion', origen: 'orden',
-                origen_id: ordenId, ref_tipo: 'material', ref_id: matId, cantidad: cant,
-                costo_unitario: costoUnitario, total: totalMovimiento, notas: `Reversa por regresar orden ${ordenId} a pendiente`
+                id: `REV-${movBase}-${i}`,
+                fecha: ahora,
+                tipo_movimiento: 'reversa_produccion',
+                origen: 'orden',
+                origen_id: ordenId,
+                ref_tipo: 'material',
+                ref_id: matId,
+                cantidad: cant,
+                costo_unitario: costoUnitario,
+                total: totalMovimiento,
+                notas: `Reversa por regresar orden ${ordenId} a pendiente`
             }
         });
     });
+
+    // ==========================================================
+    // 2. SI ESTABA LISTO Y ES STOCK:
+    //    RETIRAR EL PRODUCTO TERMINADO DE BODEGA
+    // ==========================================================
+
+    if (estadoActual === 'listo' && esPedidoStock && detalle) {
+
+        const producto =
+            (App.state?.productos || [])
+                .find(p => p.id === detalle.producto_id);
+
+        if (producto) {
+
+            const cantidadTerminada =
+                parseFloat(detalle.cantidad || 1) || 1;
+
+            // Buscar el movimiento que originalmente ingresó
+            // el producto terminado por esta orden.
+            const movimientoEntrada =
+                (App.state?.movimientos_inventario || [])
+                    .find(m =>
+                        String(m.origen_id) === String(ordenId) &&
+                        String(m.tipo_movimiento || '')
+                            .toLowerCase() === 'entrada_produccion'
+                    );
+
+            if (movimientoEntrada && movimientoEntrada.material_id) {
+
+                const matPT =
+                    (App.state?.inventario || [])
+                        .find(m =>
+                            String(m.id) ===
+                            String(movimientoEntrada.material_id)
+                        );
+
+                if (matPT) {
+
+                    const stockPT =
+                        parseFloat(matPT.stock_real || 0) || 0;
+
+                    const nuevoStockPT =
+                        Math.max(
+                            0,
+                            stockPT - cantidadTerminada
+                        );
+
+                    operaciones.push({
+                        action: 'actualizar_fila',
+                        nombreHoja: 'materiales',
+                        idFila: matPT.id,
+                        datosNuevos: {
+                            stock_real: nuevoStockPT
+                        }
+                    });
+
+                    const costoPT =
+                        parseFloat(matPT.costo_unitario || 0) || 0;
+
+                    operaciones.push({
+                        action: 'guardar_fila',
+                        nombreHoja: 'movimientos_inventario',
+                        datos: {
+                            id: `REV-PT-${movBase}`,
+                            fecha: ahora,
+                            tipo_movimiento: 'reversa_entrada_produccion',
+                            origen: 'orden',
+                            origen_id: ordenId,
+                            ref_tipo: 'material',
+                            ref_id: matPT.id,
+                            material_id: matPT.id,
+                            tipo: 'salida',
+                            cantidad: cantidadTerminada,
+                            costo_unitario: costoPT,
+                            total: cantidadTerminada * costoPT,
+                            motivo: 'Reapertura de producción',
+                            notas: `Producto terminado retirado temporalmente de Bodega por reapertura de ${ordenId}`
+                        }
+                    });
+
+                    // Actualizar memoria local
+                    matPT.stock_real = nuevoStockPT;
+                }
+            }
+        }
+    }
+
+    // ==========================================================
+    // 3. REGRESAR ORDEN A PENDIENTE
+    // ==========================================================
 
     operaciones.push({
         action: 'actualizar_fila',
         nombreHoja: 'ordenes_produccion',
         idFila: ordenId,
-        datosNuevos: { estado: 'pendiente', materiales_revertidos: true, materiales_descontados: false, fecha_reversa_materiales: ahora }
-    });
-
-    const res = await App.api.fetch('ejecutar_lote', { operaciones });
-    if (res.status !== 'success') { throw new Error(res.message || 'No se pudo ejecutar la reversa'); }
-
-    receta.forEach((item) => {
-        const matId = item.mat_id;
-        const cant = parseFloat(item.cant || 0) || 0;
-        if (!matId || cant <= 0) return;
-
-        const mat = (App.state?.inventario || []).find(m => m.id === matId);
-        if (mat) {
-            mat.stock_real = (parseFloat(mat.stock_real || 0) || 0) + cant;
-            mat.stock_reservado = (parseFloat(mat.stock_reservado || 0) || 0) + cant;
+        datosNuevos: {
+            estado: 'pendiente',
+            materiales_revertidos: true,
+            materiales_descontados: false,
+            fecha_reversa_materiales: ahora
         }
     });
 
-    const ordState = (App.state?.ordenes_produccion || []).find(o => o.id === ordenId);
+    // ==========================================================
+    // 4. SI ES STOCK, EL PEDIDO TAMBIÉN DEBE VOLVER A TALLER
+    // ==========================================================
+
+    if (esPedidoStock && pedido) {
+
+        operaciones.push({
+            action: 'actualizar_fila',
+            nombreHoja: 'pedidos',
+            idFila: pedido.id,
+            datosNuevos: {
+                estado: 'taller'
+            }
+        });
+    }
+
+    // ==========================================================
+    // 5. EJECUTAR TODO EN UN SOLO LOTE
+    // ==========================================================
+
+    const res =
+        await App.api.fetch(
+            'ejecutar_lote',
+            { operaciones }
+        );
+
+    if (res.status !== 'success') {
+        throw new Error(
+            res.message ||
+            'No se pudo ejecutar la reversa'
+        );
+    }
+
+    // ==========================================================
+    // 6. SINCRONIZAR MATERIALES EN MEMORIA
+    // ==========================================================
+
+    receta.forEach(item => {
+
+        const matId = item.mat_id;
+        const cant = parseFloat(item.cant || 0) || 0;
+
+        if (!matId || cant <= 0) return;
+
+        const mat =
+            (App.state?.inventario || [])
+                .find(m => m.id === matId);
+
+        if (mat) {
+
+            mat.stock_real =
+                (parseFloat(mat.stock_real || 0) || 0) + cant;
+
+            mat.stock_reservado =
+                (parseFloat(mat.stock_reservado || 0) || 0) + cant;
+        }
+    });
+
+    // ==========================================================
+    // 7. ACTUALIZAR ORDEN EN MEMORIA
+    // ==========================================================
+
+    const ordState =
+        (App.state?.ordenes_produccion || [])
+            .find(o => o.id === ordenId);
+
     if (ordState) {
+
         ordState.estado = 'pendiente';
         ordState.materiales_revertidos = true;
         ordState.materiales_descontados = false;
         ordState.fecha_reversa_materiales = ahora;
     }
 
-    if (!Array.isArray(App.state.movimientos_inventario)) App.state.movimientos_inventario = [];
+    // ==========================================================
+    // 8. ACTUALIZAR PEDIDO EN MEMORIA
+    // ==========================================================
+
+    if (esPedidoStock && pedido) {
+        pedido.estado = 'taller';
+    }
+
+    // ==========================================================
+    // 9. GUARDAR MOVIMIENTOS EN MEMORIA
+    // ==========================================================
+
+    if (!Array.isArray(App.state.movimientos_inventario)) {
+        App.state.movimientos_inventario = [];
+    }
 
     receta.forEach((item, i) => {
+
         const matId = item.mat_id;
         const cant = parseFloat(item.cant || 0) || 0;
+
         if (!matId || cant <= 0) return;
 
-        const mat = (App.state?.inventario || []).find(m => m.id === matId);
-        const costoUnitario = parseFloat(mat?.costo_unitario || 0) || 0;
+        const mat =
+            (App.state?.inventario || [])
+                .find(m => m.id === matId);
+
+        const costoUnitario =
+            parseFloat(mat?.costo_unitario || 0) || 0;
 
         App.state.movimientos_inventario.push({
-            id: `REV-${movBase}-${i}`, fecha: ahora, tipo_movimiento: 'reversa_produccion', origen: 'orden',
-            origen_id: ordenId, ref_tipo: 'material', ref_id: matId, cantidad: cant,
-            costo_unitario: costoUnitario, total: cant * costoUnitario, notas: `Reversa por regresar orden ${ordenId} a pendiente`
+            id: `REV-${movBase}-${i}`,
+            fecha: ahora,
+            tipo_movimiento: 'reversa_produccion',
+            origen: 'orden',
+            origen_id: ordenId,
+            ref_tipo: 'material',
+            ref_id: matId,
+            cantidad: cant,
+            costo_unitario: costoUnitario,
+            total: cant * costoUnitario,
+            notas: `Reversa por regresar orden ${ordenId} a pendiente`
         });
     });
 
-    if (App.router?.handleRoute) App.router.handleRoute();
+    // Movimiento de salida del producto terminado
+    // para mantener trazabilidad en memoria.
+    if (estadoActual === 'listo' && esPedidoStock) {
+
+        const movimientoEntrada =
+            (App.state?.movimientos_inventario || [])
+                .find(m =>
+                    String(m.origen_id) === String(ordenId) &&
+                    String(m.tipo_movimiento || '')
+                        .toLowerCase() === 'entrada_produccion'
+                );
+
+        if (movimientoEntrada && movimientoEntrada.material_id) {
+
+            const detalleActual =
+                (App.state?.pedido_detalle || [])
+                    .find(d => d.id === orden.pedido_detalle_id);
+
+            const cantidadTerminada =
+                parseFloat(detalleActual?.cantidad || 1) || 1;
+
+            App.state.movimientos_inventario.push({
+                id: `REV-PT-${movBase}`,
+                fecha: ahora,
+                tipo_movimiento: 'reversa_entrada_produccion',
+                origen: 'orden',
+                origen_id: ordenId,
+                ref_tipo: 'material',
+                ref_id: movimientoEntrada.material_id,
+                material_id: movimientoEntrada.material_id,
+                tipo: 'salida',
+                cantidad: cantidadTerminada,
+                costo_unitario: 0,
+                total: 0,
+                motivo: 'Reapertura de producción',
+                notas: `Producto terminado retirado temporalmente de Bodega por reapertura de ${ordenId}`
+            });
+        }
+    }
+
+    if (App.router?.handleRoute) {
+        App.router.handleRoute();
+    }
+
+    App.ui.toast(
+        esPedidoStock && estadoActual === 'listo'
+            ? 'Producción reabierta y producto terminado retirado de Bodega'
+            : 'Orden regresada a pendiente con reversa'
+    );
+
     return true;
 };
 
