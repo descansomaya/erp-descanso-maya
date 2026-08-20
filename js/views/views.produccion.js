@@ -28,12 +28,7 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
         return false;
     }
 
-    const esStock =
-        String(
-            ((App.state?.pedido_detalle || [])
-                .find(d => d.id === orden.pedido_detalle_id) || {})
-                .pedido_id || ''
-        );
+    
 
     const detalle = (App.state?.pedido_detalle || [])
         .find(d => d.id === orden.pedido_detalle_id);
@@ -133,91 +128,97 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
         });
     });
 
-    // ==========================================================
-    // 2. SI ESTABA LISTO Y ES STOCK:
-    //    RETIRAR EL PRODUCTO TERMINADO DE BODEGA
-    // ==========================================================
+  // ==========================================================
+// 2. SI ESTABA LISTO Y ES STOCK:
+//    RETIRAR EL PRODUCTO TERMINADO DE BODEGA
+// ==========================================================
 
-    if (estadoActual === 'listo' && esPedidoStock && detalle) {
+let movimientoReversaPT = null;
 
-        const producto =
-            (App.state?.productos || [])
-                .find(p => p.id === detalle.producto_id);
+if (estadoActual === 'listo' && esPedidoStock && detalle) {
 
-        if (producto) {
+    const cantidadTerminada =
+        parseFloat(detalle.cantidad || 1) || 1;
 
-            const cantidadTerminada =
-                parseFloat(detalle.cantidad || 1) || 1;
+    // Buscar la entrada de producción correspondiente
+    // EXCLUSIVAMENTE a esta orden.
+    const movimientosOrden =
+        (App.state?.movimientos_inventario || [])
+            .filter(m =>
+                String(m.origen_id) === String(ordenId)
+            );
 
-            // Buscar el movimiento que originalmente ingresó
-            // el producto terminado por esta orden.
-            const movimientoEntrada =
-                (App.state?.movimientos_inventario || [])
-                    .find(m =>
-                        String(m.origen_id) === String(ordenId) &&
-                        String(m.tipo_movimiento || '')
-                            .toLowerCase() === 'entrada_produccion'
-                    );
+    const movimientoEntrada =
+        movimientosOrden
+            .filter(m =>
+                String(m.tipo_movimiento || '')
+                    .toLowerCase()
+                    .trim() === 'entrada_produccion'
+            )
+            .sort((a, b) =>
+                new Date(b.fecha || 0) -
+                new Date(a.fecha || 0)
+            )[0];
 
-            if (movimientoEntrada && movimientoEntrada.material_id) {
+    if (movimientoEntrada && movimientoEntrada.material_id) {
 
-                const matPT =
-                    (App.state?.inventario || [])
-                        .find(m =>
-                            String(m.id) ===
-                            String(movimientoEntrada.material_id)
-                        );
+        const matPT =
+            (App.state?.inventario || [])
+                .find(m =>
+                    String(m.id) ===
+                    String(movimientoEntrada.material_id)
+                );
 
-                if (matPT) {
+        if (matPT) {
 
-                    const stockPT =
-                        parseFloat(matPT.stock_real || 0) || 0;
+            const stockPT =
+                parseFloat(matPT.stock_real || 0) || 0;
 
-                    const nuevoStockPT =
-                        Math.max(
-                            0,
-                            stockPT - cantidadTerminada
-                        );
+            // No permitimos que la reversa genere
+            // inventario negativo.
+            const nuevoStockPT =
+                Math.max(
+                    0,
+                    stockPT - cantidadTerminada
+                );
 
-                    operaciones.push({
-                        action: 'actualizar_fila',
-                        nombreHoja: 'materiales',
-                        idFila: matPT.id,
-                        datosNuevos: {
-                            stock_real: nuevoStockPT
-                        }
-                    });
+            const costoPT =
+                parseFloat(matPT.costo_unitario || 0) || 0;
 
-                    const costoPT =
-                        parseFloat(matPT.costo_unitario || 0) || 0;
+            movimientoReversaPT = {
+                id: `REV-PT-${movBase}`,
+                fecha: ahora,
+                tipo_movimiento: 'reversa_entrada_produccion',
+                origen: 'orden',
+                origen_id: ordenId,
+                ref_tipo: 'material',
+                ref_id: matPT.id,
+                material_id: matPT.id,
+                tipo: 'salida',
+                cantidad: cantidadTerminada,
+                costo_unitario: costoPT,
+                total: cantidadTerminada * costoPT,
+                motivo: 'Reapertura de producción',
+                notas: `Reversión de producto terminado por reapertura de ${ordenId}`
+            };
 
-                    operaciones.push({
-                        action: 'guardar_fila',
-                        nombreHoja: 'movimientos_inventario',
-                        datos: {
-                            id: `REV-PT-${movBase}`,
-                            fecha: ahora,
-                            tipo_movimiento: 'reversa_entrada_produccion',
-                            origen: 'orden',
-                            origen_id: ordenId,
-                            ref_tipo: 'material',
-                            ref_id: matPT.id,
-                            material_id: matPT.id,
-                            tipo: 'salida',
-                            cantidad: cantidadTerminada,
-                            costo_unitario: costoPT,
-                            total: cantidadTerminada * costoPT,
-                            motivo: 'Reapertura de producción',
-                            notas: `Producto terminado retirado temporalmente de Bodega por reapertura de ${ordenId}`
-                        }
-                    });
-
-                    // Actualizar memoria local
-                    matPT.stock_real = nuevoStockPT;
+            operaciones.push({
+                action: 'actualizar_fila',
+                nombreHoja: 'materiales',
+                idFila: matPT.id,
+                datosNuevos: {
+                    stock_real: nuevoStockPT
                 }
-            }
+            });
+
+            operaciones.push({
+                action: 'guardar_fila',
+                nombreHoja: 'movimientos_inventario',
+                datos: movimientoReversaPT
+            });
         }
     }
+}
 
     // ==========================================================
     // 3. REGRESAR ORDEN A PENDIENTE
@@ -354,45 +355,11 @@ App.views.revertirProduccionAPendiente = async function (ordenId) {
         });
     });
 
-    // Movimiento de salida del producto terminado
-    // para mantener trazabilidad en memoria.
-    if (estadoActual === 'listo' && esPedidoStock) {
-
-        const movimientoEntrada =
-            (App.state?.movimientos_inventario || [])
-                .find(m =>
-                    String(m.origen_id) === String(ordenId) &&
-                    String(m.tipo_movimiento || '')
-                        .toLowerCase() === 'entrada_produccion'
-                );
-
-        if (movimientoEntrada && movimientoEntrada.material_id) {
-
-            const detalleActual =
-                (App.state?.pedido_detalle || [])
-                    .find(d => d.id === orden.pedido_detalle_id);
-
-            const cantidadTerminada =
-                parseFloat(detalleActual?.cantidad || 1) || 1;
-
-            App.state.movimientos_inventario.push({
-                id: `REV-PT-${movBase}`,
-                fecha: ahora,
-                tipo_movimiento: 'reversa_entrada_produccion',
-                origen: 'orden',
-                origen_id: ordenId,
-                ref_tipo: 'material',
-                ref_id: movimientoEntrada.material_id,
-                material_id: movimientoEntrada.material_id,
-                tipo: 'salida',
-                cantidad: cantidadTerminada,
-                costo_unitario: 0,
-                total: 0,
-                motivo: 'Reapertura de producción',
-                notas: `Producto terminado retirado temporalmente de Bodega por reapertura de ${ordenId}`
-            });
-        }
-    }
+    // Registrar en memoria el movimiento de reversa
+// del producto terminado, si se generó.
+if (movimientoReversaPT) {
+    App.state.movimientos_inventario.push(movimientoReversaPT);
+}
 
     if (App.router?.handleRoute) {
         App.router.handleRoute();
