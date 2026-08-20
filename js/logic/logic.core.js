@@ -145,12 +145,39 @@ Object.assign(App.logic, {
             const index = arr.findIndex(item => item.id === id);
             if (index !== -1) arr[index] = { ...arr[index], ...datos };
             App.ui.toast("Actualizado");
-            if (callback) callback();
-            else App.router.handleRoute();
-        } else {
-            App.ui.toast(res.message || "Error", "danger");
+
+if (callback) {
+
+    callback(datos);
+
+} else {
+
+    const contexto =
+        App.ui._sheetContext;
+
+    App.ui.closeSheet();
+
+    if (
+        contexto &&
+        contexto.hash
+    ) {
+
+        if (
+            window.location.hash !==
+            contexto.hash
+        ) {
+            window.location.hash =
+                contexto.hash;
         }
-    },
+
+        App.router.handleRoute();
+
+    } else {
+
+        App.router.handleRoute();
+    }
+}
+            },
 
     async guardarNuevoGenerico(hoja, datos, prefijo, estado, callback = null) {
         App.ui.showLoader("Registrando...");
@@ -171,13 +198,40 @@ Object.assign(App.logic, {
             App.state[estado].push(datos);
             App.ui.toast("Guardado exitosamente");
 
-            if (callback) callback();
-            else App.router.handleRoute();
-        } else {
-            App.ui.toast(res.message || "Error al guardar", "danger");
-        }
-    },
+if (callback) {
 
+    callback(datos);
+
+} else {
+
+    const contexto =
+        App.ui._sheetContext;
+
+    App.ui.closeSheet();
+
+    if (
+        contexto &&
+        contexto.hash
+    ) {
+
+        // Regresamos exactamente al módulo
+        // desde donde se abrió el formulario.
+        if (
+            window.location.hash !==
+            contexto.hash
+        ) {
+            window.location.hash =
+                contexto.hash;
+        }
+
+        App.router.handleRoute();
+
+    } else {
+
+        App.router.handleRoute();
+    }
+}
+},
     revisarAlertasStock(esArranque = false) {
         const bajos = (App.state.inventario || []).filter(i => {
             const libre =
