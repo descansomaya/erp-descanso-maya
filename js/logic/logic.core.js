@@ -146,40 +146,39 @@ Object.assign(App.logic, {
             if (index !== -1) arr[index] = { ...arr[index], ...datos };
             App.ui.toast("Actualizado");
 
-if (callback) {
+        if (callback) {
 
-    callback(datos);
+            callback(datos);
 
-} else {
+        } else {
 
-    const contexto =
-        App.ui._sheetContext;
+            const contexto =
+                App.ui._sheetContext;
 
-    App.ui.closeSheet();
+            App.ui.closeSheet();
 
-    if (
-        contexto &&
-        contexto.hash
-    ) {
+            if (
+                contexto &&
+                contexto.hash
+            ) {
 
-        if (
-            window.location.hash !==
-            contexto.hash
-        ) {
-            window.location.hash =
-                contexto.hash;
+                if (
+                    window.location.hash !==
+                    contexto.hash
+                ) {
+                    window.location.hash =
+                        contexto.hash;
+                }
+
+                App.router.handleRoute();
+
+            } else {
+
+                App.router.handleRoute();
+            }
         }
 
-        App.router.handleRoute();
-
-         } else {
-
-        App.router.handleRoute();
-    }
-
-    }
-
-},
+    },
 
 async guardarNuevoGenerico(hoja, datos, prefijo, estado, callback = null) {
         App.ui.showLoader("Registrando...");
