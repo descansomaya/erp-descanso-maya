@@ -6,9 +6,7 @@ _actionLocks: App.ui._actionLocks || new Set(),
 
 _sheetContext: App.ui._sheetContext || null,
 
-init() {
-
-    showLoader(mensaje = "Procesando...") {
+showLoader(mensaje = "Procesando...") {
         const loader = document.getElementById("loader");
         if (!loader) return;
 
