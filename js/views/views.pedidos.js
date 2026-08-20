@@ -2803,7 +2803,7 @@ App.views.modalDetallesPedido = function(pedidoId) {
 ${''}
             ${estado === 'listo para entregar' || estado === 'pagado' ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'marcarEntregado')">🚚 Entregar</button>` : ''}
             ${estado === 'listo para entregar' ? `<button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'cancelarPedido')">🚫 Cancelar</button>` : ''}
-            ${estado === 'entregado' ? `<button class="dm-btn dm-btn-warning dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'devolverPedido')">↩️ Devolver</button>` : ''}
+${estado === 'entregado' && !esInterno ? `<button class="dm-btn dm-btn-warning dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'devolverPedido')">↩️ Devolver</button>` : ''}
             ${saldo <= 0.05 && !['pagado','entregado','cancelado','devuelto'].includes(estado) ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionPedido(this, '${pedidoId}', 'cerrarPedido')">🔒 Cerrar</button>` : ''}
 
     ${(() => {
