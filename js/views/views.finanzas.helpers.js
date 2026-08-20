@@ -130,19 +130,16 @@ if (typeof App.logic.obtenerResumenFinancieroCentral === 'function' && !App.logi
         const resumen = resumenFinancieroOriginal.call(this, filtro);
         const reembolsos = App.logic._resumenReembolsosFinanzas(filtro);
 
-        const gastosOperativos = parseFloat(resumen.gastosOperativosPuros || 0) || 0;
-        const comprasPagadas = parseFloat(resumen.totalComprasPagadas || 0) || 0;
-        const nominaPagada = parseFloat(resumen.totalNominaPagada || 0) || 0;
-        const salidasBase = gastosOperativos + comprasPagadas + nominaPagada;
-
         resumen.totalReembolsosPagados = reembolsos.totalPagados;
         resumen.totalReembolsosPendientes = reembolsos.totalPendientes;
         resumen.reembolsos = reembolsos.rows;
         resumen.reembolsosPagados = reembolsos.pagados;
         resumen.reembolsosPendientes = reembolsos.pendientes;
 
-        // Solo un reembolso PAGADO afecta caja. Uno pendiente no es salida.
-        resumen.salidasRegistradas = salidasBase + reembolsos.totalPagados;
+        // Una devolución pendiente todavía NO es salida de caja.
+        // Una devolución pagada SÍ es salida real.
+        resumen.salidasRegistradas = (parseFloat(resumen.salidasRegistradas || 0) || 0) + reembolsos.totalPagados;
+        resumen.reembolsosPagados = reembolsos.pagados;
         resumen.flujoOperativo = (parseFloat(resumen.cobrado || 0) || 0) - resumen.salidasRegistradas;
         resumen.resultadoCajaReal = resumen.flujoOperativo;
         resumen.saldoProyectado = (parseFloat(resumen.saldoProyectado || 0) || 0) - reembolsos.totalPendientes;
@@ -183,7 +180,7 @@ setTimeout(() => {
                     <div class="dm-mt-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
                         <div class="dm-card"><div class="dm-kpi-label">Pagados</div><div class="dm-kpi-value" style="color:#C53030">${money(reembolsos.totalPagados)}</div></div>
                         <div class="dm-card"><div class="dm-kpi-label">Pendientes</div><div class="dm-kpi-value" style="color:#B7791F">${money(reembolsos.totalPendientes)}</div></div>
-                        <div class="dm-card"><div class="dm-kpi-label">Salidas registradas</div><div class="dm-kpi-value">${money(salidasReales)}</div></div>
+                        <div class="dm-card"><div class="dm-kpi-label">Salidas por reembolso</div><div class="dm-kpi-value">${money(salidasReales)}</div></div>
                     </div>
                     <div class="dm-mt-3" style="overflow:auto">
                         ${reembolsos.rows.length ? `
