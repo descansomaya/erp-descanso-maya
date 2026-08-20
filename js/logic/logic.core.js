@@ -232,14 +232,16 @@ if (callback) {
         }
 
         App.router.handleRoute();
-   } else {
+  } else {
 
-        App.router.handleRoute();
-    }
+         App.router.handleRoute();
+     }
+ }
+
 }
 
 },
- 
+
     revisarAlertasStock(esArranque = false) {
         const bajos = (App.state.inventario || []).filter(i => {
             const libre =
