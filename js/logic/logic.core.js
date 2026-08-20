@@ -172,9 +172,11 @@ if (callback) {
 
         App.router.handleRoute();
 
-     } else {
+         } else {
 
         App.router.handleRoute();
+    }
+
     }
 
 },
