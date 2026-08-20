@@ -340,6 +340,22 @@ async devolverPedido(pedidoId) {
             throw new Error("Pedido no encontrado");
         }
 
+        // Los pedidos de stock interno no son ventas a cliente
+// y por lo tanto no pueden generar una devolución/reembolso.
+const esStockInterno =
+    String(pedido.cliente_id || '')
+        .toUpperCase()
+        .trim() === 'STOCK_INTERNO';
+
+if (esStockInterno) {
+    App.ui.toast(
+        "Los pedidos de stock no pueden devolverse desde Pedidos. " +
+        "Para reabrir producción utiliza Taller.",
+        "warning"
+    );
+    return false;
+}
+
         const estado = String(pedido.estado || "")
             .toLowerCase()
             .trim();
