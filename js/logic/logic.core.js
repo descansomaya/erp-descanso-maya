@@ -172,17 +172,20 @@ Object.assign(App.logic, {
 
                 App.router.handleRoute();
 
-              } else {
+                      } else {
 
             App.router.handleRoute();
         }
 
-        // Cierra if (res.status === "success")
+
+        }
+
+       
     }
 
-    // Cierra actualizarRegistroGenerico()
-},
 
+},
+    
 async guardarNuevoGenerico(hoja, datos, prefijo, estado, callback = null) {
         App.ui.showLoader("Registrando...");
         datos.id = prefijo + "-" + Date.now();
@@ -229,13 +232,14 @@ if (callback) {
         }
 
         App.router.handleRoute();
-
-    } else {
+   } else {
 
         App.router.handleRoute();
     }
 }
+
 },
+ 
     revisarAlertasStock(esArranque = false) {
         const bajos = (App.state.inventario || []).filter(i => {
             const libre =
