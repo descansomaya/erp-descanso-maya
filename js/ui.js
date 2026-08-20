@@ -2,11 +2,11 @@ window.App = window.App || {};
 App.ui = App.ui || {};
 
 Object.assign(App.ui, {
-    _actionLocks: App.ui._actionLocks || new Set(),
+_actionLocks: App.ui._actionLocks || new Set(),
 
-    init() {
-        console.log("UI iniciada");
-    },
+_sheetContext: App.ui._sheetContext || null,
+
+init() {
 
     showLoader(mensaje = "Procesando...") {
         const loader = document.getElementById("loader");
@@ -153,62 +153,128 @@ Object.assign(App.ui, {
         }
     },
 
-    openSheet(titulo, contenidoHTML, callbackFormulario = null) {
-        const bg = document.getElementById("sheet-bg");
-        const sheet = document.getElementById("sheet-content");
+   openSheet(titulo, contenidoHTML, callbackFormulario = null, opciones = {}) {
 
-        if (!bg || !sheet) return;
+    const bg = document.getElementById("sheet-bg");
+    const sheet = document.getElementById("sheet-content");
 
-        sheet.innerHTML = `
-            <div class="dm-modal-header">
-                <div>
-                    <h2 class="dm-modal-title">${this.escapeHTML(titulo)}</h2>
-                </div>
-                <button class="dm-btn dm-btn-ghost" type="button" onclick="App.ui.closeSheet()">✕</button>
+    if (!bg || !sheet) return;
+
+    // Guardamos el contexto actual antes de abrir el formulario.
+    // Así, después de crear/editar algo podemos regresar
+    // automáticamente al módulo desde donde se abrió.
+    const hashActual =
+        window.location.hash ||
+        "#inicio";
+
+    this._sheetContext = {
+        hash: hashActual,
+        opciones: opciones || {},
+        titulo: titulo
+    };
+
+    sheet.innerHTML = `
+        <div class="dm-modal-header">
+            <div>
+                <h2 class="dm-modal-title">
+                    ${this.escapeHTML(titulo)}
+                </h2>
             </div>
-            <div class="dm-modal-body">
-                ${contenidoHTML}
-            </div>
-        `;
 
-        bg.classList.remove("hidden");
+            <button
+                class="dm-btn dm-btn-ghost"
+                type="button"
+                onclick="App.ui.closeSheet()">
+                ✕
+            </button>
+        </div>
 
-        if (App.compat && typeof App.compat.apply === "function") {
-            App.compat.apply(sheet);
+        <div class="dm-modal-body">
+            ${contenidoHTML}
+        </div>
+    `;
+
+    bg.classList.remove("hidden");
+
+    if (
+        App.compat &&
+        typeof App.compat.apply === "function"
+    ) {
+        App.compat.apply(sheet);
+    }
+
+    bg.onclick = (e) => {
+        if (e.target === bg) {
+            this.closeSheet();
         }
+    };
 
-        bg.onclick = (e) => {
-            if (e.target === bg) this.closeSheet();
-        };
+    if (callbackFormulario) {
 
-        if (callbackFormulario) {
-            const form = document.getElementById("dynamic-form");
-            if (form) {
-                form.onsubmit = async (e) => {
-                    e.preventDefault();
-                    const data = this.serializeForm(form);
-                    const submitButton = form.querySelector('button[type="submit"]');
+        const form =
+            document.getElementById("dynamic-form");
 
-                    await this.runSafeAction({
-                        lockKey: `form:${titulo}`,
-                        button: submitButton,
-                        loadingText: "Guardando...",
-                        loaderMessage: "Guardando información...",
-                        errorTitle: "No se pudo guardar",
-                        toastOnSuccess: false
-                    }, async () => callbackFormulario(data, form, submitButton));
-                };
-            }
+        if (form) {
+
+            form.onsubmit = async (e) => {
+
+                e.preventDefault();
+
+                const data =
+                    this.serializeForm(form);
+
+                const submitButton =
+                    form.querySelector(
+                        'button[type="submit"]'
+                    );
+
+                await this.runSafeAction({
+
+                    lockKey: `form:${titulo}`,
+
+                    button: submitButton,
+
+                    loadingText: "Guardando...",
+
+                    loaderMessage:
+                        "Guardando información...",
+
+                    errorTitle:
+                        "No se pudo guardar",
+
+                    toastOnSuccess: false
+
+                }, async () => {
+
+                    return callbackFormulario(
+                        data,
+                        form,
+                        submitButton
+                    );
+                });
+            };
         }
-    },
+    }
+},
 
-    closeSheet() {
-        const bg = document.getElementById("sheet-bg");
-        const sheet = document.getElementById("sheet-content");
+   closeSheet() {
 
-        if (bg) bg.classList.add("hidden");
-        if (sheet) sheet.innerHTML = "";
-    },
+    const bg =
+        document.getElementById("sheet-bg");
+
+    const sheet =
+        document.getElementById("sheet-content");
+
+    if (bg) {
+        bg.classList.add("hidden");
+    }
+
+    if (sheet) {
+        sheet.innerHTML = "";
+    }
+
+    this._sheetContext = null;
+},
 
     serializeForm(form) {
         const formData = new FormData(form);
