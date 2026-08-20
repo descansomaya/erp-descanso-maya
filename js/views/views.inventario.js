@@ -212,48 +212,314 @@ App.views._optionsMaterialCompraConSeleccion = function (selectedId) {
 // FASE 3: BODEGA DE PRODUCTOS TERMINADOS Y REVENTA
 // ==========================================
 App.views._renderProductosTerminadosBodega = function () {
-    const productos = App.state.productos || [];
-    let html = `<div class="dm-list">`;
 
-    if (!productos.length) {
-        html += `<div class="dm-alert dm-alert-info">No hay productos registrados en el catálogo.</div>`;
+    const inventario = App.state.inventario || [];
+
+    // ==========================================================
+    // PRODUCTOS TERMINADOS
+    // ==========================================================
+
+    const productosTerminados = inventario.filter(i => {
+        const tipo = String(i.tipo || '').toLowerCase().trim();
+        return tipo === 'producto_terminado';
+    });
+
+    // ==========================================================
+    // REVENTA
+    // ==========================================================
+
+    const productosReventa = inventario.filter(i => {
+        const tipo = String(i.tipo || '').toLowerCase().trim();
+        return tipo === 'reventa';
+    });
+
+    let html = '';
+
+    // ==========================================================
+    // SECCIÓN: PRODUCTOS TERMINADOS
+    // ==========================================================
+
+    html += `
+        <div class="dm-card dm-mb-4">
+            <div style="display:flex; flex-direction:column; gap:6px;">
+                <h3 class="dm-card-title">📦 Productos Terminados</h3>
+                <p class="dm-muted" style="margin:0;">
+                    Productos fabricados por Descanso Maya y disponibles en bodega.
+                </p>
+            </div>
+        </div>
+    `;
+
+    if (!productosTerminados.length) {
+
+        html += `
+            <div class="dm-alert dm-alert-info dm-mb-4">
+                No hay productos terminados disponibles en bodega.
+            </div>
+        `;
+
     } else {
-        productos.forEach(p => {
-            const stockDisponible = parseFloat(p.stock_disponible || p.stock_real || 0) || 0;
-            const esReventa = (p.categoria === 'reventa' || p.clasificacion === 'Reventa');
-            const tipoLabel = esReventa ? '🛒 Reventa Directa' : '🔨 Fabricación Taller';
-            const badgeClass = stockDisponible > 0 ? 'dm-badge-success' : 'dm-badge-warning';
+
+        html += `<div class="dm-list dm-mb-4">`;
+
+        productosTerminados.forEach(i => {
+
+            const stock =
+                parseFloat(i.stock_real || 0) || 0;
+
+            const reservado =
+                parseFloat(i.stock_reservado || 0) || 0;
+
+            const comprometido =
+                parseFloat(i.stock_comprometido || 0) || 0;
+
+            const disponible =
+                Math.max(
+                    0,
+                    stock - reservado - comprometido
+                );
+
+            const costo =
+                parseFloat(i.costo_unitario || 0) || 0;
+
+            const badgeClass =
+                disponible > 0
+                    ? 'dm-badge-success'
+                    : 'dm-badge-warning';
 
             html += `
-                <div class="dm-list-card tarj-prod-bodega">
+                <div class="dm-list-card tarj-prod-terminado">
                     <div style="display:flex; flex-direction:column; gap:10px;">
-                        <div class="dm-row-between" style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
+                        <div class="dm-row-between"
+                             style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
                             <div style="flex:1; min-width:0;">
-                                <div class="dm-list-card-title" style="word-break:break-word;">${App.ui.escapeHTML(p.nombre)}</div>
-                                <div class="dm-list-card-subtitle">${tipoLabel}</div>
+                                <div class="dm-list-card-title"
+                                     style="word-break:break-word;">
+                                    ${App.ui.escapeHTML(i.nombre)}
+                                </div>
+
+                                <div class="dm-list-card-subtitle">
+                                    🔨 Fabricación propia
+                                </div>
                             </div>
+
                             <div style="flex:0 0 auto;">
-                                <span class="dm-badge ${badgeClass}">Disponible: ${App.ui.number(stockDisponible, 0)} pzas</span>
+                                <span class="dm-badge ${badgeClass}">
+                                    Disponible: ${App.ui.number(disponible, 0)} pzas
+                                </span>
+                            </div>
+
+                        </div>
+
+                        <div class="dm-card"
+                             style="background:var(--dm-surface-2); padding:10px;">
+
+                            <div style="
+                                display:grid;
+                                grid-template-columns:repeat(auto-fit,minmax(90px,1fr));
+                                gap:10px;
+                                text-align:center;
+                            ">
+
+                                <div>
+                                    <small class="dm-muted">Físico</small>
+                                    <br>
+                                    <strong>
+                                        ${App.ui.number(stock, 0)}
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <small class="dm-muted">Apartado</small>
+                                    <br>
+                                    <strong style="color:var(--dm-warning);">
+                                        ${App.ui.number(reservado, 0)}
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <small class="dm-muted">Comprometido</small>
+                                    <br>
+                                    <strong style="color:var(--dm-primary);">
+                                        ${App.ui.number(comprometido, 0)}
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <small class="dm-muted">Costo</small>
+                                    <br>
+                                    <strong>
+                                        ${App.ui.money(costo)}
+                                    </strong>
+                                </div>
+
                             </div>
                         </div>
 
-                        <div class="dm-card" style="background:var(--dm-surface-2); padding:10px;">
-                            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(100px,1fr)); gap:10px; text-align:center;">
-                                <div><small class="dm-muted">Precio Venta</small><br><strong>${App.ui.money(p.precio_venta || 0)}</strong></div>
-                                <div><small class="dm-muted">Costo Base</small><br><strong>${App.ui.money(p.costo_unitario || p.costo || 0)}</strong></div>
-                            </div>
+                        <div class="dm-list-card-actions"
+                             style="display:flex; gap:8px; flex-wrap:wrap;">
+
+                            <button
+                                class="dm-btn dm-btn-secondary dm-btn-sm"
+                                onclick="App.views.modalKardex('${i.id}')">
+                                📋 Kardex
+                            </button>
+
                         </div>
 
-                        <div class="dm-list-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
-                            <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.formAjusteStockProducto('${p.id}')">📦 Ajustar Stock Manual</button>
-                        </div>
                     </div>
                 </div>
             `;
         });
+
+        html += `</div>`;
     }
 
-    html += `</div>`;
+
+    // ==========================================================
+    // SECCIÓN: REVENTA
+    // ==========================================================
+
+    html += `
+        <div class="dm-card dm-mb-4 dm-mt-4">
+            <div style="display:flex; flex-direction:column; gap:6px;">
+                <h3 class="dm-card-title">🛒 Mercancía de Reventa</h3>
+                <p class="dm-muted" style="margin:0;">
+                    Productos comprados a proveedores y vendidos sin pasar por fabricación.
+                </p>
+            </div>
+        </div>
+    `;
+
+    if (!productosReventa.length) {
+
+        html += `
+            <div class="dm-alert dm-alert-info">
+                No hay mercancía de reventa registrada en inventario.
+            </div>
+        `;
+
+    } else {
+
+        html += `<div class="dm-list">`;
+
+        productosReventa.forEach(i => {
+
+            const stock =
+                parseFloat(i.stock_real || 0) || 0;
+
+            const reservado =
+                parseFloat(i.stock_reservado || 0) || 0;
+
+            const comprometido =
+                parseFloat(i.stock_comprometido || 0) || 0;
+
+            const disponible =
+                Math.max(
+                    0,
+                    stock - reservado - comprometido
+                );
+
+            const costo =
+                parseFloat(i.costo_unitario || 0) || 0;
+
+            const badgeClass =
+                disponible > 0
+                    ? 'dm-badge-success'
+                    : 'dm-badge-warning';
+
+            html += `
+                <div class="dm-list-card tarj-prod-reventa">
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+
+                        <div class="dm-row-between"
+                             style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
+                            <div style="flex:1; min-width:0;">
+                                <div class="dm-list-card-title"
+                                     style="word-break:break-word;">
+                                    ${App.ui.escapeHTML(i.nombre)}
+                                </div>
+
+                                <div class="dm-list-card-subtitle">
+                                    🛒 Compra para reventa
+                                </div>
+                            </div>
+
+                            <div style="flex:0 0 auto;">
+                                <span class="dm-badge ${badgeClass}">
+                                    Disponible: ${App.ui.number(disponible, 0)} pzas
+                                </span>
+                            </div>
+
+                        </div>
+
+                        <div class="dm-card"
+                             style="background:var(--dm-surface-2); padding:10px;">
+
+                            <div style="
+                                display:grid;
+                                grid-template-columns:repeat(auto-fit,minmax(90px,1fr));
+                                gap:10px;
+                                text-align:center;
+                            ">
+
+                                <div>
+                                    <small class="dm-muted">Físico</small>
+                                    <br>
+                                    <strong>
+                                        ${App.ui.number(stock, 0)}
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <small class="dm-muted">Apartado</small>
+                                    <br>
+                                    <strong style="color:var(--dm-warning);">
+                                        ${App.ui.number(reservado, 0)}
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <small class="dm-muted">Comprometido</small>
+                                    <br>
+                                    <strong style="color:var(--dm-primary);">
+                                        ${App.ui.number(comprometido, 0)}
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <small class="dm-muted">Costo</small>
+                                    <br>
+                                    <strong>
+                                        ${App.ui.money(costo)}
+                                    </strong>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <div class="dm-list-card-actions"
+                             style="display:flex; gap:8px; flex-wrap:wrap;">
+
+                            <button
+                                class="dm-btn dm-btn-secondary dm-btn-sm"
+                                onclick="App.views.modalKardex('${i.id}')">
+                                📋 Kardex
+                            </button>
+
+                        </div>
+
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `</div>`;
+    }
+
     return html;
 };
 
@@ -412,7 +678,7 @@ App.views.inventario = function() {
     const subtitle = document.getElementById('app-header-subtitle');
     const bottomNav = document.getElementById('bottom-nav');
     if (title) title.innerText = 'Inventario y Bodega';
-    if (subtitle) subtitle.innerText = 'Control de insumos y hamacas/reventa listas';
+    if (subtitle) subtitle.innerText = 'Materia prima, productos terminados y mercancía de reventa';
     if (bottomNav) bottomNav.style.display = 'flex';
 
     const tab = App.state.inventarioTab || 'insumos';
@@ -426,8 +692,9 @@ App.views.inventario = function() {
         <div class="dm-card dm-mb-4">
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="dm-btn ${activeTabInsumos}" onclick="App.views.setInventarioTab('insumos')">🧶 Insumos y Materia Prima</button>
-                <button class="dm-btn ${activeTabBodega}" onclick="App.views.setInventarioTab('bodega')">🏷️ Productos Terminados (Bodega)</button>
-            </div>
+<button class="dm-btn ${activeTabBodega}" onclick="App.views.setInventarioTab('bodega')">
+    📦 Bodega
+</button>            </div>
         </div>
     `;
 
@@ -444,10 +711,17 @@ App.views.inventario = function() {
         <div class="dm-list">
     `;
 
-    if (!inventario.length) {
-        htmlInsumos += `<div class="dm-alert dm-alert-info">No hay insumos registrados.</div>`;
-    } else {
-        inventario.forEach(i => {
+const inventarioInsumos = inventario.filter(i => {
+    const tipo = String(i.tipo || '').toLowerCase().trim();
+
+    return tipo !== 'producto_terminado' &&
+           tipo !== 'reventa';
+});
+
+if (!inventarioInsumos.length) {
+    htmlInsumos += `<div class="dm-alert dm-alert-info">No hay insumos o materia prima registrados.</div>`;
+} else {
+    inventarioInsumos.forEach(i => {
             const real = parseFloat(i.stock_real || 0);
             const reservado = parseFloat(i.stock_reservado || 0);
             const comprometido = parseFloat(i.stock_comprometido || 0);
