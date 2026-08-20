@@ -136,36 +136,110 @@ Object.assign(App.logic, {
                         if (pedido.cliente_id === "STOCK_INTERNO") {
                             const producto = (App.state?.productos || []).find(p => p.id === detalle.producto_id);
                             if (producto) {
-                                const cantidadTerminada = parseFloat(detalle.cantidad || 1) || 1;
-                                const matExistente = (App.state?.inventario || []).find(m => m.nombre.toLowerCase() === producto.nombre.toLowerCase());
-                                const movId = "ENT-" + Date.now();
-                                const ahoraStr = new Date().toISOString();
+                            const cantidadTerminada = parseFloat(detalle.cantidad || 1) || 1;
 
-                                const baseMov = {
-                                    id: movId, fecha: ahoraStr, tipo_movimiento: "entrada_produccion", origen: "orden",
-                                    origen_id: ordenId, ref_tipo: "material", cantidad: cantidadTerminada, costo_unitario: 0,
-                                    total: 0, notas: `Ingreso por finalización de orden en taller (${ordenId})`
-                                };
+// Buscar primero un producto terminado ya existente.
+// Se conserva compatibilidad con registros antiguos que fueron creados
+// incorrectamente como "reventa".
+const matExistente = (App.state?.inventario || []).find(m =>
+    String(m.nombre || '').toLowerCase().trim() ===
+    String(producto.nombre || '').toLowerCase().trim() &&
+    (
+        String(m.tipo || '').toLowerCase().trim() === 'producto_terminado' ||
+        String(m.tipo || '').toLowerCase().trim() === 'reventa'
+    )
+);
 
-                                if (matExistente) {
-                                    const nuevoStockReal = (parseFloat(matExistente.stock_real || 0) || 0) + cantidadTerminada;
-                                    operaciones.push({ action: "actualizar_fila", nombreHoja: "materiales", idFila: matExistente.id, datosNuevos: { stock_real: nuevoStockReal } });
-                                    baseMov.ref_id = matExistente.id;
-                                    baseMov.material_id = matExistente.id;
-                                    operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: baseMov });
-                                    invMemoria = { mat: matExistente, nuevoStock: nuevoStockReal, mov: baseMov };
-                                } else {
-                                    const nuevoIdMat = "MAT-" + Date.now() + "-PROD";
-                                    const nuevoMat = {
-                                        id: nuevoIdMat, nombre: producto.nombre, tipo: "reventa", unidad: "Pzas",
-                                        stock_real: cantidadTerminada, stock_minimo: 0, stock_reservado: 0, stock_comprometido: 0, costo_unitario: 0
-                                    };
-                                    operaciones.push({ action: "guardar_fila", nombreHoja: "materiales", datos: nuevoMat });
-                                    baseMov.ref_id = nuevoIdMat;
-                                    baseMov.material_id = nuevoIdMat;
-                                    operaciones.push({ action: "guardar_fila", nombreHoja: "movimientos_inventario", datos: baseMov });
-                                    invNuevo = { mat: nuevoMat, mov: baseMov };
-                                }
+const movId = "ENT-" + Date.now();
+const ahoraStr = new Date().toISOString();
+
+const baseMov = {
+    id: movId,
+    fecha: ahoraStr,
+    tipo_movimiento: "entrada_produccion",
+    origen: "orden",
+    origen_id: ordenId,
+    ref_tipo: "material",
+    cantidad: cantidadTerminada,
+    costo_unitario: 0,
+    total: 0,
+    notas: `Ingreso por finalización de orden en taller (${ordenId})`
+};
+
+if (matExistente) {
+
+    // Si este registro corresponde a un producto fabricado,
+    // lo clasificamos correctamente como producto terminado.
+    const nuevoStockReal =
+        (parseFloat(matExistente.stock_real || 0) || 0) +
+        cantidadTerminada;
+
+    const datosInventario = {
+        stock_real: nuevoStockReal,
+        tipo: "producto_terminado",
+        unidad: matExistente.unidad || "Pzas"
+    };
+
+    operaciones.push({
+        action: "actualizar_fila",
+        nombreHoja: "materiales",
+        idFila: matExistente.id,
+        datosNuevos: datosInventario
+    });
+
+    baseMov.ref_id = matExistente.id;
+    baseMov.material_id = matExistente.id;
+
+    operaciones.push({
+        action: "guardar_fila",
+        nombreHoja: "movimientos_inventario",
+        datos: baseMov
+    });
+
+    invMemoria = {
+        mat: matExistente,
+        nuevoStock: nuevoStockReal,
+        mov: baseMov,
+        tipo: "producto_terminado"
+    };
+
+} else {
+
+    const nuevoIdMat = "MAT-" + Date.now() + "-PROD";
+
+    const nuevoMat = {
+        id: nuevoIdMat,
+        nombre: producto.nombre,
+        tipo: "producto_terminado",
+        unidad: "Pzas",
+        stock_real: cantidadTerminada,
+        stock_minimo: 0,
+        stock_reservado: 0,
+        stock_comprometido: 0,
+        costo_unitario: 0
+    };
+
+    operaciones.push({
+        action: "guardar_fila",
+        nombreHoja: "materiales",
+        datos: nuevoMat
+    });
+
+    baseMov.ref_id = nuevoIdMat;
+    baseMov.material_id = nuevoIdMat;
+
+    operaciones.push({
+        action: "guardar_fila",
+        nombreHoja: "movimientos_inventario",
+        datos: baseMov
+    });
+
+    invNuevo = {
+        mat: nuevoMat,
+        mov: baseMov,
+        tipo: "producto_terminado"
+    };
+}
                             }
                         }
 
