@@ -1,5 +1,6 @@
 window.App = window.App || {};
 App.views = App.views || {};
+App.state = App.state || {};
 
 App.views._resumenCosteoPlaneacion = function () {
     const pedidos = App.state.pedidos || [];
@@ -75,25 +76,17 @@ App.views._resumenCosteoPlaneacion = function () {
     };
 };
 
-// ==========================================
-// CORRECCIÓN: SALIDAS REALES DE CAJA
-// ==========================================
-// Las compras se contabilizan únicamente por monto_pagado,
-// no por el total de la compra. Los pendientes siguen siendo
-// obligaciones, pero no representan una salida de efectivo.
-// Los reembolsos pagados sí representan una salida real.
-// ==========================================
+// ==========================================================
+// MOTOR FINANCIERO CENTRAL: SALIDAS REALES Y REEMBOLSOS
+// ==========================================================
 
 App.logic = App.logic || {};
 
-App.logic._obtenerSalidasRealesCaja = function (resumen, filtro = 'todo') {
-    const reembolsos = Array.isArray(App.state.reembolsos)
-        ? App.state.reembolsos
-        : [];
+App.logic._resumenReembolsosFinanzas = function (filtro = 'todo') {
+    const reembolsos = Array.isArray(App.state.reembolsos) ? App.state.reembolsos : [];
 
     const entraEnFiltro = (fechaStr) => {
         if (!fechaStr) return filtro === 'todo';
-
         const fecha = new Date(fechaStr);
         if (isNaN(fecha.getTime())) return false;
         if (filtro === 'todo') return true;
@@ -102,74 +95,155 @@ App.logic._obtenerSalidasRealesCaja = function (resumen, filtro = 'todo') {
         const mesActual = hoy.getMonth();
         const anioActual = hoy.getFullYear();
 
-        if (filtro === 'mes_actual') {
-            return fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual;
-        }
-
-        if (filtro === 'trimestre_actual') {
-            return fecha.getFullYear() === anioActual &&
-                Math.floor(fecha.getMonth() / 3) === Math.floor(mesActual / 3);
-        }
-
-        if (filtro === 'anio_actual') {
-            return fecha.getFullYear() === anioActual;
-        }
+        if (filtro === 'mes_actual') return fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual;
+        if (filtro === 'trimestre_actual') return fecha.getFullYear() === anioActual && Math.floor(fecha.getMonth() / 3) === Math.floor(mesActual / 3);
+        if (filtro === 'anio_actual') return fecha.getFullYear() === anioActual;
 
         if (filtro === 'custom') {
             const desde = App.state.finanzasFechaDesde || '';
             const hasta = App.state.finanzasFechaHasta || '';
             if (!desde || !hasta) return true;
-
-            return fecha >= new Date(desde + 'T00:00:00') &&
-                fecha <= new Date(hasta + 'T23:59:59');
+            return fecha >= new Date(desde + 'T00:00:00') && fecha <= new Date(hasta + 'T23:59:59');
         }
 
         return true;
     };
 
-    const reembolsosPagados = reembolsos
-        .filter(r => String(r.estado || '').toLowerCase().trim() === 'pagado')
-        .filter(r => entraEnFiltro(r.fecha_pago || r.fecha || r.fecha_creacion))
-        .reduce((sum, r) => sum + (parseFloat(r.monto || 0) || 0), 0);
+    const rows = reembolsos.filter(r => {
+        const estado = String(r.estado || '').toLowerCase().trim();
+        const fecha = estado === 'pagado'
+            ? (r.fecha_pago || r.fecha || r.fecha_creacion)
+            : (r.fecha || r.fecha_creacion || r.fecha_pago);
+        return entraEnFiltro(fecha);
+    });
 
-    const gastosOperativos = parseFloat(resumen?.gastosOperativosPuros || 0) || 0;
-    const comprasPagadas = parseFloat(resumen?.totalComprasPagadas || 0) || 0;
-    const nominaPagada = parseFloat(resumen?.totalNominaPagada || 0) || 0;
+    const pagados = rows.filter(r => String(r.estado || '').toLowerCase().trim() === 'pagado');
+    const pendientes = rows.filter(r => String(r.estado || '').toLowerCase().trim() === 'pendiente');
 
     return {
-        gastosOperativos,
-        comprasPagadas,
-        nominaPagada,
-        reembolsosPagados,
-        total: gastosOperativos + comprasPagadas + nominaPagada + reembolsosPagados
+        rows,
+        pagados,
+        pendientes,
+        totalPagados: pagados.reduce((sum, r) => sum + (parseFloat(r.monto || 0) || 0), 0),
+        totalPendientes: pendientes.reduce((sum, r) => sum + (parseFloat(r.monto || 0) || 0), 0)
     };
 };
 
-// Conservamos el motor financiero original y agregamos los indicadores
-// de caja real sin duplicar compras pendientes.
-if (typeof App.logic.obtenerResumenFinancieroCentral === 'function') {
-    const _obtenerResumenFinancieroCentralOriginal = App.logic.obtenerResumenFinancieroCentral;
+App.logic.obtenerResumenReembolsosFinanzas = App.logic._resumenReembolsosFinanzas;
+
+if (typeof App.logic.obtenerResumenFinancieroCentral === 'function' && !App.logic.__finanzasIntegradas) {
+    const resumenFinancieroOriginal = App.logic.obtenerResumenFinancieroCentral;
 
     App.logic.obtenerResumenFinancieroCentral = function (filtro = 'todo') {
-        const resumen = _obtenerResumenFinancieroCentralOriginal.call(this, filtro);
-        const salidas = App.logic._obtenerSalidasRealesCaja(resumen, filtro);
+        const resumen = resumenFinancieroOriginal.call(this, filtro);
+        const reembolsos = App.logic._resumenReembolsosFinanzas(filtro);
 
-        resumen.salidasRegistradas = salidas.total;
-        resumen.reembolsosPagados = salidas.reembolsosPagados;
-        resumen.flujoOperativo = (parseFloat(resumen.cobrado || 0) || 0) - salidas.total;
+        resumen.totalReembolsosPagados = reembolsos.totalPagados;
+        resumen.totalReembolsosPendientes = reembolsos.totalPendientes;
+        resumen.reembolsos = reembolsos.rows;
+        resumen.reembolsosPagados = reembolsos.pagados;
+        resumen.reembolsosPendientes = reembolsos.pendientes;
+
+        // Una devolución pendiente todavía NO es salida de caja.
+        // Una devolución pagada SÍ es salida real.
+        resumen.salidasRegistradas = (parseFloat(resumen.salidasRegistradas || 0) || 0) + reembolsos.totalPagados;
+        resumen.reembolsosPagados = reembolsos.pagados;
+        resumen.flujoOperativo = (parseFloat(resumen.cobrado || 0) || 0) - resumen.salidasRegistradas;
         resumen.resultadoCajaReal = resumen.flujoOperativo;
+        resumen.saldoProyectado = (parseFloat(resumen.saldoProyectado || 0) || 0) - reembolsos.totalPendientes;
 
         return resumen;
     };
+
+    App.logic.__finanzasIntegradas = true;
 }
 
-// Ajusta la gráfica de flujo para utilizar exactamente la misma definición
-// de salida real que el resumen financiero.
-if (typeof App.logic.renderGraficasFinanzas === 'function') {
-    const _renderGraficasFinanzasOriginal = App.logic.renderGraficasFinanzas;
+// ==========================================================
+// PRESENTACIÓN DE REEMBOLSOS EN FINANZAS > EGRESOS
+// ==========================================================
+
+setTimeout(() => {
+    if (typeof App.views.finanzas !== 'function' || App.views.__reembolsosIntegrados) return;
+
+    const finanzasOriginal = App.views.finanzas;
+
+    App.views.finanzas = function () {
+        let html = finanzasOriginal.apply(this, arguments);
+        const filtro = App.state.finanzasFiltro || 'mes_actual';
+        const resumen = typeof App.logic.obtenerResumenFinancieroCentral === 'function'
+            ? App.logic.obtenerResumenFinancieroCentral(filtro)
+            : null;
+
+        if (!resumen || (App.state.finanzasTab || 'resumen') !== 'egresos') return html;
+
+        const money = n => '$' + ((parseFloat(n || 0) || 0).toFixed(2));
+        const reembolsos = App.logic._resumenReembolsosFinanzas(filtro);
+        const salidasReales = parseFloat(resumen.salidasRegistradas || 0) || 0;
+
+        const block = `
+            <div class="dm-mb-4">
+                <div class="dm-card" style="border:1px solid #FEB2B2;background:#FFF5F5">
+                    <div class="dm-card-title" style="color:#C53030">💸 Reembolsos</div>
+                    <div class="dm-muted dm-mt-2">Devoluciones de dinero registradas.</div>
+                    <div class="dm-mt-3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+                        <div class="dm-card">
+                            <div class="dm-kpi-label">Pagados</div>
+                            <div class="dm-kpi-value" style="color:#C53030">${money(reembolsos.totalPagados)}</div>
+                        </div>
+                        <div class="dm-card">
+                            <div class="dm-kpi-label">Pendientes</div>
+                            <div class="dm-kpi-value" style="color:#B7791F">${money(reembolsos.totalPendientes)}</div>
+                        </div>
+                        <div class="dm-card">
+                            <div class="dm-kpi-label">Salidas registradas</div>
+                            <div class="dm-kpi-value">${money(salidasReales)}</div>
+                        </div>
+                    </div>
+                    <div class="dm-mt-3" style="overflow:auto">
+                        ${reembolsos.rows.length ? `
+                            <table class="dm-table" style="width:100%;min-width:720px">
+                                <thead><tr><th>Reembolso</th><th>Pedido</th><th>Fecha</th><th>Estado</th><th>Motivo</th><th>Monto</th></tr></thead>
+                                <tbody>
+                                    ${reembolsos.rows.map(r => {
+                                        const estado = String(r.estado || '').toLowerCase().trim();
+                                        const fecha = estado === 'pagado'
+                                            ? (r.fecha_pago || r.fecha || r.fecha_creacion)
+                                            : (r.fecha || r.fecha_creacion || r.fecha_pago);
+                                        return `<tr style="background:${estado === 'pagado' ? '#FFF5F5' : '#FFFBEB'}">
+                                            <td>${App.ui.safe(r.id || '')}</td>
+                                            <td>${App.ui.safe(r.pedido_id || '')}</td>
+                                            <td>${App.ui.safe(String(fecha || '').split('T')[0])}</td>
+                                            <td>${App.ui.safe(r.estado || '')}</td>
+                                            <td>${App.ui.safe(r.motivo || 'Devolución de pedido')}</td>
+                                            <td style="text-align:right;font-weight:700">${money(r.monto)}</td>
+                                        </tr>`;
+                                    }).join('')}
+                                </tbody>
+                            </table>`
+                            : '<div class="dm-alert dm-alert-info">No hay reembolsos para este filtro.</div>'}
+                    </div>
+                </div>
+            </div>`;
+
+        const marker = '<div class="dm-card dm-mb-4" style="display:flex; gap:8px; flex-wrap:wrap;">';
+        return html.includes(marker) ? html.replace(marker, block + marker) : html;
+    };
+
+    App.views.__reembolsosIntegrados = true;
+
+    try {
+        if (App.router && typeof App.router.handleRoute === 'function') App.router.handleRoute();
+    } catch (e) {
+        console.warn('[FINANZAS] No se pudo refrescar la vista inicial:', e);
+    }
+}, 0);
+
+// Ajusta la gráfica de flujo para utilizar la misma definición de salida real.
+if (typeof App.logic.renderGraficasFinanzas === 'function' && !App.logic.__graficaFinanzasIntegrada) {
+    const renderGraficasOriginal = App.logic.renderGraficasFinanzas;
 
     App.logic.renderGraficasFinanzas = function (filtro) {
-        _renderGraficasFinanzasOriginal.call(this, filtro);
+        renderGraficasOriginal.call(this, filtro);
 
         const resumen = App.logic.obtenerResumenFinancieroCentral(filtro);
         const grafica = window.graficaFinanzasFlujo;
@@ -184,8 +258,9 @@ if (typeof App.logic.renderGraficasFinanzas === 'function') {
                 Math.max(salidas, 0),
                 Math.max(flujo, 0)
             ];
-
             grafica.update();
         }
     };
+
+    App.logic.__graficaFinanzasIntegrada = true;
 }
