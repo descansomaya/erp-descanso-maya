@@ -33,14 +33,28 @@ App.logic.estado.esStockInterno = function(pedido) {
 };
 
 App.logic.estado.esReventa = function(pedido) {
+
+    if (!pedido) return false;
+
+    // Un pedido interno nunca es una reventa,
+    // aunque alguno de sus productos tenga categoría "reventa".
+    if (this.esStockInterno(pedido)) {
+        return false;
+    }
+
     const detalles = (App.state.pedido_detalle || [])
-        .filter(d => d.pedido_id === pedido?.id);
+        .filter(d =>
+            String(d.pedido_id) === String(pedido.id)
+        );
 
     if (!detalles.length) return false;
 
     return detalles.every(detalle => {
+
         const producto = (App.state.productos || [])
-            .find(p => p.id === detalle.producto_id);
+            .find(p =>
+                String(p.id) === String(detalle.producto_id)
+            );
 
         return producto &&
             String(producto.categoria || "")
