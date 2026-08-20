@@ -176,7 +176,7 @@ if (callback) {
 
         App.router.handleRoute();
     }
-}
+},
 
     async guardarNuevoGenerico(hoja, datos, prefijo, estado, callback = null) {
         App.ui.showLoader("Registrando...");
