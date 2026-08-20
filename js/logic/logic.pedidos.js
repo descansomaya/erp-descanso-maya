@@ -25,7 +25,12 @@ Object.assign(App.logic, {
                     precio_unitario: totalNum / (parseInt(datosFormulario.cantidad) || 1)
                 }];
 
-        const requiereTaller =
+   const esStockInterno =
+    String(datosFormulario.cliente_id || "")
+        .toUpperCase()
+        .trim() === "STOCK_INTERNO";
+
+const requiereTaller =
     App.logic.estado.requiereTallerPorProductos(listaProductos);
 
 const todosReventa = listaProductos.every(item => {
@@ -37,9 +42,18 @@ const todosReventa = listaProductos.every(item => {
 
 let estadoCalculado = "nuevo";
 
-if (requiereTaller) {
+if (esStockInterno) {
+    // El stock interno siempre sigue el flujo de producción.
+    estadoCalculado = requiereTaller
+        ? "taller"
+        : "nuevo";
+
+} else if (requiereTaller) {
+
     estadoCalculado = "taller";
+
 } else if (todosReventa) {
+
     estadoCalculado = "listo para entregar";
 }
 
