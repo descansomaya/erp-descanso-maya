@@ -625,7 +625,12 @@ App.views._buildOrdenCard = function (o) {
                     <button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.verDetallesProduccion('${o.id}')">👁️ Detalles</button>
                     ${String(o.estado || '').toLowerCase().trim() === 'pendiente' ? `<button class="dm-btn dm-btn-primary dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'iniciar')">▶️ Iniciar</button>` : ''}
                     ${String(o.estado || '').toLowerCase().trim() === 'proceso' ? `<button class="dm-btn dm-btn-success dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'terminar')">✅ Terminar</button>` : ''}
-                    ${String(o.estado || '').toLowerCase().trim() !== 'pendiente' ? `<button class="dm-btn dm-btn-secondary dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'regresarPendiente')">↩️ Pendiente</button>` : ''}
+${String(o.estado || '').toLowerCase().trim() !== 'pendiente'
+    ? `<button class="dm-btn dm-btn-secondary dm-btn-sm"
+        onclick="App.views.accionProduccion(this, '${o.id}', 'regresarPendiente')">
+        ${String(o.estado || '').toLowerCase().trim() === 'listo' ? '↩️ Reabrir producción' : '↩️ Pendiente'}
+       </button>`
+    : ''}
                     ${String(o.estado || '').toLowerCase().trim() === 'pendiente' ? `<button class="dm-btn dm-btn-danger dm-btn-sm" onclick="App.views.accionProduccion(this, '${o.id}', 'eliminar')">🗑️</button>` : ''}
                 </div>
             </div>
