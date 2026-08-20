@@ -172,13 +172,16 @@ Object.assign(App.logic, {
 
                 App.router.handleRoute();
 
-            } else {
+              } else {
 
-                App.router.handleRoute();
-            }
+            App.router.handleRoute();
         }
 
-    },
+        // Cierra if (res.status === "success")
+    }
+
+    // Cierra actualizarRegistroGenerico()
+},
 
 async guardarNuevoGenerico(hoja, datos, prefijo, estado, callback = null) {
         App.ui.showLoader("Registrando...");
